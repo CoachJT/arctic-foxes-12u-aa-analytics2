@@ -60,3 +60,17 @@ test('new scripts parse and offline workbook reader is packaged',()=>{
  for(const f of ['stats-import.js','stats-import-ui.js'])new vm.Script(fs.readFileSync(f,'utf8'));
  const h=fs.readFileSync('index.html','utf8');assert.match(h,/stats-import-ui.js/);assert.match(h,/vendor\/xlsx.full.min.js/);const files=require('../package.json').build.files;assert.ok(files.includes('stats-import-ui.js')&&files.includes('vendor/**'));
 });
+
+test('additional current entry fields import and reach analytics without event double counting',()=>{
+ const off=imported('Player #,Goals,CH,Takeaways,Giveaways\n73,2,4,3,1');
+ const game={id:'one',players,officialStats:off,events:[{playerId:'p',type:'goal',team:'us'}]};
+ const r=A.records(game)[0];assert.equal(r.g,2);assert.equal(r.chances,4);assert.equal(r.takeaways,3);assert.equal(r.giveaways,1);
+ assert.equal(A.season([game],players)[0].g,2);
+});
+test('game entry exposes import, export and template actions',()=>{
+ const ui=fs.readFileSync('release-ui.js','utf8');
+ for(const label of ['Import Stats','Export Stats','Download Stats Template'])assert.ok(ui.includes(label));
+ assert.match(ui,/entryImportStats.*onclick=.*openWorkspace\('stats'\)/);
+ assert.match(fs.readFileSync('tests/serve.cjs','utf8'),/stats-import-ui.js/);
+});
+test('confirmation without preview reports actionable error',()=>assert.throws(()=>I.apply(null,{},players,'one'),/Preview a spreadsheet/));

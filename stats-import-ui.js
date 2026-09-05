@@ -37,3 +37,12 @@ $('#importPastedStats').onclick=()=>{++statsReadToken;try{importOfficialStatsTex
 $('#cancelStatsImport').onclick=()=>{++statsReadToken;clearStatsPreview();};
 $('#confirmStatsImport').onclick=()=>{try{const next=SI.apply(statsImportPlan,state.officialStats,state.players,state.currentGameId);snapshot();state.officialStats=next;save();clearStatsPreview();render();if(typeof render312==='function')render312();}catch(err){clearStatsPreview();alert(err.message);}};
 $('#downloadStatsTemplate').onclick=downloadOfficialStatsTemplate;
+
+function exportGameStats(){
+ if(!state.currentGameId){alert('Create or open a saved game in My Games first.');return;}
+ const rows=SI.template(state.players),records=A312.records({players:state.players,officialStats:state.officialStats,events:state.events,goalieEvents:state.goalieEvents});
+ const fields=['','','','gp','g','a','pts','shots','pim','plusMinus','blocks','fow','fol','ppg','ppa','ppp','shg','sha','shp','gwg','gtg','min','saves','sa','ga','w','l','t','so','chances','takeaways','giveaways'];
+ rows.slice(1).forEach((row,i)=>{const r=records[i];fields.forEach((k,j)=>{if(!k)return;const goalie=r.type==='goalie';if(goalie&&['shots','blocks','fow','fol','chances','takeaways','giveaways'].includes(k)||!goalie&&['min','saves','sa','ga','w','l','t','so'].includes(k))return;row[j]=r[k]??'';});});
+ const url=URL.createObjectURL(new Blob([SI.csv(rows)],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='Foxes_Game_Stats.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+$('#exportGameStats').onclick=exportGameStats;

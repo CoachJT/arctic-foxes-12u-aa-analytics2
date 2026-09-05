@@ -4,8 +4,8 @@
 const norm=v=>String(v??'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 const name=v=>String(v??'').split(',').reverse().map(norm).join('');
 const jersey=v=>/^#?\s*\d+$/.test(String(v).trim())?String(Number(String(v).replace('#','').trim())):'';
-const aliases={number:['#','number','jersey','jersey number','no'],name:['player','name','player name'],type:['type','position','pos'],gp:['gp','games played'],g:['g','goals'],a:['a','assists'],pts:['pts','points'],shots:['s','sog','shots','shots on goal'],pim:['pim','penalty minutes'],plusMinus:['+/-','plus minus','pm'],blocks:['blocks','blk','blocked shots'],fo:['fo','faceoffs','faceoff attempts'],fow:['fow','fo w','faceoff wins'],fol:['fol','fo l','faceoff losses'],ppg:['ppg','pp goals'],ppa:['ppa','pp assists'],ppp:['ppp','pp points'],shg:['shg','sh goals'],sha:['sha','sh assists'],shp:['shp','sh points'],gwg:['gwg'],gtg:['gtg'],min:['min','minutes'],saves:['saves','sv'],sa:['sa','shots against'],ga:['ga','goals against'],w:['w','wins'],l:['l','losses'],t:['t','ties'],so:['so','shutouts'],svPct:['sv%','save percentage'],gaa:['gaa'],shotPct:['s%','shot percentage'],foPct:['fo%']};
-const key=v=>!String(v??'').trim()?undefined:String(v).trim()==='+/-'?'plusMinus':Object.keys(aliases).find(k=>aliases[k].some(a=>norm(a)===norm(v)&&String(a).includes('%')===String(v).includes('%')));
+const aliases={number:['player #','jersey #','#','number','jersey','jersey number','no'],name:['player','name','player name'],type:['type','position','pos'],ch:['ch','chances','scoring chances'],tk:['tk','takeaways'],gv:['gv','giveaways'],gp:['gp','games played'],g:['g','goals'],a:['a','assists'],pts:['pts','points'],shots:['s','sog','shots','shots on goal'],pim:['pim','penalty minutes'],plusMinus:['+/-','plus minus','pm'],blocks:['blocks','blk','blocked shots'],fo:['fo','faceoffs','faceoff attempts'],fow:['fow','fo w','faceoff wins'],fol:['fol','fo l','faceoff losses'],ppg:['ppg','pp goals'],ppa:['ppa','pp assists'],ppp:['ppp','pp points'],shg:['shg','sh goals'],sha:['sha','sh assists'],shp:['shp','sh points'],gwg:['gwg'],gtg:['gtg'],min:['min','minutes'],saves:['saves','sv'],sa:['sa','shots against'],ga:['ga','goals against'],w:['w','wins'],l:['l','losses'],t:['t','ties'],so:['so','shutouts'],svPct:['sv%','save percentage'],gaa:['gaa'],shotPct:['s%','shot percentage'],foPct:['fo%']};
+const key=v=>!String(v??'').trim()?undefined:String(v).trim()==='+/-'?'plusMinus':Object.keys(aliases).find(k=>aliases[k].some(a=>norm(a)===norm(v)&&String(a).includes('%')===String(v).includes('%')&&String(a).includes('#')===String(v).includes('#')));
 const clone=v=>JSON.parse(JSON.stringify(v));
 function parse(text){
  text=String(text).replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n');
@@ -64,15 +64,15 @@ function preview(rows,players,stats,gameId,sourceName='pasted data'){
  return plan;
 }
 function apply(plan,stats,players,gameId){
+ if(!plan)throw Error('Preview a spreadsheet before confirming.');
  if(gameId!==plan.gameId||JSON.stringify(stats)!==plan.base||JSON.stringify(players.map(p=>[p.id,p.number,p.name,p.pos]))!==plan.roster)throw Error('Game, roster or stats changed. Preview the sheet again.');
  const rows=plan.rows.filter(r=>r.ready);if(!rows.length)throw Error('No matched rows with usable stats to import.');
  const out=clone(stats||{});out.skaters=out.skaters||{};out.goalies=out.goalies||{};
  rows.forEach(r=>{const n=String(r.player.number);out[r.group][n]={...out[r.group][n],...r.values,number:r.player.number,name:r.player.name,playerId:r.player.id};});
  out.imported=true;out.sourceName=plan.sourceName;out.importedAt=new Date().toISOString();return out;
 }
-const headers=['TYPE','#','Player','GP','G','A','PTS','SOG','PIM','+/-','Blocks','FO W','FO L','PPG','PPA','PPP','SHG','SHA','SHP','GWG','GTG','MIN','Saves','SA','GA','W','L','T','SO'];
+const headers=['TYPE','#','Player','GP','G','A','PTS','SOG','PIM','+/-','Blocks','FO W','FO L','PPG','PPA','PPP','SHG','SHA','SHP','GWG','GTG','MIN','Saves','SA','GA','W','L','T','SO','CH','TK','GV'];
 function template(players){return [headers,...players.map(p=>headers.map(h=>h==='TYPE'?(p.pos==='G'?'GOALIE':'SKATER'):h==='#'?String(p.number):h==='Player'?p.name:''))];}
 function csv(rows){return '\uFEFF'+rows.map((r,i)=>r.map((v,j)=>{let s=String(v??'');if(i>0&&j===2&&/^[=+@-]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';}).join(',')).join('\r\n');}
 const api={parse,preview,apply,template,csv};if(typeof module==='object'&&module.exports)module.exports=api;else root.FoxesStatsImport=api;
 })(globalThis);
-
