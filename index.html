@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>Arctic Foxes 3.0 — Arctic Foxes 12U AA Hockey Analytics 3.0</title>
+<title>Arctic Foxes Hockey Analytics</title>
 <style>
 :root{
   --bg:#0b0f14;--panel:#141a22;--panel2:#1b2430;--text:#f7f9fc;--muted:#99a6b5;
@@ -668,7 +668,7 @@ body{min-height:100vh}
   box-shadow:18px 0 50px rgba(0,0,0,.18)!important;backdrop-filter:none!important
 }
 .workspace-nav:before{
-  content:"ARCTIC FOXES / 3.0";position:absolute;left:18px;top:24px;
+  content:"ARCTIC FOXES";position:absolute;left:18px;top:24px;
   font-size:12px;font-weight:1000;letter-spacing:.14em;color:#fff
 }
 .workspace-nav:after{
@@ -722,7 +722,7 @@ input,select,textarea{background:#090e14!important;border-color:#263342!importan
   margin-bottom:14px
 }
 .coach-center-hero:after{
-  content:"3.0.12";position:absolute;right:20px;bottom:-24px;
+  content:"";position:absolute;right:20px;bottom:-24px;
   font-size:110px;font-weight:1000;letter-spacing:-.08em;color:rgba(255,255,255,.025)
 }
 .coach-eyebrow{font-size:9px;font-weight:900;letter-spacing:.18em;color:#ff767e;text-transform:uppercase}
@@ -1224,13 +1224,14 @@ tr:hover td{background:rgba(255,255,255,.025)}
 @media print{body.print-game312 #gameDetail312 td button{display:inline!important;border:0;background:none!important;color:inherit}}
 .workspace-nav{overflow-y:auto!important}
 @media print{body.print-game312 *{visibility:hidden}body.print-game312 #gameDetail312,body.print-game312 #gameDetail312 *{visibility:visible}body.print-game312 #gameDetail312{position:absolute;left:0;top:0;width:100%}body.print-game312 #gameDetail312 button{display:none}}
-</style></head>
+</style><link rel="stylesheet" href="interface.css">
+</head>
 <body>
 <div id="v2Splash" aria-hidden="true">
   <div class="v2-splash-inner">
     <div class="v2-splash-logo">🦊</div>
     <div class="v2-splash-title">Arctic Foxes 12U AA Analytics</div>
-    <div class="v2-splash-sub">12U AA • 2026–2027 Season • Version 3.0.12</div>
+    <div class="v2-splash-sub">12U AA • 2026–2027 Season</div>
     <div class="v2-splash-line"><i></i></div>
   </div>
 </div>
@@ -1242,10 +1243,10 @@ tr:hover td{background:rgba(255,255,255,.025)}
       <div>
         <div class="brand-kicker">Arctic Foxes Hockey</div>
         <div class="brand-title">Arctic Foxes 12U AA</div>
-        <div class="brand-season">12U AA • 2026–2027 Season • Coach Platform 3.0</div>
+        <div class="brand-season">2026–2027 Season</div>
       </div>
     </div>
-    <div class="brand-mark">ANALYTICS 3.0</div>
+    <div class="brand-mark">COACH COMMAND CENTER</div>
   </div>
   <nav class="workspace-nav" id="workspaceNav" aria-label="App workspaces">
     <button type="button" data-workspace="home" class="active">🏠 Coach Center</button>
@@ -5805,7 +5806,7 @@ function setupWorkspaceLayout(){
   workspaces.aifilm.innerHTML=`<div id="aiFilm296Mount"></div>`;
 
   workspaces.coachlab.innerHTML=
-    workspaceHeader("Coach Lab 3.0","The complete 2.x coaching suite: film scouting, usage, trends, combinations, reports, insights and automation.",`<span id="labAnalyticsModeBadge"></span>${analyticsToggle294()}<button type="button" id="labGenerateReportTop">Generate Postgame Report</button>`)+
+    workspaceHeader("Coach Lab","Film scouting, usage, trends, combinations, reports, insights and automation.",`<span id="labAnalyticsModeBadge"></span>${analyticsToggle294()}<button type="button" id="labGenerateReportTop">Generate Postgame Report</button>`)+
     `<div class="lab-tabs">
       <button class="active" data-lab="filmScout">2.2 Scout + Film</button><button data-lab="usage2">2.3 Usage</button><button data-lab="trends2">2.4 Trends</button><button data-lab="combos">2.5 Lines/Pairs</button><button data-lab="report">2.6 Reports</button><button data-lab="insights">2.7 Insights</button><button data-lab="autotrack">2.8 Auto Track</button><button data-lab="stability">2.9 Stability</button>
     </div>
@@ -5816,7 +5817,7 @@ function setupWorkspaceLayout(){
     <div id="lab-report" class="lab-panel"><div class="lab-card lab-wide"><div class="row"><button class="primary" id="labGenerateReport">Coach Report</button><button id="labParentReport">Team / Parent Report</button></div><div id="labReportPreview" class="report-preview">Generate after a game.</div></div></div>
     <div id="lab-insights" class="lab-panel"><div class="lab-card lab-wide"><h3>Evidence-Based Coach Insights</h3><div id="labInsights"></div></div></div>
     <div id="lab-autotrack" class="lab-panel"><div class="lab-grid"><div class="lab-card"><h3>Visual Tag Tracking</h3><label>Mode</label><select id="labAutoMode"><option value="off">Off</option><option value="suggest">Suggest Only</option><option value="auto">Auto Track</option></select><br><label>Stable crossing time</label><select id="labAutoDebounce"><option value="500">0.5 sec</option><option value="750" selected>0.75 sec</option><option value="1000">1.0 sec</option></select></div><div class="lab-card"><h3>Safeguards</h3><div id="labAutoStatus" class="lab-muted"></div><button id="labUndoAuto">Undo Last Shift</button></div></div></div>
-    <div id="lab-stability" class="lab-panel"><div class="lab-grid"><div class="lab-card"><h3>Backup / Export</h3><button id="labExportBackup">Save Season Copy</button><button id="labOpenSave">Open Save Folder</button></div><div class="lab-card"><h3>Import / Migration</h3><input id="labImportBackup" type="file" accept=".json"><div class="lab-muted">Validates player data before replacing the in-app state.</div></div><div class="lab-card"><h3>Updates</h3><button id="labCheckUpdates">Check for Updates</button></div><div class="lab-card"><h3>3.0 Ready</h3><div class="lab-muted">App data remains separate from the installation so the future iPad/cloud architecture can migrate cleanly.</div></div></div></div>`;
+    <div id="lab-stability" class="lab-panel"><div class="lab-grid"><div class="lab-card"><h3>Backup / Export</h3><button id="labExportBackup">Save Season Copy</button><button id="labOpenSave">Open Save Folder</button></div><div class="lab-card"><h3>Import / Migration</h3><input id="labImportBackup" type="file" accept=".json"><div class="lab-muted">Validates player data before replacing the in-app state.</div></div><div class="lab-card"><h3>Updates</h3><button id="labCheckUpdates">Check for Updates</button></div><div class="lab-card"><h3>Season Data</h3><div class="lab-muted">Your saved season is stored separately from the application installation.</div></div></div></div>`;
 
 
 
@@ -6359,7 +6360,7 @@ bindSaveLocationControls(); render();
 setInterval(()=>{ if(state.players.some(p=>p.active)) render(); },1000);
 
 // -------------------- 2.0.2 UPDATE UI --------------------
-let foxesUpdateState={status:'idle',percent:0,currentVersion:'3.0.12'};
+let foxesUpdateState={status:'idle',percent:0,currentVersion:'3.0.13'};
 function showUpdates(){
   $("#updateModal")?.classList.add("open");
   $("#updateModal")?.setAttribute("aria-hidden","false");
@@ -6376,8 +6377,8 @@ function renderUpdateState(s={}){
   const bar=$("#updateProgressBar"), dl=$("#downloadUpdateBtn"), install=$("#installUpdateBtn");
   const release=$("#releasePageBtn"), badge=$("#updateNavBadge"), note=$("#updateNote");
   if(text) text.textContent=foxesUpdateState.message||'Ready to check for updates.';
-  if(ver) ver.textContent=`Current version ${foxesUpdateState.currentVersion||'3.0.12'}`;
-  if(pill) pill.textContent=foxesUpdateState.availableVersion ? `v${foxesUpdateState.availableVersion}` : `v${foxesUpdateState.currentVersion||'3.0.12'}`;
+  if(ver) ver.textContent=`Current version ${foxesUpdateState.currentVersion||'3.0.13'}`;
+  if(pill) pill.textContent=foxesUpdateState.availableVersion ? `v${foxesUpdateState.availableVersion}` : `v${foxesUpdateState.currentVersion||'3.0.13'}`;
   if(bar) bar.style.width=`${Math.max(0,Math.min(100,Number(foxesUpdateState.percent||0)))}%`;
   if(dl) dl.style.display=status==='available'?'inline-flex':'none';
   if(install) install.style.display=status==='downloaded'?'inline-flex':'none';
@@ -6425,7 +6426,7 @@ setTimeout(refreshUpdateState,1200);
     <div class="update-status-card">
       <div class="update-status-row">
         <div class="update-status-text" id="updateStatusText">Ready to check for updates.</div>
-        <div class="update-version-pill" id="updateVersionPill">v3.0.12</div>
+        <div class="update-version-pill" id="updateVersionPill">v3.0.13</div>
       </div>
       <div class="update-progress"><i id="updateProgressBar"></i></div>
     </div>
@@ -6541,10 +6542,10 @@ setTimeout(()=>{try{initSchedule301()}catch(e){console.error("Schedule 3.0.1 ini
 <script>
 // ===== 3.0.2 UPDATE CENTER UI =====
 function ensureUpdateCenter302(){
- const host=document.querySelector('.workspace[data-workspace-page="home"],.workspace[data-workspace-page="dashboard"],.workspace[data-workspace-page="coach"]');
+ const host=document.querySelector('#updatesMount313');
  if(!host||host.querySelector("#updateCenter302"))return;
  const box=document.createElement("div");box.id="updateCenter302";box.className="update302";
- box.innerHTML=`<div><div class="update302-title">App Updates</div><div class="update302-sub" id="updateStatus302">3.0.12 • GitHub auto updates • GitHub Releases</div></div>
+ box.innerHTML=`<div><div class="update302-title">App Updates</div><div class="update302-sub" id="updateStatus302">3.0.13 • GitHub auto updates • GitHub Releases</div></div>
  <div class="update302-actions"><button type="button" id="updateCheck302">Check for Updates</button><button type="button" id="updateDownload302" style="display:none">Download Update</button><button type="button" id="updateInstall302" class="primary" style="display:none">Restart & Install</button><button type="button" id="updateReleases302">Open Releases</button><button type="button" id="updateLog302">Open Updater Log</button></div>`;
  host.insertBefore(box,host.firstChild);
  $("#updateCheck302")?.addEventListener("click",async()=>{
@@ -6553,7 +6554,7 @@ function ensureUpdateCenter302(){
      const timeout=new Promise((_,reject)=>setTimeout(()=>reject(new Error("No response from updater after 30 seconds.")),30000));
      const r=await Promise.race([window.foxesStorage?.updateCheck?.(),timeout]);
      if(r?.message) $("#updateStatus302").textContent=r.message;
-     else if(r?.status==="current") $("#updateStatus302").textContent=`You're up to date • ${r.currentVersion||"3.0.12"}`;
+     else if(r?.status==="current") $("#updateStatus302").textContent=`You're up to date • ${r.currentVersion||"3.0.13"}`;
    }catch(e){ $("#updateStatus302").textContent=`Update check failed: ${String(e?.message||e)}`; }
  });
  $("#updateDownload302")?.addEventListener("click",()=>window.foxesStorage?.updateDownload?.());
@@ -6583,7 +6584,7 @@ setTimeout(initUpdates302,1700);
 // Coach Center and scrolls to the always-visible update card instead of
 // depending only on the legacy modal.
 function openUpdates305(){
-  try{ if(typeof openWorkspace==='function') openWorkspace('home'); }catch(e){}
+  try{ if(typeof openWorkspace==='function') openWorkspace('updates'); }catch(e){}
   ensureUpdateCenter302();
   const box=document.getElementById('updateCenter302');
   if(box){
@@ -6607,19 +6608,13 @@ setTimeout(()=>{
 </script>
 <script>
 // ===== 3.0.5 UPDATE CENTER FIX =====
-function ensureUpdateTest305(){
-  const host=document.querySelector('.workspace[data-workspace-page="home"],.workspace[data-workspace-page="dashboard"],.workspace[data-workspace-page="coach"]');
-  if(!host || host.querySelector("#updateTest305")) return;
-  const box=document.createElement("div");
-  box.id="updateTest305";
-  box.className="update-test-304";
-  box.innerHTML='✅ Arctic Foxes Analytics 3.0.5 Update Fix<small>Updates can now be opened from the left menu or directly from Coach Center.</small>';
-  host.insertBefore(box, host.firstChild);
-}
+function ensureUpdateTest305(){ /* Historical promotional banner retired in 3.0.13. */ }
 setTimeout(ensureUpdateTest305, 1200);
 setInterval(ensureUpdateTest305, 3000);
 </script>
 
 <script src="release-ui.js"></script>
+<script src="interface-model.js"></script>
+<script src="interface.js"></script>
 </body>
 </html>
