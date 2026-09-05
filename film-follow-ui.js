@@ -44,7 +44,31 @@ $('#startFollow416').onclick=()=>{try{const m=media314();if(!follow416?.tracks.l
 $('#stopFollow416').onclick=()=>pauseFollow416('Following paused. Resume from this frame.');
 const oldAuto416=$('#autoStart314').onclick;$('#autoStart314').onclick=()=>{if(follow416)pauseFollow416('Unlabeled review selected. Reconnect to follow again.',true);oldAuto416();};
 const labelCanvas416=document.createElement('canvas');labelCanvas416.id='labelCanvas416';wrap31.appendChild(labelCanvas416);
-function paintFollow416(){const w=v314.videoWidth,h=v314.videoHeight;if(!w||v314.readyState<2){labelCanvas416.style.display='none';return;}const scale=(document.body.classList.contains('film-fill31')?Math.max:Math.min)(v314.clientWidth/w,v314.clientHeight/h);Object.assign(labelCanvas416.style,{display:'block',left:`${v314.offsetLeft+(v314.clientWidth-w*scale)/2}px`,top:`${v314.offsetTop+(v314.clientHeight-h*scale)/2}px`,width:`${w*scale}px`,height:`${h*scale}px`});labelCanvas416.width=960;labelCanvas416.height=Math.round(960*h/w);const c=labelCanvas416.getContext('2d');for(const t of follow416?.tracks||[]){if(t.status!=='following')continue;const p=state.players.find(p=>p.id===t.playerId),b=t.box;c.strokeStyle='#70ecc3';c.lineWidth=2;c.strokeRect(b.x*960,b.y*labelCanvas416.height,b.width*960,b.height*labelCanvas416.height);c.font='bold 14px sans-serif';const text=`#${p?.number||''} ${p?.name||''}`,x=b.x*960,y=Math.max(18,b.y*labelCanvas416.height);c.fillStyle='#071912';c.fillRect(x,y-18,c.measureText(text).width+8,18);c.fillStyle='#aaffdf';c.fillText(text,x+4,y-4);}}
+function paintFollow416(){
+ const w=v314.videoWidth,h=v314.videoHeight;if(!w||v314.readyState<2){labelCanvas416.style.display='none';return;}
+ const scale=(document.body.classList.contains('film-fill31')?Math.max:Math.min)(v314.clientWidth/w,v314.clientHeight/h);
+ Object.assign(labelCanvas416.style,{display:'block',left:`${v314.offsetLeft+(v314.clientWidth-w*scale)/2}px`,top:`${v314.offsetTop+(v314.clientHeight-h*scale)/2}px`,width:`${w*scale}px`,height:`${h*scale}px`});
+ labelCanvas416.width=960;labelCanvas416.height=Math.round(960*h/w);
+ const c=labelCanvas416.getContext('2d'),ch=labelCanvas416.height;
+ for(const t of follow416?.tracks||[]){
+  if(t.status!=='following')continue;
+  const p=state.players.find(p=>p.id===t.playerId),b=t.box;
+  // Anchor near the top center of the tracked player; tracking geometry stays private.
+  const hx=(b.x+b.width/2)*960,hy=(b.y+b.height*.08)*ch;
+  c.font='bold 13px sans-serif';
+  let text=`#${p?.number||''} ${p?.name||''}`.trim();
+  while(c.measureText(text).width>210&&text.length>4)text=text.slice(0,-2).trimEnd()+'…';
+  const fw=c.measureText(text).width+22,fh=24,x=Math.max(3,Math.min(957-fw,hx-fw/2));
+  const above=hy>=fh+20,y=above?hy-fh-16:Math.min(ch-fh-3,hy+16);
+  c.lineWidth=2;c.strokeStyle='#77f3c7';c.lineCap='round';
+  c.beginPath();c.moveTo(hx,hy);c.lineTo(Math.max(x+7,Math.min(x+fw-7,hx)),above?y+fh:y);c.stroke();
+  c.beginPath();c.arc(hx,hy,3,0,Math.PI*2);c.fillStyle='#aaffdf';c.fill();
+  // A small pennant replaces the full player rectangle.
+  c.beginPath();c.moveTo(x+5,y);c.lineTo(x+fw,y);c.lineTo(x+fw-5,y+fh/2);c.lineTo(x+fw,y+fh);c.lineTo(x+5,y+fh);c.quadraticCurveTo(x,y+fh,x,y+fh-5);c.lineTo(x,y+5);c.quadraticCurveTo(x,y,x+5,y);c.closePath();
+  c.fillStyle='rgba(7,25,18,.94)';c.fill();c.lineWidth=1;c.strokeStyle='#77f3c7';c.stroke();
+  c.fillStyle='#effff9';c.textBaseline='middle';c.fillText(text,x+8,y+fh/2);
+ }
+}
 function loopFollow416(){try{const context=JSON.stringify([state.currentGameId,currentClipId()]);if(context!==followContext416&&follow416){following416=false;follow416=null;followContext416=context;renderFollow416();}
  if(following416&&!v314.paused&&!v314.seeking&&v314.readyState>=2&&v314.currentTime-followTime416>=.1){if(follow416.tracks.some(t=>t.onIce!==!!state.players.find(p=>p.id===t.playerId)?.shifts?.some(s=>!s.ended)))throw Error('On-ice selections changed. Reconnect labels.');followTime416=v314.currentTime;const result=follow416.frame(frame416(),followTime416);if(result.lost.length){const reason=follow416.tracks.find(t=>t.status==='lost')?.reason||'Reconnect labels.';pauseFollow416(reason,true);openTool416('follow');}else if(result.events.length){const clipId=currentClipId();if(!commit314(g=>{for(const event of result.events){const id=crypto.randomUUID();T314.transition(g,{...event,clipId,source:'auto',detectionId:id});T314.data(g).groundTruth.push({...event,id,clipId,kind:'followed-crossing',confirmedAt:Date.now()});}})){pauseFollow416('Shift needs review. Reconnect after correcting it.',true);openTool416('review');}}}paintFollow416();}catch(e){pauseFollow416(e.message,true);}requestAnimationFrame(loopFollow416);}
 v314.addEventListener('play',()=>{if(follow416&&!following416){follow416.invalidate('Video played without following. Reconnect labels.');renderFollow416();}});
