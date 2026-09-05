@@ -1786,78 +1786,16 @@ tr:hover td{background:rgba(255,255,255,.025)}
 </div></div>
 
 <div id="playerValuePage" class="value-page" aria-hidden="true">
-  <div class="value-page-inner">
-    <div class="value-page-head">
-      <div>
-        <div class="value-page-title">Foxes Player Rating</div>
-        <div class="sub" style="margin:3px 0 0">Stat-based impact view. Higher scores mean stronger statistical contribution in the selected scope.</div>
-      </div>
-      <button id="closePlayerValue" type="button">← Back to Analytics</button>
-    </div>
-
-    <div class="card">
-      <div class="value-controls">
-        <div>
-          <label for="valueScope">View</label>
-          <select id="valueScope">
-            <option value="season">Full Season</option>
-            <option value="current">Current Game</option>
-            <option value="selected">Selected Game</option>
-          </select>
-        </div>
-        <div>
-          <label for="valueGameSelect">Game</label>
-          <select id="valueGameSelect"></select>
-        </div>
-        <div>
-          <label for="valuePosition">Position</label>
-          <select id="valuePosition">
-            <option value="ALL">All Players</option>
-            <option value="F">Forwards</option>
-            <option value="D">Defense</option>
-            <option value="G">Goalies</option>
-          </select>
-        </div>
-        <div>
-          <label for="valueSearch">Find player</label>
-          <input id="valueSearch" type="text" placeholder="Name or #">
-        </div>
-      </div>
-    </div>
-
-    <div class="value-summary">
-      <div class="value-kpi"><div class="kpi-label">Players Rated</div><div class="num" id="valuePlayersRated">0</div></div>
-      <div class="value-kpi"><div class="kpi-label">Team Leader</div><div class="num" id="valueLeaderScore">—</div><div class="sub" id="valueLeaderName" style="margin:2px 0 0"></div></div>
-      <div class="value-kpi"><div class="kpi-label">Team Average</div><div class="num" id="valueTeamAverage">—</div></div>
-      <div class="value-kpi"><div class="kpi-label">Strong Impact 70+</div><div class="num" id="valueStrongCount">0</div></div>
-    </div>
-
-    <div class="value-legend">
-      <span style="background:#123c25;color:#8ef0ad">85–100 Elite Impact</span>
-      <span style="background:#123b3d;color:#83e7e9">70–84 Strong</span>
-      <span style="background:#493a0d;color:#ffd66e">55–69 Solid</span>
-      <span style="background:#4b2b0c;color:#ffc27b">40–54 Needs More</span>
-      <span style="background:#48171c;color:#ff9aa4">Below 40 Low Impact</span>
-    </div>
-
-    <div id="valueTopCards" class="value-top-cards"></div>
-
-    <div class="value-table-wrap">
-      <table class="value-table">
-        <thead>
-          <tr>
-            <th>Rank</th><th>Player</th><th>Rating</th><th>Trend</th><th>Production / SV%</th><th>Results / GAA</th>
-            <th>Defense / Result</th><th>Discipline</th><th>Efficiency / Workload</th><th>Key Stats</th><th>Biggest Driver</th>
-          </tr>
-        </thead>
-        <tbody id="playerValueBody"></tbody>
-      </table>
-    </div>
-
-    <div class="value-info" style="margin-top:12px">
-      Foxes Player Rating starts at 50.0 and recalculates from individual Game Ratings. Season history and movement update after every game edit. Skaters use impact and efficiency; more minutes alone never add points. Goalies use a separate formula. Adjust Rating Weights on Season Stats. Missing TOI and unused faceoffs are excluded and remaining weights are normalized.
-    </div>
+ <div class="rating-studio">
+  <header class="rating-header"><div class="rating-brand">AF<span>ARCTIC FOXES / DEVELOPMENT</span></div><button id="closePlayerValue" type="button">← Back to Analytics</button></header>
+  <div class="rating-title"><div><span class="rating-eyebrow">THE COACH'S VIEW</span><h1>Player ratings<span>.</span></h1><p>See the contribution. Understand the player.</p></div><div class="rating-scope"><label for="valueScope">Rating window</label><select id="valueScope"><option value="season">Full Season</option><option value="current">Current Game</option><option value="selected">Selected Game</option></select><div><label for="valueGameSelect">Game</label><select id="valueGameSelect"></select></div></div></div>
+  <div id="ratingPulse" class="rating-pulse"></div>
+  <div class="rating-workspace">
+   <section class="rating-roster" aria-label="Player rankings"><div class="rating-roster-heading"><h2>The roster</h2><span>SELECT A PLAYER ↗</span></div><div class="rating-filters"><label for="valueSearch" class="rating-sr">Find player</label><input id="valueSearch" placeholder="Search name or jersey…"><label for="valuePosition" class="rating-sr">Position</label><select id="valuePosition"><option value="ALL">All positions</option><option value="F">Forwards</option><option value="D">Defense</option><option value="G">Goalies</option></select></div><div id="ratingRosterList"></div></section>
+   <section id="ratingFocus" class="rating-focus" aria-label="Selected player details" aria-live="polite"></section>
   </div>
+  <details class="rating-method"><summary>About the rating model</summary><p>Season ratings start at 50 and combine individual game ratings with two baseline games at 50. Category scores show the latest game. Missing TOI and unused faceoffs are excluded; remaining weights are normalized. Goalies use a separate formula. Adjust weights in Season Stats.</p></details>
+ </div>
 </div>
 
 
@@ -5453,9 +5391,9 @@ document.addEventListener("keydown",e=>{let t=(document.activeElement?.tagName||
 $("#openPlayerValue")?.addEventListener("click",openPlayerValuePage);
 $("#closePlayerValue")?.addEventListener("click",closePlayerValuePage);
 $("#valueScope")?.addEventListener("change",()=>{renderValueGameOptions();renderPlayerValuePage();});
-$("#valueGameSelect")?.addEventListener("change",renderPlayerValuePage);
-$("#valuePosition")?.addEventListener("change",renderPlayerValuePage);
-$("#valueSearch")?.addEventListener("input",renderPlayerValuePage);
+$("#valueGameSelect")?.addEventListener("change",()=>renderPlayerValuePage());
+$("#valuePosition")?.addEventListener("change",()=>renderPlayerValuePage());
+$("#valueSearch")?.addEventListener("input",()=>renderPlayerValuePage());
 document.addEventListener("keydown",e=>{
   if(e.key==="Escape" && $("#playerValuePage")?.classList.contains("open")) closePlayerValuePage();
 });
@@ -6240,7 +6178,7 @@ bindSaveLocationControls(); render();
 setInterval(()=>{ if(state.players.some(p=>p.active)) render(); },1000);
 
 // -------------------- 2.0.2 UPDATE UI --------------------
-let foxesUpdateState={status:'idle',percent:0,currentVersion:'3.1.1'};
+let foxesUpdateState={status:'idle',percent:0,currentVersion:'3.1.2'};
 function showUpdates(){
   $("#updateModal")?.classList.add("open");
   $("#updateModal")?.setAttribute("aria-hidden","false");
@@ -6257,8 +6195,8 @@ function renderUpdateState(s={}){
   const bar=$("#updateProgressBar"), dl=$("#downloadUpdateBtn"), install=$("#installUpdateBtn");
   const release=$("#releasePageBtn"), badge=$("#updateNavBadge"), note=$("#updateNote");
   if(text) text.textContent=foxesUpdateState.message||'Ready to check for updates.';
-  if(ver) ver.textContent=`Current version ${foxesUpdateState.currentVersion||'3.1.1'}`;
-  if(pill) pill.textContent=foxesUpdateState.availableVersion ? `v${foxesUpdateState.availableVersion}` : `v${foxesUpdateState.currentVersion||'3.1.1'}`;
+  if(ver) ver.textContent=`Current version ${foxesUpdateState.currentVersion||'3.1.2'}`;
+  if(pill) pill.textContent=foxesUpdateState.availableVersion ? `v${foxesUpdateState.availableVersion}` : `v${foxesUpdateState.currentVersion||'3.1.2'}`;
   if(bar) bar.style.width=`${Math.max(0,Math.min(100,Number(foxesUpdateState.percent||0)))}%`;
   if(dl) dl.style.display=status==='available'?'inline-flex':'none';
   if(install) install.style.display=status==='downloaded'?'inline-flex':'none';
@@ -6306,7 +6244,7 @@ setTimeout(refreshUpdateState,1200);
     <div class="update-status-card">
       <div class="update-status-row">
         <div class="update-status-text" id="updateStatusText">Ready to check for updates.</div>
-        <div class="update-version-pill" id="updateVersionPill">v3.1.1</div>
+        <div class="update-version-pill" id="updateVersionPill">v3.1.2</div>
       </div>
       <div class="update-progress"><i id="updateProgressBar"></i></div>
     </div>
@@ -6425,7 +6363,7 @@ function ensureUpdateCenter302(){
  const host=document.querySelector('#updatesMount313');
  if(!host||host.querySelector("#updateCenter302"))return;
  const box=document.createElement("div");box.id="updateCenter302";box.className="update302";
- box.innerHTML=`<div><div class="update302-title">App Updates</div><div class="update302-sub" id="updateStatus302">3.1.1 • GitHub auto updates • GitHub Releases</div></div>
+ box.innerHTML=`<div><div class="update302-title">App Updates</div><div class="update302-sub" id="updateStatus302">3.1.2 • GitHub auto updates • GitHub Releases</div></div>
  <div class="update302-actions"><button type="button" id="updateCheck302">Check for Updates</button><button type="button" id="updateDownload302" style="display:none">Download Update</button><button type="button" id="updateInstall302" class="primary" style="display:none">Restart & Install</button><button type="button" id="updateReleases302">Open Releases</button><button type="button" id="updateLog302">Open Updater Log</button></div>`;
  host.insertBefore(box,host.firstChild);
  $("#updateCheck302")?.addEventListener("click",async()=>{
@@ -6434,7 +6372,7 @@ function ensureUpdateCenter302(){
      const timeout=new Promise((_,reject)=>setTimeout(()=>reject(new Error("No response from updater after 30 seconds.")),30000));
      const r=await Promise.race([window.foxesStorage?.updateCheck?.(),timeout]);
      if(r?.message) $("#updateStatus302").textContent=r.message;
-     else if(r?.status==="current") $("#updateStatus302").textContent=`You're up to date • ${r.currentVersion||"3.1.1"}`;
+     else if(r?.status==="current") $("#updateStatus302").textContent=`You're up to date • ${r.currentVersion||"3.1.2"}`;
    }catch(e){ $("#updateStatus302").textContent=`Update check failed: ${String(e?.message||e)}`; }
  });
  $("#updateDownload302")?.addEventListener("click",()=>window.foxesStorage?.updateDownload?.());
@@ -6488,7 +6426,7 @@ setTimeout(()=>{
 </script>
 <script>
 // ===== 3.0.5 UPDATE CENTER FIX =====
-function ensureUpdateTest305(){ /* Historical promotional banner retired in 3.1.1. */ }
+function ensureUpdateTest305(){ /* Historical promotional banner retired in 3.1.2. */ }
 setTimeout(ensureUpdateTest305, 1200);
 setInterval(ensureUpdateTest305, 3000);
 </script>

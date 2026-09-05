@@ -35,3 +35,27 @@ const review31=document.createElement('details');review31.id='review31';review31
 const sync31=$('#syncPeriod')?.closest('#filmCard > div');if(sync31){const details=document.createElement('details');details.innerHTML='<summary>Game clock sync & legacy Tag Assist</summary>';sync31.replaceWith(details);details.appendChild(sync31);}
 const syncJump31=$('#toiSyncJump314').onclick;$('#toiSyncJump314').onclick=()=>{if(sync31?.parentElement?.tagName==='DETAILS')sync31.parentElement.open=true;syncJump31();};
 const setup31=$('#autoSetup314').onclick;$('#autoSetup314').onclick=()=>{review31.open=true;setup31();};
+
+// Keep detection controls and readiness visible while the analysis panel is closed.
+const autoBar31=document.createElement('div');autoBar31.className='film-auto31';
+autoBar31.innerHTML='<button id="filmAutoToggle31" type="button" aria-pressed="false">Start Auto Track</button><button id="filmAutoZone31" type="button">Bench Zone</button><button id="filmAutoReview31" type="button">Review crossings</button><span id="filmAutoState31" role="status" aria-live="polite"></span><small>Crossing detection · Assign and confirm players to record TOI</small>';
+tools31.after(autoBar31);
+function renderFilmAuto31(){
+ const data=ensure314(),clip=currentClipId(),ready=!!state.currentGameId&&!!clip&&Number.isFinite(v314.duration)&&v314.duration>0;
+ const zone=data.zones[clip],pending=data.candidates.filter(c=>c.clipId===clip&&c.status==='review').length;
+ const label=!state.currentGameId?'Select a saved game':!ready?'Load a playable clip':zoneDraft314||drawing314?'Save your bench zone':!zone?'Bench zone required':analyzing314?(v314.seeking?'Seeking · detection paused':v314.paused?'Paused · resumes with playback':v314.readyState<2?'Buffering · detection waiting':'Detecting bench crossings'):'Auto Track is off';
+ const button=$('#filmAutoToggle31');button.textContent=analyzing314?'Stop Auto Track':'Start Auto Track';button.setAttribute('aria-pressed',String(analyzing314));
+ const status=$('#filmAutoState31');if(status.textContent!==label)status.textContent=label;
+ autoBar31.dataset.running=String(analyzing314&&!v314.paused&&!v314.seeking&&v314.readyState>=2);
+ $('#filmAutoReview31').textContent=`Review crossings (${pending})`;
+}
+$('#filmAutoToggle31').onclick=()=>{
+ if(analyzing314){$('#autoStop314').click();renderFilmAuto31();return;}
+ analysis31.open=true;$('#toiControls314 [data-mode314="auto"]').click();$('#autoStart314').click();renderFilmAuto31();
+ if(analyzing314)analysis31.open=false;
+};
+$('#filmAutoZone31').onclick=()=>$('#autoSetup314').click();
+$('#filmAutoReview31').onclick=()=>{review31.open=true;renderTOI314();$('#autoSummary314').scrollIntoView({block:'center'});};
+const renderAutoBase31=renderTOI314;renderTOI314=function(){renderAutoBase31();renderFilmAuto31();};
+for(const event of ['play','pause','playing','waiting','seeking','seeked','ended','emptied','loadedmetadata','timeupdate'])v314.addEventListener(event,renderFilmAuto31);
+renderFilmAuto31();
