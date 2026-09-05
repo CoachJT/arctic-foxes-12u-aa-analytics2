@@ -20,3 +20,13 @@ test('existing precision seek clamps timestamps and pauses film',()=>{
  vm.runInContext('seekVideo(.25)',ctx);assert.equal(video.currentTime,4.25);assert.ok(video.paused);
  vm.runInContext('seekVideo(-10)',ctx);assert.equal(video.currentTime,0);vm.runInContext('seekVideo(50)',ctx);assert.equal(video.currentTime,20);
 });
+test('TOI review data saves per game and loading legacy games does not leak candidates',()=>{
+ const toi={zones:{clip:{axis:'x',boundary:.5}},candidates:[{id:'detect',status:'review'}],groundTruth:[{id:'truth',playerId:'p',confirmedAt:1}]};
+ const first={id:'one',players:[],toi314:structuredClone(toi)},second={id:'two',players:[]};
+ const state={currentGameId:'one',savedGames:[first,second],players:[],toi314:structuredClone(toi)};
+ const ctx=vm.createContext({state,deepClone:structuredClone,emptyOfficialStats:()=>({}),crypto:require('crypto').webcrypto,normalizedGame312:()=>{},ensureFilmClipState:()=>{},save:()=>{},render:()=>{},setTimeout:()=>{}});
+ vm.runInContext(source('currentGameSnapshot')+'\n'+source('loadSavedGame'),ctx);
+ assert.deepEqual(JSON.parse(vm.runInContext('JSON.stringify(currentGameSnapshot().toi314)',ctx)),toi);
+ vm.runInContext("loadSavedGame('two')",ctx);assert.deepEqual(JSON.parse(JSON.stringify(state.toi314)),{zones:{},candidates:[],groundTruth:[]});
+ vm.runInContext("loadSavedGame('one')",ctx);assert.deepEqual(JSON.parse(JSON.stringify(state.toi314)),toi);state.toi314.candidates.push({id:'new'});assert.equal(first.toi314.candidates.length,1);
+});

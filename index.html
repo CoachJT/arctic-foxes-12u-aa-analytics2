@@ -3622,6 +3622,7 @@ function downloadOfficialStatsTemplate(){
 
 
 function resetWorkingGameData(){
+  state.toi314={zones:{},candidates:[],groundTruth:[]};
   state.running=false;
   clearInterval(tickHandle);
   state.players.forEach(p=>{p.active=false;p.shifts=[];});
@@ -3677,6 +3678,7 @@ function createSimpleGame(){
 
 function currentGameSnapshot(){
   return {
+    toi314: deepClone(state.toi314||{zones:{},candidates:[],groundTruth:[]}),
     id: state.currentGameId || crypto.randomUUID(),
     date: state.gameDate || "",
     opponent: state.opponent || "",
@@ -3720,6 +3722,7 @@ function loadSavedGame(id){
   if(!g) return;
 
   normalizedGame312(g);
+  state.toi314=deepClone(g.toi314||{zones:{},candidates:[],groundTruth:[]});
   state.currentGameId=g.id;
   state.dashboardGameId=g.id;
   state.gameDate=g.date||"";
@@ -6360,7 +6363,7 @@ bindSaveLocationControls(); render();
 setInterval(()=>{ if(state.players.some(p=>p.active)) render(); },1000);
 
 // -------------------- 2.0.2 UPDATE UI --------------------
-let foxesUpdateState={status:'idle',percent:0,currentVersion:'3.0.13'};
+let foxesUpdateState={status:'idle',percent:0,currentVersion:'3.0.14'};
 function showUpdates(){
   $("#updateModal")?.classList.add("open");
   $("#updateModal")?.setAttribute("aria-hidden","false");
@@ -6377,8 +6380,8 @@ function renderUpdateState(s={}){
   const bar=$("#updateProgressBar"), dl=$("#downloadUpdateBtn"), install=$("#installUpdateBtn");
   const release=$("#releasePageBtn"), badge=$("#updateNavBadge"), note=$("#updateNote");
   if(text) text.textContent=foxesUpdateState.message||'Ready to check for updates.';
-  if(ver) ver.textContent=`Current version ${foxesUpdateState.currentVersion||'3.0.13'}`;
-  if(pill) pill.textContent=foxesUpdateState.availableVersion ? `v${foxesUpdateState.availableVersion}` : `v${foxesUpdateState.currentVersion||'3.0.13'}`;
+  if(ver) ver.textContent=`Current version ${foxesUpdateState.currentVersion||'3.0.14'}`;
+  if(pill) pill.textContent=foxesUpdateState.availableVersion ? `v${foxesUpdateState.availableVersion}` : `v${foxesUpdateState.currentVersion||'3.0.14'}`;
   if(bar) bar.style.width=`${Math.max(0,Math.min(100,Number(foxesUpdateState.percent||0)))}%`;
   if(dl) dl.style.display=status==='available'?'inline-flex':'none';
   if(install) install.style.display=status==='downloaded'?'inline-flex':'none';
@@ -6426,7 +6429,7 @@ setTimeout(refreshUpdateState,1200);
     <div class="update-status-card">
       <div class="update-status-row">
         <div class="update-status-text" id="updateStatusText">Ready to check for updates.</div>
-        <div class="update-version-pill" id="updateVersionPill">v3.0.13</div>
+        <div class="update-version-pill" id="updateVersionPill">v3.0.14</div>
       </div>
       <div class="update-progress"><i id="updateProgressBar"></i></div>
     </div>
@@ -6545,7 +6548,7 @@ function ensureUpdateCenter302(){
  const host=document.querySelector('#updatesMount313');
  if(!host||host.querySelector("#updateCenter302"))return;
  const box=document.createElement("div");box.id="updateCenter302";box.className="update302";
- box.innerHTML=`<div><div class="update302-title">App Updates</div><div class="update302-sub" id="updateStatus302">3.0.13 • GitHub auto updates • GitHub Releases</div></div>
+ box.innerHTML=`<div><div class="update302-title">App Updates</div><div class="update302-sub" id="updateStatus302">3.0.14 • GitHub auto updates • GitHub Releases</div></div>
  <div class="update302-actions"><button type="button" id="updateCheck302">Check for Updates</button><button type="button" id="updateDownload302" style="display:none">Download Update</button><button type="button" id="updateInstall302" class="primary" style="display:none">Restart & Install</button><button type="button" id="updateReleases302">Open Releases</button><button type="button" id="updateLog302">Open Updater Log</button></div>`;
  host.insertBefore(box,host.firstChild);
  $("#updateCheck302")?.addEventListener("click",async()=>{
@@ -6554,7 +6557,7 @@ function ensureUpdateCenter302(){
      const timeout=new Promise((_,reject)=>setTimeout(()=>reject(new Error("No response from updater after 30 seconds.")),30000));
      const r=await Promise.race([window.foxesStorage?.updateCheck?.(),timeout]);
      if(r?.message) $("#updateStatus302").textContent=r.message;
-     else if(r?.status==="current") $("#updateStatus302").textContent=`You're up to date • ${r.currentVersion||"3.0.13"}`;
+     else if(r?.status==="current") $("#updateStatus302").textContent=`You're up to date • ${r.currentVersion||"3.0.14"}`;
    }catch(e){ $("#updateStatus302").textContent=`Update check failed: ${String(e?.message||e)}`; }
  });
  $("#updateDownload302")?.addEventListener("click",()=>window.foxesStorage?.updateDownload?.());
@@ -6608,7 +6611,7 @@ setTimeout(()=>{
 </script>
 <script>
 // ===== 3.0.5 UPDATE CENTER FIX =====
-function ensureUpdateTest305(){ /* Historical promotional banner retired in 3.0.13. */ }
+function ensureUpdateTest305(){ /* Historical promotional banner retired in 3.0.14. */ }
 setTimeout(ensureUpdateTest305, 1200);
 setInterval(ensureUpdateTest305, 3000);
 </script>
@@ -6616,5 +6619,9 @@ setInterval(ensureUpdateTest305, 3000);
 <script src="release-ui.js"></script>
 <script src="interface-model.js"></script>
 <script src="interface.js"></script>
+<link rel="stylesheet" href="toi.css">
+<script src="toi-engine.js"></script>
+<script src="crossing-detector.js"></script>
+<script src="toi-ui.js"></script>
 </body>
 </html>

@@ -13,6 +13,10 @@ on:
       - 'interface.js'
       - 'interface-model.js'
       - 'interface.css'
+      - 'toi-engine.js'
+      - 'crossing-detector.js'
+      - 'toi-ui.js'
+      - 'toi.css'
       - 'package-lock.json'
       - 'tests/**'
       - '.github/workflows/publish-windows.yml'
@@ -78,7 +82,9 @@ jobs:
           $tag = "v${{ steps.version.outputs.version }}"
           gh release view $tag --repo "${{ github.repository }}" *> $null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $tag --repo "${{ github.repository }}" --title "${{ steps.version.outputs.version }}" --notes "Arctic Foxes Analytics ${{ steps.version.outputs.version }}"
+            $releaseTitle = "${{ steps.version.outputs.version }}"
+            if ($tag -eq "v3.0.14") { $releaseTitle = "3.0.14 - TOI Tracking + Auto Track Alpha" }
+            gh release create $tag --repo "${{ github.repository }}" --title $releaseTitle --notes "Arctic Foxes Analytics ${{ steps.version.outputs.version }}"
           } else {
             Write-Host "Release $tag already exists."
           }
