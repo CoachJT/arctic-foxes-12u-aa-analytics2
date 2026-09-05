@@ -84,7 +84,7 @@ function review(g,{id,action,playerId,videoTime,direction}){
  Object.assign(c,{status:'confirmed',assignedPlayerId:playerId,correctedVideoTime:t,correctedDirection:direction,reviewedAt:Date.now()});
  data(g).groundTruth.push({id:uid(),detectionId:c.id,clipId:c.clipId,videoTime:t,direction,playerId,original:copy(c),confirmedAt:Date.now()});
 }
-function apply(g,fn){const out=copy(g);fn(out);return out;}
+function apply(g,fn){const out=copy(g);fn(out);const before=shifts(g),after=shifts(out),changes=[];for(const s of after){const old=before.find(x=>x.shiftId===s.shiftId);if(JSON.stringify(old)!==JSON.stringify(s))changes.push({shiftId:s.shiftId,before:old||null,after:s});}for(const s of before)if(!after.some(x=>x.shiftId===s.shiftId))changes.push({shiftId:s.shiftId,before:s,after:null});if(changes.length){const d=data(out);d.audit=d.audit||[];d.audit.push({at:Date.now(),changes});}return out;}
 const api={saveZone,data,clock,view,shifts,duration,summary,transition,edit,remove,candidate,review,apply};
 if(typeof module==='object'&&module.exports)module.exports=api;else root.FoxesTOI=api;
 })(globalThis);

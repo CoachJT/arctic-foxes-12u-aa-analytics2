@@ -3515,6 +3515,7 @@ function renderOfficialStats(){
 }
 
 function resetWorkingGameData(){
+  state.command31={};
   state.toi314={zones:{},candidates:[],groundTruth:[]};
   state.running=false;
   clearInterval(tickHandle);
@@ -6237,7 +6238,7 @@ bindSaveLocationControls(); render();
 setInterval(()=>{ if(state.players.some(p=>p.active)) render(); },1000);
 
 // -------------------- 2.0.2 UPDATE UI --------------------
-let foxesUpdateState={status:'idle',percent:0,currentVersion:'3.0.16'};
+let foxesUpdateState={status:'idle',percent:0,currentVersion:'3.1.0-dev.1'};
 function showUpdates(){
   $("#updateModal")?.classList.add("open");
   $("#updateModal")?.setAttribute("aria-hidden","false");
@@ -6254,8 +6255,8 @@ function renderUpdateState(s={}){
   const bar=$("#updateProgressBar"), dl=$("#downloadUpdateBtn"), install=$("#installUpdateBtn");
   const release=$("#releasePageBtn"), badge=$("#updateNavBadge"), note=$("#updateNote");
   if(text) text.textContent=foxesUpdateState.message||'Ready to check for updates.';
-  if(ver) ver.textContent=`Current version ${foxesUpdateState.currentVersion||'3.0.16'}`;
-  if(pill) pill.textContent=foxesUpdateState.availableVersion ? `v${foxesUpdateState.availableVersion}` : `v${foxesUpdateState.currentVersion||'3.0.16'}`;
+  if(ver) ver.textContent=`Current version ${foxesUpdateState.currentVersion||'3.1.0-dev.1'}`;
+  if(pill) pill.textContent=foxesUpdateState.availableVersion ? `v${foxesUpdateState.availableVersion}` : `v${foxesUpdateState.currentVersion||'3.1.0-dev.1'}`;
   if(bar) bar.style.width=`${Math.max(0,Math.min(100,Number(foxesUpdateState.percent||0)))}%`;
   if(dl) dl.style.display=status==='available'?'inline-flex':'none';
   if(install) install.style.display=status==='downloaded'?'inline-flex':'none';
@@ -6303,7 +6304,7 @@ setTimeout(refreshUpdateState,1200);
     <div class="update-status-card">
       <div class="update-status-row">
         <div class="update-status-text" id="updateStatusText">Ready to check for updates.</div>
-        <div class="update-version-pill" id="updateVersionPill">v3.0.16</div>
+        <div class="update-version-pill" id="updateVersionPill">v3.1.0-dev.1</div>
       </div>
       <div class="update-progress"><i id="updateProgressBar"></i></div>
     </div>
@@ -6422,7 +6423,7 @@ function ensureUpdateCenter302(){
  const host=document.querySelector('#updatesMount313');
  if(!host||host.querySelector("#updateCenter302"))return;
  const box=document.createElement("div");box.id="updateCenter302";box.className="update302";
- box.innerHTML=`<div><div class="update302-title">App Updates</div><div class="update302-sub" id="updateStatus302">3.0.16 • GitHub auto updates • GitHub Releases</div></div>
+ box.innerHTML=`<div><div class="update302-title">App Updates</div><div class="update302-sub" id="updateStatus302">3.1.0-dev.1 • GitHub auto updates • GitHub Releases</div></div>
  <div class="update302-actions"><button type="button" id="updateCheck302">Check for Updates</button><button type="button" id="updateDownload302" style="display:none">Download Update</button><button type="button" id="updateInstall302" class="primary" style="display:none">Restart & Install</button><button type="button" id="updateReleases302">Open Releases</button><button type="button" id="updateLog302">Open Updater Log</button></div>`;
  host.insertBefore(box,host.firstChild);
  $("#updateCheck302")?.addEventListener("click",async()=>{
@@ -6431,7 +6432,7 @@ function ensureUpdateCenter302(){
      const timeout=new Promise((_,reject)=>setTimeout(()=>reject(new Error("No response from updater after 30 seconds.")),30000));
      const r=await Promise.race([window.foxesStorage?.updateCheck?.(),timeout]);
      if(r?.message) $("#updateStatus302").textContent=r.message;
-     else if(r?.status==="current") $("#updateStatus302").textContent=`You're up to date • ${r.currentVersion||"3.0.16"}`;
+     else if(r?.status==="current") $("#updateStatus302").textContent=`You're up to date • ${r.currentVersion||"3.1.0-dev.1"}`;
    }catch(e){ $("#updateStatus302").textContent=`Update check failed: ${String(e?.message||e)}`; }
  });
  $("#updateDownload302")?.addEventListener("click",()=>window.foxesStorage?.updateDownload?.());
@@ -6485,7 +6486,7 @@ setTimeout(()=>{
 </script>
 <script>
 // ===== 3.0.5 UPDATE CENTER FIX =====
-function ensureUpdateTest305(){ /* Historical promotional banner retired in 3.0.16. */ }
+function ensureUpdateTest305(){ /* Historical promotional banner retired in 3.1.0-dev.1. */ }
 setTimeout(ensureUpdateTest305, 1200);
 setInterval(ensureUpdateTest305, 3000);
 </script>
@@ -6498,5 +6499,9 @@ setInterval(ensureUpdateTest305, 3000);
 <script src="crossing-detector.js"></script>
 <script src="toi-ui.js"></script>
 <script src="stats-import-ui.js"></script>
+<link rel="stylesheet" href="command.css">
+<script src="command-model.js"></script>
+<script src="command-ui.js"></script>
+<script src="film-workspace.js"></script>
 </body>
 </html>

@@ -19,12 +19,24 @@ function preview(rows,players,stats,gameId,sourceName='pasted data'){
  if(!gameId)throw Error('Create or open a saved game in My Games first.');
  if(rows.length>10000)throw Error('Use a sheet for one game (at most 10,000 rows).');
  const plan={gameId,sourceName,rows:[],warnings:[],base:JSON.stringify(stats),roster:JSON.stringify(players.map(p=>[p.id,p.number,p.name,p.pos]))};
- let headers=null;
+ plan.team={};let headers=null,section='players';
  rows.forEach((row,index)=>{
   if(!row.some(v=>String(v??'').trim()))return;
   const h=row.map(key);
+  const labels=row.map(norm),sectionName=labels.find(v=>['teamstats','scoring','scoringbyperiod','periodscoring','shots','shotsbyperiod','periodshots'].includes(v));
+  if(sectionName&&!h.includes('name')){section=sectionName==='teamstats'?'team':sectionName.includes('scor')?'scoring':'shots';headers=null;return;}
+  if(section!=='players'&&!h.includes('name')){
+   const at=labels.findIndex(v=>['powerplay','penaltykill','faceoff','goalsfor','goalsagainst','shotsfor','shotsagainst'].includes(v));
+   if(at<0)return;
+   const label=labels[at],values={},warnings=[],read=i=>{const raw=row[at+i];if(raw==null||String(raw).trim()===''||/^#|^=/.test(String(raw)))return null;const n=Number(raw);return Number.isInteger(n)&&n>=0?n:null;};
+   if(['powerplay','penaltykill','faceoff'].includes(label)){
+    const n=read(1),v=read(2),keys=label==='powerplay'?['ppChances','ppSuccess']:label==='penaltykill'?['pkChances','pkSuccess']:['fo','fow'];
+    if(n!=null&&v!=null&&v>n)warnings.push('Success exceeds attempts; section skipped.');else{if(n!=null)values[keys[0]]=n;if(v!=null)values[keys[1]]=v;if(label==='faceoff'&&n!=null&&v!=null)values.fol=n-v;}
+   }else{const k={goalsfor:'goalsFor',goalsagainst:'goalsAgainst',shotsfor:'shotsFor',shotsagainst:'shotsAgainst'}[label],p={};['p1','p2','p3','ot','total'].forEach((key,i)=>{const v=read(i+1);if(v!=null)p[key]=v;});if(['p1','p2','p3','ot'].every(k=>p[k]!=null)){const total=p.p1+p.p2+p.p3+p.ot;if(p.total!=null&&p.total!==total)warnings.push('Period sum differs from supplied total; supplied total preserved.');else p.total=total;}if(Object.keys(p).length)values[k]=p;}
+   Object.assign(plan.team,values);plan.rows.push({line:index+1,label:row.join(' | '),warnings,values,player:null,group:'team',ready:Object.keys(values).length>0});return;
+  }
   if((h.includes('number')||h.includes('name'))&&h.some(k=>k&&!['number','name','type'].includes(k))){
-   headers=h;const seen=new Set();h.forEach((k,i)=>{if(k&&seen.has(k))throw Error('Duplicate column: '+row[i]);if(k)seen.add(k);else if(row[i])plan.warnings.push('Ignored column: '+row[i]);});return;
+   section='players';headers=h;const seen=new Set();h.forEach((k,i)=>{if(k&&seen.has(k))throw Error('Duplicate column: '+row[i]);if(k)seen.add(k);else if(row[i])plan.warnings.push('Ignored column: '+row[i]);});return;
   }
   const item={line:index+1,label:row.join(' | '),warnings:[],values:{},player:null};plan.rows.push(item);
   if(!headers){item.warnings.push('Skipped: no recognized header above this row.');return;}
@@ -60,7 +72,7 @@ function preview(rows,players,stats,gameId,sourceName='pasted data'){
   if(Object.keys(v).length&&v.gp==null)v.gp=1;
  });
  const counts={};plan.rows.forEach(r=>{if(r.player&&Object.keys(r.values).length){const n=String(r.player.number);counts[n]=(counts[n]||0)+1;}});
- plan.rows.forEach(r=>{r.ready=!!r.player&&Object.keys(r.values).length>0;if(r.ready&&counts[String(r.player.number)]>1){r.ready=false;r.warnings.push('Duplicate player rows; resolve in the sheet before importing.');}});
+ plan.rows.forEach(r=>{if(r.group==='team')return;r.ready=!!r.player&&Object.keys(r.values).length>0;if(r.ready&&counts[String(r.player.number)]>1){r.ready=false;r.warnings.push('Duplicate player rows; resolve in the sheet before importing.');}});
  return plan;
 }
 function apply(plan,stats,players,gameId){
@@ -68,7 +80,9 @@ function apply(plan,stats,players,gameId){
  if(gameId!==plan.gameId||JSON.stringify(stats)!==plan.base||JSON.stringify(players.map(p=>[p.id,p.number,p.name,p.pos]))!==plan.roster)throw Error('Game, roster or stats changed. Preview the sheet again.');
  const rows=plan.rows.filter(r=>r.ready);if(!rows.length)throw Error('No matched rows with usable stats to import.');
  const out=clone(stats||{});out.skaters=out.skaters||{};out.goalies=out.goalies||{};
- rows.forEach(r=>{const n=String(r.player.number);out[r.group][n]={...out[r.group][n],...r.values,number:r.player.number,name:r.player.name,playerId:r.player.id};});
+ rows.filter(r=>r.group!=='team').forEach(r=>{const n=String(r.player.number);out[r.group][n]={...out[r.group][n],...r.values,number:r.player.number,name:r.player.name,playerId:r.player.id};});
+ out.team={...out.team};Object.entries(plan.team||{}).forEach(([k,v])=>{out.team[k]=typeof v==='object'?{...out.team[k],...v}:v;});
+ out.importFields31=[...new Set([...(out.importFields31||Object.keys(stats?.team||{}).filter(k=>Number(stats.team[k]?.total)>0)),...Object.keys(plan.team||{})])];
  out.imported=true;out.sourceName=plan.sourceName;out.importedAt=new Date().toISOString();return out;
 }
 const headers=['TYPE','#','Player','GP','G','A','PTS','SOG','PIM','+/-','Blocks','FO W','FO L','PPG','PPA','PPP','SHG','SHA','SHP','GWG','GTG','MIN','Saves','SA','GA','W','L','T','SO','CH','TK','GV'];

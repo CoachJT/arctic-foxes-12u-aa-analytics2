@@ -1,14 +1,16 @@
 {
   "name": "foxes-hockey-analytics",
-  "version": "3.0.16",
+  "version": "3.1.0-dev.1",
   "description": "Arctic Foxes 12U AA coach platform with scouting center, printable game-day reports, usage, trends, settings and video library.",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win --publish never",
+    "dist": "npm run dist:portable && npm run dist:installer",
     "release": "electron-builder --win nsis --publish always",
     "publish": "electron-builder --win --publish always",
-    "test": "node --test tests/*.test.cjs"
+    "test": "node --test tests/*.test.cjs",
+    "dist:portable": "electron-builder --win portable --publish never --config.directories.output=dist/portable",
+    "dist:installer": "electron-builder --win nsis --publish never"
   },
   "devDependencies": {
     "electron": "^39.0.0",
@@ -43,7 +45,11 @@
       "toi.css",
       "stats-import.js",
       "stats-import-ui.js",
-      "vendor/**"
+      "vendor/**",
+      "command-model.js",
+      "command-ui.js",
+      "command.css",
+      "film-workspace.js"
     ],
     "nsis": {
       "oneClick": false,
