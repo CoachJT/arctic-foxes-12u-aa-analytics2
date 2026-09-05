@@ -38,57 +38,48 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           Write-Host "App version: $version"
 
-      - name: Check whether release already exists
-        id: release_check
+      - name: Ensure release tag exists
+        shell: pwsh
+        run: |
+          $tag = "v${{ steps.version.outputs.version }}"
+          git fetch --tags
+          if (-not (git tag -l $tag)) {
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag $tag
+            git push origin $tag
+          } else {
+            Write-Host "Tag $tag already exists."
+          }
+
+      - name: Build update files
+        shell: pwsh
+        run: npx electron-builder --win nsis --publish never
+
+      - name: Ensure GitHub release exists
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $tag = "v${{ steps.version.outputs.version }}"
           gh release view $tag --repo "${{ github.repository }}" *> $null
-          $releaseExists = ($LASTEXITCODE -eq 0)
-
-          if ($releaseExists) {
-            "exists=true" >> $env:GITHUB_OUTPUT
-            Write-Host "Release $tag already exists. Nothing to publish."
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --repo "${{ github.repository }}" --title "${{ steps.version.outputs.version }}" --notes "Arctic Foxes Analytics ${{ steps.version.outputs.version }}"
           } else {
-            "exists=false" >> $env:GITHUB_OUTPUT
-            Write-Host "Release $tag does not exist yet. It will be published."
+            Write-Host "Release $tag already exists."
           }
-
           exit 0
-      - name: Create release tag
-        if: steps.release_check.outputs.exists != 'true'
-        shell: pwsh
-        run: |
-          $tag = "v${{ steps.version.outputs.version }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag $tag
-          git push origin $tag
-      - name: Build and publish update
-        if: steps.release_check.outputs.exists != 'true'
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --win nsis --publish never
 
-       - name: Upload update files to GitHub Release
-        if: steps.release_check.outputs.exists != 'true'
+      - name: Upload updater files
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $tag = "v${{ steps.version.outputs.version }}"
-          gh release create $tag --repo "${{ github.repository }}" --title "${{ steps.version.outputs.version }}" --notes "Arctic Foxes Analytics ${{ steps.version.outputs.version }}"
-          gh release upload $tag "dist/latest.yml" "dist/*.exe" "dist/*.blockmap" --repo "${{ github.repository }}" --clobber       
+          gh release upload $tag "dist/latest.yml" "dist/*.exe" "dist/*.blockmap" --repo "${{ github.repository }}" --clobber
 
       - name: Publish summary
         shell: pwsh
         run: |
-          if ("${{ steps.release_check.outputs.exists }}" -eq "true") {
-            "### Arctic Foxes ${{ steps.version.outputs.version }} already published ✅" >> $env:GITHUB_STEP_SUMMARY
-          } else {
-            "### Arctic Foxes ${{ steps.version.outputs.version }} published automatically ✅" >> $env:GITHUB_STEP_SUMMARY
-            "The Windows installer, blockmap, and latest.yml were created by GitHub Actions." >> $env:GITHUB_STEP_SUMMARY
-          }
+          "### Arctic Foxes ${{ steps.version.outputs.version }} published ✅" >> $env:GITHUB_STEP_SUMMARY
+          "The Windows installer, blockmap, and latest.yml were uploaded by GitHub Actions." >> $env:GITHUB_STEP_SUMMARY
