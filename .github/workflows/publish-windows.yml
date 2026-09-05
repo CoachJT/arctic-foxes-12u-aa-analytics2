@@ -39,17 +39,17 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           Write-Host "App version: $version"
 
-      - name: Check whether release already exists
+          - name: Check whether release already exists
         id: release_check
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
         run: |
           $tag = "v${{ steps.version.outputs.version }}"
-          gh release view $tag --repo "${{ github.repository }}" *> $null
+          gh release view $tag --repo "${{ github.repository }}"
           if ($LASTEXITCODE -eq 0) {
             "exists=true" >> $env:GITHUB_OUTPUT
-            Write-Host "Release $tag already exists. Nothing to publish."
           } else {
             "exists=false" >> $env:GITHUB_OUTPUT
           }
