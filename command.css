@@ -280,3 +280,5 @@ body.ui313 #scheduleForm412[open] .schedule-301-fields{margin-top:12px}
 body.ui313.film-fill31 #tagOverlayWrap.film-workstation316:is(:fullscreen,.tag-fullscreen) #gameVideo{object-fit:cover!important}
 
 #filmStatus31{flex-basis:100%;white-space:normal;overflow-wrap:anywhere}#filmStatus31:empty{display:none}
+
+.film-help413{margin:8px 0;font-size:12px}.film-help413>summary{cursor:pointer;color:#b5c2d5}.film-help413 p{line-height:1.5;margin:8px 0}.film-empty413{grid-column:1;grid-row:1;align-self:stretch;justify-self:stretch;z-index:4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#0b0e13;min-height:180px}.film-empty413[hidden]{display:none!important}.film-empty413 strong{font-size:20px}body.ui313 #filmEmpty313{display:none}body.ui313 #tagOverlayWrap #finalize314[hidden]{display:none!important}

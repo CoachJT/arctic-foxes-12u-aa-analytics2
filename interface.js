@@ -134,7 +134,7 @@ const weight=$('#weights312'),weightDetails=document.createElement('details');we
 // Keep clip-loading behavior, with a focused empty state inside the film page.
 const filmEmpty=document.createElement('div');filmEmpty.id='filmEmpty313';$('#filmCard').prepend(filmEmpty);
 const baseClips313=renderFilmClips;
-renderFilmClips=function(){baseClips313();filmEmpty.innerHTML=(state.filmClips||[]).length?'':empty313('Add a LiveBarn clip','Load local film to review shifts, sync the game clock, and tag the action.','addfilm','Add LiveBarn Clip','film');};
+renderFilmClips=function(){baseClips313();filmEmpty.innerHTML=(state.filmClips||[]).length?'':empty313('Add a video to begin','Choose a clip from your computer.','addfilm','Add Clip','film');};
 document.addEventListener('click',e=>{
   const game=e.target.closest('[data-open-game313]');if(game){loadSavedGame(game.dataset.openGame313);return;}
   const action=e.target.closest('[data-ui-go313]')?.dataset.uiGo313;if(!action)return;
