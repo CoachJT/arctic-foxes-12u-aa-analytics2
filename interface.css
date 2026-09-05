@@ -82,3 +82,37 @@ body.ui313 .selected-header313 h2{font-size:25px!important}
 @media(max-width:1050px){.snapshot313{grid-template-columns:repeat(3,minmax(0,1fr))}.recent-game313{grid-template-columns:minmax(150px,1fr) 80px;gap:10px}.recent-game313>.recent-status313{grid-column:1/-1}.recent-game313>.chevron313{display:none}.ui313 .schedule-301-grid{grid-template-columns:1fr}.ui313 .game-create-grid{grid-template-columns:140px 1fr}.ui313 .game-create-grid>button{grid-column:1/-1}.ui313 .next-game313 h2{font-size:25px!important}}
 @media(max-width:800px){body.ui313 #workspaceNav{width:180px!important;padding:20px 8px!important}body.ui313 #workspaceNav button{font-size:12px!important;gap:8px;padding:10px!important}.sidebar-brand313{padding:0 10px 14px}.sidebar-brand313 strong{font-size:15px}.sidebar-brand313 span{font-size:8px}body.ui313 .app{padding:0 18px 30px 198px!important}body.ui313 .brand-title{font-size:19px!important}.ui313 .brand-mark{display:none!important}.leaders313{grid-template-columns:repeat(2,minmax(0,1fr))}.snapshot313{grid-template-columns:repeat(2,minmax(0,1fr))}.command-heading313{flex-wrap:wrap}.ui313 .next-game313{padding:22px}.next-top313{flex-wrap:wrap}.ui313 .next-game313 h2{font-size:24px!important}body.ui313 .footerbar{margin-left:198px;margin-right:18px}}
 @media(prefers-reduced-motion:reduce){body.ui313 *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+/* Workspace refresh: compact chrome, readable forms, and stable table context. */
+body.ui313 .brand-header{height:76px!important;margin-bottom:18px!important;border-bottom:1px solid #272b33!important}
+body.ui313 .brand-title{font-size:19px!important}.ui313 .fox-logo{transform:scale(.8)}
+body.ui313 .workspace-page-head{margin-bottom:18px!important}
+body.ui313 .workspace-page-head h1{font-size:27px!important}
+body.ui313 :is(.card,.coach-panel,.lab-card){padding:20px!important;border:1px solid #292d36!important}
+body.ui313 #workspaceNav{padding-top:20px!important;gap:2px!important}
+body.ui313 #workspaceNav button{min-height:38px!important;padding:9px 12px!important}
+body.ui313 .nav-section313{padding-top:13px}
+body.ui313 .sidebar-brand313{padding-bottom:14px}
+body.ui313 .workspace-current{margin-top:auto!important;padding-top:16px!important}
+body.ui313 .table-wrap313{max-height:65vh;border:1px solid #2d323c;overscroll-behavior:contain}
+body.ui313 .table-wrap313 :is(th,td){padding:9px 10px!important}
+body.ui313 .table-wrap313 :is(th,td):first-child{position:sticky;left:0;background:#191d24!important;z-index:1;text-align:left;min-width:180px;border-right:1px solid #323844!important}
+body.ui313 .table-wrap313 th{background:#242a34!important;z-index:2}
+body.ui313 .table-wrap313 th:first-child{z-index:3}
+body.ui313 .table-wrap313 tr:hover td{background:#242b35!important}
+body.ui313 .q295-input{min-height:34px!important;padding:6px 8px!important;font-variant-numeric:tabular-nums}
+body.ui313 #quickStatsMount>.workspace-page-head{position:sticky;top:0;z-index:5;background:#101114f5;padding:15px 0;border-bottom:1px solid #343945;backdrop-filter:blur(12px)}
+body.ui313 #quickStatsMount .import-actions{display:flex;gap:8px;margin-bottom:14px}
+body.ui313 .entry-help314{margin:0 0 18px;color:#aab3c2;font-size:12px;max-width:850px}
+body.ui313 .entry-help314 summary{cursor:pointer;padding:7px 0}
+body.ui313 #entryStatus312:not(:empty){padding:12px 16px;border:1px solid #355749;background:#1c3029;color:#b7e6ce;border-radius:9px;margin-bottom:16px}
+body.ui313 .team-entry314 fieldset{min-width:0;border:0;border-top:1px solid #303642;padding:15px 0 4px;margin:18px 0 0}
+body.ui313 .team-entry314 legend{padding:0 12px 0 0;color:#d4dbe6;font-size:13px;font-weight:600}
+body.ui313 .team-fields314{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:14px}
+body.ui313 .team-fields314 label{display:flex;flex-direction:column;gap:7px;line-height:1.4}
+body.ui313 .team-fields314 .q295-input{width:100%!important;min-width:0;font-size:18px!important;min-height:42px!important}
+body.ui313 #importPaste{width:100%;min-height:145px;line-height:1.6;resize:vertical;margin:12px 0}
+body.ui313 #officialStatsCard details{margin-top:16px}
+body.ui313 #officialStatsCard summary{padding:12px 0;cursor:pointer}
+body.ui313 .footerbar{position:relative!important;margin-top:12px!important}
+body.ui313 .saved-grid{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+@media(max-width:800px){body.ui313 .team-fields314{grid-template-columns:repeat(2,minmax(0,1fr))}body.ui313 #quickStatsMount>.workspace-page-head{gap:10px!important}body.ui313 .brand-header{height:68px!important}}

@@ -2,8 +2,10 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('foxesStorage', {
+  openPrivateScouting: () => ipcRenderer.invoke('foxes-open-private-scouting'),
 
   load: () => ipcRenderer.sendSync('foxes-data-load'),
+  readOpponentPhoto: bytes => ipcRenderer.invoke('foxes-opponent-photo', bytes),
   save: (jsonText) => ipcRenderer.send('foxes-data-save', jsonText),
   dataPath: () => ipcRenderer.sendSync('foxes-data-path'),
   chooseSaveFolder: () => ipcRenderer.invoke('foxes-choose-save-folder'),

@@ -4,6 +4,7 @@ const { autoUpdater } = require('electron-updater');
 const { pathToFileURL } = require('url');
 const path = require('path');
 const fs = require('fs');
+ipcMain.handle('foxes-opponent-photo', (_event, bytes) => require('./opponent-ocr').recognize(bytes));
 
 // Stable application settings folder across every version.
 app.setPath('userData', path.join(app.getPath('appData'), 'ArcticFoxesBY14HockeyAnalytics'));
@@ -12,6 +13,7 @@ const settingsFile = path.join(app.getPath('userData'), 'storage-settings.json')
 const defaultDataDir = app.getPath('userData');
 const defaultDataFileName = 'foxes-season-data.json';
 const previousFileName = 'foxes-season-data.previous.json';
+require('./scouting-main').install({app,BrowserWindow,ipcMain,powerMonitor:require('electron').powerMonitor,readSeasonData});
 
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
@@ -346,7 +348,7 @@ function createWindow() {
     minWidth: 1000,
     minHeight: 700,
     backgroundColor: '#0b0f14',
-    title: 'Arctic Foxes 12U AA Hockey Analytics 3.0',
+    title: 'Arctic Foxes 12U AA Hockey Analytics 4.1',
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

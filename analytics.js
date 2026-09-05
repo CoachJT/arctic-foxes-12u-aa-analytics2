@@ -126,6 +126,24 @@
     });
     return [...map.values()].map(r=>({...r,pts:r.pts,shotPct:r.shots?r.g/r.shots:0,foPct:r.fo?r.fow/r.fo:0,svPct:r.sa?r.saves/r.sa:0,gaa:r.min?r.ga*36/r.min:0,delta:r.history.length>1?r.value-r.history[r.history.length-2]:0}));
   }
-  const api={number,minutes,weights,normalize,records,rate,season};
+  // Automatic game honors use the existing MVP impact weights, from that game only.
+  function honors(games, roster=[]) {
+    const totals=new Map(roster.map(p=>[String(p.number),{p,mvp:0,first:0,second:0,third:0,so:0}])), byGame=[];
+    const seen=new Set();
+    for(const game of games){
+      if(game.id&&seen.has(game.id))continue;if(game.id)seen.add(game.id);
+      const ranked=records(game).filter(r=>r.played).map(r=>{
+        const n=k=>number(r[k]);
+        const score=r.type==='goalie'?n('saves')*.9+Math.max(0,n('svPct')-.85)*140+n('w')*10+n('so')*18+n('pts')*7+Math.min(n('min'),60)*.12-n('ga')*4-n('l')*2:
+          n('g')*12+n('a')*7+n('pts')*2+n('shots')*1.25+n('chances')*2+n('entries')+n('takeaways')*3+n('blocks')*2.5-n('giveaways')*3+n('pm')*3.5+n('ppg')*2+n('ppp')*1.5+n('shg')*4+n('shp')*2+n('gwg')*5+n('gtg')*4+Math.max(0,(r.fo?r.fow/r.fo:0)-.5)*20+Math.min(n('fo'),20)*.15+Math.min(n('toi')/60,22)*.25+50*.18-Math.max(0,n('pim')-4)*.5;
+        return {r,score};
+      }).sort((a,b)=>b.score-a.score||String(a.r.p.number).localeCompare(String(b.r.p.number)));
+      let place=0;
+      ranked.forEach((entry,i)=>{if(i===0||Math.abs(entry.score-ranked[i-1].score)>1e-8)place=i+1;entry.place=place;const key=String(entry.r.p.number);if(!totals.has(key))totals.set(key,{p:entry.r.p,mvp:0,first:0,second:0,third:0,so:0});const t=totals.get(key);if(place<=3)t[['first','second','third'][place-1]]++;if(place===1)t.mvp++;if(entry.r.type==='goalie')t.so+=Math.max(0,number(entry.r.so));});
+      byGame.push({id:game.id,stars:ranked.filter(e=>e.place<=3)});
+    }
+    return {totals:[...totals.values()],byGame};
+  }
+  const api={number,minutes,weights,normalize,records,rate,season,honors};
   if(typeof module==='object' && module.exports)module.exports=api; else root.FoxesAnalytics=api;
 })(globalThis);

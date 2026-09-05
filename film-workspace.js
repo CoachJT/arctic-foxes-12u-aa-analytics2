@@ -1,8 +1,16 @@
 'use strict';
-const layers31={bench:true,tracks:true,motion:true,crossings:true};
+const layers31={bench:true,tracks:false,motion:false,crossings:true};
 const wrap31=$('#tagOverlayWrap'),tools31=document.createElement('div');tools31.className='film-tools31';
-tools31.innerHTML=`<button id="fit31" aria-pressed="true">Fit Entire Video</button><button id="fill31" aria-pressed="false">Fill</button><button id="theater31" aria-pressed="false">Theater</button><button id="fullscreen31">Fullscreen</button><button id="play31">Play / Pause</button><button id="back31">−5 sec</button><button id="forward31">+5 sec</button><details><summary>Overlays</summary>${Object.keys(layers31).map(k=>`<label><input type="checkbox" data-layer31="${k}" checked>${k}</label>`).join('')}</details><details><summary>Bookmark / Tag</summary><label>Tag <select id="bookmarkTag31">${['Goal','Chance','Turnover','Breakout','Forecheck','PP','PK','Good Play','Teaching Clip'].map(k=>`<option>${k}</option>`).join('')}</select></label><label>Association <select id="bookmarkPlayer31"></select></label><button id="bookmark31">Save Bookmark</button></details><span id="filmStatus31" role="status"></span>`;
+tools31.innerHTML=`<button id="fit31" aria-pressed="true">Fit Entire Video</button><button id="fill31" aria-pressed="false">Fill</button><button id="theater31" aria-pressed="false">Theater</button><button id="fullscreen31">Fullscreen</button><button id="play31">Play / Pause</button><button id="back31">−5 sec</button><button id="forward31">+5 sec</button><details><summary>Overlays</summary>${Object.keys(layers31).map(k=>`<label><input type="checkbox" data-layer31="${k}" ${layers31[k]?'checked':''}>${k}</label>`).join('')}</details><details><summary>Bookmark / Tag</summary><label>Tag <select id="bookmarkTag31">${['Goal','Chance','Turnover','Breakout','Forecheck','PP','PK','Good Play','Teaching Clip'].map(k=>`<option>${k}</option>`).join('')}</select></label><label>Association <select id="bookmarkPlayer31"></select></label><button id="bookmark31">Save Bookmark</button></details><span id="filmStatus31" role="status"></span>`;
 wrap31.prepend(tools31);
+// Group existing controls without replacing their handlers or changing saved analysis.
+for(const [label,ids] of [['Playback',['back31','play31','forward31']],['View',['fit31','fill31','theater31','fullscreen31']]]){const group=document.createElement('div');group.className='film-control-group315';group.setAttribute('role','group');group.setAttribute('aria-label',label);for(const id of ids)group.appendChild(tools31.querySelector('#'+id));tools31.prepend(group);}
+const playback=tools31.querySelector('[aria-label="Playback"]');tools31.prepend(playback);
+$('#play31').textContent='Play';$('#play31').title='Play / pause (Space)';$('#back31').title='Back 5 seconds (Left arrow)';$('#forward31').title='Forward 5 seconds (Right arrow)';
+for(const event of ['play','pause','ended'])v314.addEventListener(event,()=>{$('#play31').textContent=v314.paused?'Play':'Pause';});
+const overlayLabels={bench:'Bench boundary',tracks:'Track labels',motion:'Motion boxes',crossings:'Latest crossing'};
+tools31.querySelectorAll('[data-layer31]').forEach(input=>{input.parentElement.lastChild.textContent=overlayLabels[input.dataset.layer31];});
+
 const analysis31=document.createElement('details');analysis31.id='analysis31';analysis31.innerHTML='<summary>Analysis panel · Manual / Auto Track</summary>';$('#toiControls314').replaceWith(analysis31);analysis31.appendChild(shell314);
 function fit31(fill){document.body.classList.toggle('film-fill31',fill);$('#fit31').setAttribute('aria-pressed',String(!fill));$('#fill31').setAttribute('aria-pressed',String(fill));}
 $('#fit31').onclick=()=>fit31(false);$('#fill31').onclick=()=>fit31(true);
@@ -59,3 +67,22 @@ $('#filmAutoReview31').onclick=()=>{review31.open=true;renderTOI314();$('#autoSu
 const renderAutoBase31=renderTOI314;renderTOI314=function(){renderAutoBase31();renderFilmAuto31();};
 for(const event of ['play','pause','playing','waiting','seeking','seeked','ended','emptied','loadedmetadata','timeupdate'])v314.addEventListener(event,renderFilmAuto31);
 renderFilmAuto31();
+// Film workstation: preserve the original video and analysis nodes and their handlers.
+const side316=document.createElement('aside');side316.className='film-side316';side316.setAttribute('aria-label','Film analysis tools');
+side316.innerHTML='<div class="film-side-heading316"><h2>Review tools</h2><p>Tag moments. Check shifts. Keep the ice in view.</p></div>';
+const overlayPanel316=tools31.querySelector('details'),bookmarkPanel316=tools31.querySelector('details:last-of-type');
+side316.append(bookmarkPanel316,overlayPanel316,autoBar31,analysis31,review31);
+bookmarkPanel316.open=true;
+wrap31.appendChild(side316);wrap31.classList.add('film-workstation316');
+// A keyboard-accessible scrubber operates on the current clip only.
+const transport316=document.createElement('div');transport316.className='film-transport316';
+transport316.innerHTML='<div class="film-seek316"><span id="filmTime316">00:00</span><input id="filmSeek316" type="range" min="0" max="1" step="0.1" value="0" aria-label="Video position" disabled><span id="filmDuration316">00:00</span></div>';
+transport316.appendChild(tools31);wrap31.appendChild(transport316);
+const seekInput316=$('#filmSeek316');
+function updateTransport316(){const duration=v314.duration,ready=Number.isFinite(duration)&&duration>0;seekInput316.disabled=!ready;seekInput316.max=ready?duration:1;seekInput316.value=ready?v314.currentTime:0;$('#filmTime316').textContent=stamp314(v314.currentTime||0);$('#filmDuration316').textContent=ready?stamp314(duration):'00:00';}
+seekInput316.addEventListener('input',()=>{if(Number.isFinite(v314.duration))v314.currentTime=Math.min(v314.duration,Math.max(0,Number(seekInput316.value)));});
+for(const event of ['timeupdate','loadedmetadata','durationchange','emptied'])v314.addEventListener(event,updateTransport316);
+updateTransport316();
+// Empty film stays compact; the existing Add Clip action remains available.
+function filmReady316(){wrap31.classList.toggle('has-media316',!!v314.currentSrc||!!v314.getAttribute('src'));}
+for(const event of ['loadedmetadata','emptied','loadstart'])v314.addEventListener(event,filmReady316);filmReady316();

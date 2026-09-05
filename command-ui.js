@@ -7,18 +7,79 @@ const game31=()=>state.savedGames.find(g=>g.id===state.currentGameId);
 function cards31(items){return '<div class="snapshot313">'+items.map(([k,v])=>`<div class="metric313"><span>${esc(k)}</span><strong>${esc(v??'—')}</strong></div>`).join('')+'</div>';}
 function chart31(rows,key,label){
  const known=rows.filter(r=>C31.valid(r[key]));if(!known.length)return '<p class="sub">No recorded data for this trend.</p>';
- const min=Math.min(0,...known.map(r=>Number(r[key]))),max=Math.max(1,...known.map(r=>Number(r[key]))),x=i=>25+i*550/Math.max(1,rows.length-1),y=v=>125-(v-min)*100/(max-min);
- return `<svg class="trend31" viewBox="0 0 600 150" role="img" aria-label="${esc(label)}"><path d="M25 10V125H580" fill="none" stroke="#64748b"/>${rows.map((r,i)=>C31.valid(r[key])?`${i&&C31.valid(rows[i-1][key])?`<line x1="${x(i-1)}" y1="${y(rows[i-1][key])}" x2="${x(i)}" y2="${y(r[key])}" stroke="#ef7188" stroke-width="2"/>`:''}<circle cx="${x(i)}" cy="${y(r[key])}" r="5" fill="#ef7188"/>`:'').join('')}</svg><div class="trend-links31">${rows.map(r=>`<button data-game31="${esc(r.id)}">${esc(r.date||'Game')} · ${esc(r.opponent||'')}<br>${value31(r[key],['fo','pp','pk','foPct'].includes(key))}</button>`).join('')}</div>`;
+ const pct=['fo','pp','pk','foPct'].includes(key),fmt=v=>key==='toi'?formatSec(v):pct?(v*100).toFixed(0)+'%':Number(v).toFixed(1);
+ const min=Math.min(0,...known.map(r=>Number(r[key]))),max=Math.max(pct?1:1,...known.map(r=>Number(r[key]))),x=i=>58+i*510/Math.max(1,rows.length-1),y=v=>130-(v-min)*104/(max-min);
+ return `<svg class="trend31" viewBox="0 0 600 168" role="img" aria-label="${esc(label)}">${[min,(min+max)/2,max].map(v=>`<line x1="58" y1="${y(v)}" x2="568" y2="${y(v)}" stroke="#343b48"/><text x="48" y="${y(v)+4}" text-anchor="end" fill="#acb6c6" font-size="11">${fmt(v)}</text>`).join('')}${rows.map((r,i)=>C31.valid(r[key])?`${i&&C31.valid(rows[i-1][key])?`<line x1="${x(i-1)}" y1="${y(rows[i-1][key])}" x2="${x(i)}" y2="${y(r[key])}" stroke="#ef7188" stroke-width="2.5"/>`:''}<circle cx="${x(i)}" cy="${y(r[key])}" r="5" fill="#ef7188"><title>${esc(r.date||'Game')}: ${fmt(r[key])}</title></circle>`:'').join('')}<text x="58" y="157" fill="#acb6c6" font-size="11">${esc(rows[0]?.date||'First game')}</text><text x="568" y="157" text-anchor="end" fill="#acb6c6" font-size="11">${esc(rows.at(-1)?.date||'Latest game')}</text></svg><div class="trend-links31">${rows.map(r=>`<button data-game31="${esc(r.id)}">${esc(r.date||'Game')} · ${esc(r.opponent||'')}<br>${C31.valid(r[key])?fmt(r[key]):'—'}</button>`).join('')}</div>`;
 }
 function options31(map,current){return Object.entries(map).map(([k,label])=>`<option value="${k}" ${k===current?'selected':''}>${esc(label)}</option>`).join('');}
 const oldCommand31=renderCommand313;
+let dashboardView318='overview';
+function dashboardTabs318(){return `<div class="dashboard-tabs318" aria-label="Dashboard view"><button data-dashboard318="overview" aria-pressed="${dashboardView318==='overview'}">Game room</button><button data-dashboard318="jerseys" aria-pressed="${dashboardView318==='jerseys'}">Team jerseys</button></div>`;}
+function renderJerseys318(root){
+ const honors=A312.honors(state.savedGames||[],state.players),lookup=new Map(honors.totals.map(t=>[String(t.p.number),t]));
+ const roster=[...state.players].sort((a,b)=>Number(a.number)-Number(b.number));
+ root.innerHTML=`<div class="jersey-heading318"><div><span class="eyebrow313">ARCTIC FOXES · SEASON HONORS</span><h1>The locker room</h1></div>${dashboardTabs318()}</div><div class="jersey-legend318"><span class="gold318">★ MVP / 1st</span><span class="silver318">★ 2nd</span><span class="bronze318">★ 3rd</span><span>SO · Recorded shutouts</span></div><div id="jerseyGrid318">${roster.map(p=>{const t=lookup.get(String(p.number))||{first:0,second:0,third:0,so:0};return `<button class="jersey-player318" data-profile-number="${esc(p.number)}" aria-label="${esc(p.name)}, number ${esc(p.number)}. MVP and first star ${t.first}, second star ${t.second}, third star ${t.third}${p.pos==='G'?`, shutouts ${t.so}`:''}. Open profile"><span class="jersey-shirt318" aria-hidden="true"><span class="jersey-name318">${esc(p.name)}</span><strong>${esc(p.number)}</strong><span class="jersey-awards318">${[['first','gold318'],['second','silver318'],['third','bronze318']].filter(([key])=>t[key]>0).map(([key,color])=>`<span class="${color}">★<b>${t[key]}</b></span>`).join('')}</span></span><span class="jersey-caption318">${esc(p.name)}${p.pos==='G'?` <small>G · ${t.so} SO</small>`:''}</span></button>`;}).join('')||'<p>Add players to your roster to fill the locker room.</p>'}</div>`;
+ const grid=root.querySelector('#jerseyGrid318');
+ const jerseys=[...grid.querySelectorAll('.jersey-player318')];
+ if(jerseys.length){
+  const positions=[['F','Forwards'],['D','Defensemen'],['G','Goalies']];
+  if(roster.some(p=>!['F','D','G'].includes(p.pos)))positions.push(['other','Other positions']);
+  positions.forEach(([pos,label])=>{
+   const section=document.createElement('section');section.className='jersey-position319';section.setAttribute('aria-label',label);
+   const players=roster.filter(p=>pos==='other'?!['F','D','G'].includes(p.pos):p.pos===pos);
+   section.innerHTML=`<h2>${label} <small>${players.length}</small></h2><div class="jersey-position-grid319"></div>`;
+   players.forEach(p=>{const jersey=jerseys.find(b=>b.dataset.profileNumber===String(p.number));if(jersey)section.lastElementChild.appendChild(jersey);});
+   if(!players.length)section.lastElementChild.innerHTML='<span class="jersey-empty319">No players assigned</span>';
+   grid.appendChild(section);
+  });
+ }
+ requestAnimationFrame(fitJerseys318);
+}
+function fitJerseys318(){
+ const grid=$('#jerseyGrid318');if(!grid||activeWorkspace!=='home'||dashboardView318!=='jerseys')return;
+ const groups=[...grid.querySelectorAll('.jersey-position319')];if(!groups.length)return;
+ const counts=groups.map(g=>g.querySelectorAll('.jersey-player318').length),width=grid.clientWidth,height=Math.max(240,window.innerHeight-grid.getBoundingClientRect().top-(window.innerWidth<=700?95:22));
+ let best={size:0,cols:1,rows:counts.map(n=>Math.max(1,n))};
+ for(let cols=1;cols<=Math.max(1,...counts);cols++){
+  const rows=counts.map(n=>Math.max(1,Math.ceil(n/cols))),total=rows.reduce((a,b)=>a+b,0);
+  const size=Math.min((width-(cols-1)*12)/cols/1.15,(height-groups.length*27-(total-1)*8)/total);
+  if(size>best.size)best={size,cols,rows};
+ }
+ grid.style.gridTemplateColumns='1fr';grid.style.gridTemplateRows=best.rows.map(n=>`${27+n*best.size+(n-1)*8}px`).join(' ');grid.style.height=height+'px';
+ groups.forEach((g,i)=>{g.lastElementChild.style.gridTemplateColumns=`repeat(${best.cols},minmax(0,1fr))`;g.lastElementChild.style.gridTemplateRows=`repeat(${best.rows[i]},minmax(0,1fr))`;});
+ grid.style.setProperty('--jersey-size318',Math.max(30,best.size-25)+'px');
+}
+window.addEventListener('resize',fitJerseys318);
+document.addEventListener('click',e=>{const b=e.target.closest('[data-dashboard318]');if(b){dashboardView318=b.dataset.dashboard318;renderCommand313();window.scrollTo(0,0);}});
 renderCommand313=function(){
+ document.body.classList.toggle('jersey-dashboard318',dashboardView318==='jerseys');
+ if(dashboardView318==='jerseys'){renderJerseys318($('#commandCenter313'));return;}
  oldCommand31();const root=$('#commandCenter313'),d=C31.overview(state.savedGames||[],state.players);
+ root.querySelector('.command-heading313').insertAdjacentHTML('beforeend',dashboardTabs318());
  root.querySelector('.snapshot313').outerHTML=cards31([['Record',d.record],['GF/G',value31(d.gf)],['GA/G',value31(d.ga)],['PP%',value31(d.pp,true)],['PK%',value31(d.pk,true)],['FO%',value31(d.fo,true)],['Shot differential / game',value31(d.diff)]]);
+ const selectedGame=game31();
+ if(selectedGame){const t=C31.team(selectedGame),score=t.gf!=null&&t.ga!=null?`${t.gf} – ${t.ga}`:'Score needed';root.querySelector('.command-heading313').insertAdjacentHTML('afterend',`<section class="game-focus315" aria-label="Selected game"><div><span class="eyebrow313">Selected game · ${esc(selectedGame.date||'Date not set')}</span><h2>vs ${esc(selectedGame.opponent||'Opponent')}</h2><span class="sub">${selectedGame.officialStats?.imported?'Official stats entered':'Stats not entered'} · ${(selectedGame.filmClips||[]).length} film clips</span></div><strong class="focus-score315">${score}</strong><div class="focus-actions315"><button class="primary313" data-ui-go313="film">Review film</button><button data-ui-go313="quickstats">Edit stats</button><button data-ui-go313="mygames">Game details</button></div></section>`);}
+ root.querySelector('.snapshot313')?.classList.add('team-snapshot315');
+ const honors=A312.honors(state.savedGames||[],state.players),awards=honors.byGame.find(g=>g.id===selectedGame?.id)?.stars||[];
+ const awardsPanel=`<section class="honors317" aria-label="Game stars"><h2>Game stars & MVP</h2><div class="honors-stars317">${awards.map(({r,place})=>`<article><span>${place===1?'★ MVP · 1st star':place===2?'★ 2nd star':'★ 3rd star'}</span>${player312(r)}<small>${r.type==='goalie'?`${r.saves} saves · ${r.ga} GA${r.so?' · Shutout':''}`:`${r.g} goals · ${r.a} assists · ${r.shots} shots`}</small></article>`).join('')||'<p>Save game stats to reveal the game stars.</p>'}</div><details><summary>Season honors · MVPs, stars & shutouts</summary>${table312(['Player','MVP / 1st','2nd','3rd','Shutouts'],honors.totals.filter(t=>t.mvp||t.second||t.third||t.p.pos==='G').sort((a,b)=>b.mvp-a.mvp||b.second-a.second||b.third-a.third).map(t=>row312([player312(t),t.mvp,t.second,t.third,t.p.pos==='G'?t.so:'—'])))}<p class="sub">Automatic awards use game MVP impact weights. MVP is the first star. Tied scores share a place; the next place is skipped. Shutouts come from recorded goalie SO stats.</p></details></section>`;
+ (root.querySelector('.game-focus315')||root.querySelector('.command-heading313')).insertAdjacentHTML('afterend',awardsPanel);
  root.querySelector('.leaders313')?.previousElementSibling?.remove();root.querySelector('.leaders313')?.remove();
  const rows=d.rows.filter(r=>r.type==='skater'&&r.games.length&&(metric31!=='foPct'||r.fo>0)&&(metric31!=='toi'||r.toi>0)).sort((a,b)=>b[metric31]-a[metric31]).slice(0,5);
  const selected=d.rows.find(r=>String(r.p.number)===trendPlayer31)||d.rows.find(r=>r.games.length);trendPlayer31=String(selected?.p.number??'');
  root.insertAdjacentHTML('beforeend',`<div class="grid31"><section class="card"><h2>Top 5</h2><label>Category <select id="leaderMetric31">${options31(metrics31,metric31)}</select></label>${table312(['Player',metrics31[metric31]],rows.map(r=>row312([player312(r),metric31==='toi'?formatSec(r.toi):value31(r[metric31],metric31==='foPct')])))}<button data-ui-go313="season">View all players</button></section><section class="card"><h2>Last 5 played games</h2>${d.last5.map(t=>`<button data-game31="${esc(t.id)}">${esc(t.date)} · ${esc(t.opponent)} · ${t.gf==null||t.ga==null?'Score unavailable':`${t.gf}–${t.ga}`}</button>`).join('')||'<p>No played games yet.</p>'}<p>Season GF/G ${value31(d.gf)} · Last 5 GF/G ${value31(C31.overview((state.savedGames||[]).filter(g=>d.last5.some(t=>t.id===g.id)),state.players).gf)}</p></section><section class="card"><h2>Team trend</h2><label>Metric <select id="teamMetric31">${options31({gf:'Goals for',ga:'Goals against',sf:'Shots for',sa:'Shots against',diff:'Shot differential',fo:'FO%',pp:'PP%',pk:'PK%'},teamMetric31)}</select></label>${chart31(d.trends,teamMetric31,'Team trend')}</section><section class="card"><h2>Player trend</h2><label>Player <select id="trendPlayer31">${d.rows.filter(r=>r.games.length).map(r=>`<option value="${esc(r.p.number)}" ${String(r.p.number)===trendPlayer31?'selected':''}>#${esc(r.p.number)} ${esc(r.p.name)}</option>`).join('')}</select></label><label>Metric <select id="trendMetric31">${options31(metrics31,trendMetric31)}</select></label>${chart31((selected?.games||[]).map(g=>({...g.record,...g,foPct:C31.ratio(g.record.fow,g.record.fo)})),trendMetric31,'Player trend')}</section></div>`);
+ // Place the analytical overview before history and secondary preparation.
+ const report=root.querySelector('.grid31'),panels=[...report.children];report.classList.add('report-grid316');
+ panels[2].classList.add('report-trend316');panels[0].classList.add('report-leaders316');panels[1].classList.add('report-recent316');panels[3].classList.add('report-player316');
+ report.prepend(panels[2]);root.querySelector('.team-snapshot315').after(report);
+ const preparation=root.querySelector('.next-game313');if(preparation)root.appendChild(preparation);
+ root.querySelector('.command-heading313 h1').textContent='Game room';
+ if(selectedGame){
+  const t=C31.team(selectedGame),known=t.gf!=null&&t.ga!=null;
+  root.querySelector('.game-focus315').innerHTML=`<div class="score-meta317">${known?(t.gf>t.ga?'WIN':t.gf<t.ga?'LOSS':'TIE'):'SCORE NEEDED'} · ${esc(selectedGame.date||'Date not set')}</div><div class="score-stage317"><div>ARCTIC FOXES<small>12U AA</small></div><strong>${t.gf??'—'} <span>–</span> ${t.ga??'—'}</strong><div>${esc(selectedGame.opponent||'Opponent')}<small>Selected game</small></div></div><div class="periods317">${['p1','p2','p3','ot'].map((p,i)=>`<span>${['1ST','2ND','3RD','OT'][i]} &nbsp; ${t.gf!=null?(t.raw.goalsFor?.[p]??'—'):'—'}–${t.ga!=null?(t.raw.goalsAgainst?.[p]??'—'):'—'}</span>`).join('')}</div><div class="focus-actions315"><button class="primary313" data-ui-go313="film">Review film</button><button data-ui-go313="quickstats">Edit stats</button><button data-ui-go313="mygames">Game details</button></div>`;
+  const comparisons=[['Shots on goal',t.sf,t.sa],['Goals',t.gf,t.ga],['Faceoffs won',t.raw.fow,t.raw.fol]];
+  report.insertAdjacentHTML('afterbegin',`<section class="card game-comparison317"><h2>Game comparison</h2>${comparisons.map(([label,a,b])=>{const valid= C31.valid(a)&&C31.valid(b),total=Number(a)+Number(b);return `<div class="comparison317"><div><span>${label}</span><strong>${valid?`${a} / ${b}`:'Not recorded'}</strong></div>${valid&&total>0?`<div class="comparison-track317" role="img" aria-label="${label}: Foxes ${a}, opponent ${b}"><i style="width:${Math.max(0,Math.min(100,100*Number(a)/total))}%"></i></div>`:''}</div>`;}).join('')}<small>Foxes / ${esc(selectedGame.opponent||'Opponent')}</small></section>`);
+ }
+ root.querySelector('.command-heading313 p').textContent='Game results, season performance, and the next coaching decision.';
  for(const [id,set] of [['leaderMetric31',v=>metric31=v],['teamMetric31',v=>teamMetric31=v],['trendPlayer31',v=>trendPlayer31=v],['trendMetric31',v=>trendMetric31=v]])$('#'+id).onchange=e=>{set(e.target.value);renderCommand313();};
 };
 updateCoach312=renderCommand313;
@@ -43,6 +104,11 @@ gameTab312=function(tab){
 const oldHub31=renderGameHub312;
 renderGameHub312=function(){oldHub31();const tabs=$('#gameHub312 .game-tabs313');if(tabs)tabs.insertAdjacentHTML('beforeend',`<details><summary>More game tools</summary>${[['gameday','Game Day'],['timeline','Shift Timeline'],['lines','Lines & D-Pairs'],['clips','Clips'],['notes','Coach Notes'],['quality','Data Quality']].map(([k,v])=>`<button data-tab31="${k}">${v}</button>`).join('')}</details>`);};
 document.addEventListener('click',e=>{const g=e.target.closest('[data-game31],[data-open-game313]');if(g){if(g.dataset.game31)loadSavedGame(g.dataset.game31);openWorkspace('mygames');}const b=e.target.closest('[data-tab31]');if(b)gameTab312(b.dataset.tab31);const s=e.target.closest('[data-seek31]');if(s){openWorkspace('film');jump314(s.dataset.clip31,Number(s.dataset.seek31));}});
+function playerHonors317(number){const t=A312.honors(state.savedGames||[],state.players).totals.find(t=>String(t.p.number)===String(number));return t?`<section class="player-honors317"><h3>Season honors</h3>${cards31([['MVP / 1st star',t.mvp],['2nd star',t.second],['3rd star',t.third],...(t.p.pos==='G'?[['Shutouts',t.so]]:[])])}<small>MVP counts as first star · recorded goalie shutouts</small></section>`:'';}
+const baseHonorsDevelop317=renderPlayerValuePage;
+renderPlayerValuePage=function(){baseHonorsDevelop317();if(ratingSelected31)$('#ratingFocus').insertAdjacentHTML('beforeend',playerHonors317(ratingSelected31));};
+const baseHonorsProfile317=renderPlayerProfile;
+renderPlayerProfile=function(){baseHonorsProfile317();$('#playerProfilePage .player-honors317')?.remove();$('#profileValue')?.parentElement.insertAdjacentHTML('afterend',playerHonors317(activeProfileNumber));};
 // Additive saved-game fields use the same snapshot and Undo pipeline as existing tracking.
 const oldSnapshot31=currentGameSnapshot;currentGameSnapshot=function(){return {...oldSnapshot31(),command31:deepClone(state.command31||{})};};
 const oldLoad31=loadSavedGame;loadSavedGame=function(id){const g=state.savedGames.find(g=>g.id===id);if(g)state.command31=deepClone(g.command31||{});return oldLoad31(id);};

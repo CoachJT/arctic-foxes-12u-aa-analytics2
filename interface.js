@@ -75,6 +75,10 @@ function context313(){
   $('#undo312').disabled=!state.history?.length;
   document.querySelectorAll('#workspaceNav [data-workspace]').forEach(b=>{const selected=b.dataset.workspace===activeWorkspace;b.classList.toggle('active',selected);if(selected)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
   $('#openUpdates').classList.toggle('active',activeWorkspace==='updates');
+  $('#workspacePlayerValue').classList.toggle('active',!!$('#playerValuePage')?.classList.contains('open'));
+  if($('#playerValuePage')?.classList.contains('open'))sidebar?.querySelectorAll('[data-workspace]').forEach(b=>b.classList.remove('active'));
+  $('#workspaceNav [data-workspace=home]')?.classList.toggle('active',activeWorkspace==='home'&&!$('#playerValuePage')?.classList.contains('open'));
+  syncSections317();
 }
 const baseOpen313=openWorkspace;
 openWorkspace=function(name){
@@ -98,7 +102,7 @@ const homeMount=$('#homePrimaryMount');
 if(homeMount){[...homeMount.children].forEach(el=>{if(el.id==='coachSnapshot312')return;$('#trackingPageMount').appendChild(el);});}
 home.innerHTML='<div id="commandCenter313"></div>';
 const updates=document.createElement('section');updates.className='workspace';updates.dataset.workspacePage='updates';
-updates.innerHTML=workspaceHeader('Updates','Keep your coaching platform current. Your saved season stays with you.')+'<div id="updatesMount313"></div><div class="card"><h2>About this app</h2><p>Arctic Foxes Hockey Analytics <strong id="installed313">3.1.1</strong></p><p class="sub">Updates install through the existing GitHub release channel. Your games, roster, and season data are stored separately from the application.</p><button id="aboutStorage313">Open Save Folder</button></div>';
+updates.innerHTML=workspaceHeader('Updates','Keep your coaching platform current. Your saved season stays with you.')+'<div id="updatesMount313"></div><div class="card"><h2>About this app</h2><p>Arctic Foxes Hockey Analytics <strong id="installed313">4.0.0</strong></p><p class="sub">Updates install through the existing GitHub release channel. Your games, roster, and season data are stored separately from the application.</p><button id="aboutStorage313">Open Save Folder</button></div>';
 document.querySelector('.app').appendChild(updates);
 $('#aboutStorage313').onclick=openSeasonSaveFolder;
 $('#openUpdates').removeEventListener('click',showUpdates);
@@ -109,8 +113,23 @@ const sidebar=$('#workspaceNav'),current=$('#workspaceCurrent');
 const groups=[['Everyday',[['home','Coach Center'],['schedule','Schedule'],['mygames','My Games'],['film','Film'],['tracking','Track'],['season','Season Stats'],['scout','Scout']]],['Tools',[['quickstats','Quick Stats'],['aifilm','Film Analysis'],['analytics','Analyze'],['coachlab','Coach Lab'],['develop','Develop']]],['System',[['updates','Updates']]]];
 sidebar.insertAdjacentHTML('afterbegin','<div class="sidebar-brand313"><strong>ARCTIC FOXES</strong><span>COACHING PLATFORM</span></div>');
 groups.forEach(([label,items])=>{const heading=document.createElement('div');heading.className='nav-section313';heading.textContent=label;sidebar.appendChild(heading);items.forEach(([id,label])=>{const b=id==='develop'?$('#workspacePlayerValue'):id==='updates'?$('#openUpdates'):sidebar.querySelector(`[data-workspace="${id}"]`);if(!b)return;const badge=b.querySelector('#updateNavBadge');b.innerHTML=icon313(id)+`<span>${label}</span>`;if(badge)b.appendChild(badge);b.setAttribute('aria-label',label);sidebar.appendChild(b);});});sidebar.appendChild(current);
-$('#workspacePlayerValue').addEventListener('click',()=>{sidebar.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.id==='workspacePlayerValue'));});
+$('#workspacePlayerValue').addEventListener('click',()=>{openPlayerValuePage();sidebar.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.id==='workspacePlayerValue'));syncSections317();});
 $('#closePlayerValue').addEventListener('click',context313);
+// Preserve the original controls and their handlers; relocate secondary destinations.
+const sectionGroups317=[['games','Games','mygames',['mygames','schedule','quickstats','scout']],['video','Film','film',['film','tracking','aifilm']],['team','Team','season',['season','analytics','coachlab']]];
+var subnav317=document.createElement('nav');subnav317.id='sectionTabs317';subnav317.setAttribute('aria-label','Section tools');$('.brand-header').after(subnav317);
+sidebar.querySelectorAll('.nav-section313').forEach(el=>el.remove());
+sectionGroups317.forEach(([key,label,icon,pages])=>{const group=document.createElement('div');group.dataset.section317=key;pages.forEach(page=>{const original=sidebar.querySelector(`[data-workspace="${page}"]`);if(original)group.appendChild(original);});subnav317.appendChild(group);const button=document.createElement('button');button.type='button';button.dataset.sectionButton317=key;button.innerHTML=icon313(icon)+`<span>${label}</span>`;button.onclick=()=>openWorkspace(pages[0]);sidebar.insertBefore(button,$('#workspacePlayerValue'));});
+const home317=sidebar.querySelector('[data-workspace="home"]');home317.querySelector('span:last-child').textContent='Dashboard';home317.setAttribute('aria-label','Dashboard');
+function syncSections317(){
+ if(!subnav317)return;
+ const development=$('#playerValuePage')?.classList.contains('open');
+ const selected=development?null:sectionGroups317.find(([, , ,pages])=>pages.includes(activeWorkspace));
+ subnav317.hidden=!selected;
+ subnav317.querySelectorAll('[data-section317]').forEach(el=>el.hidden=el.dataset.section317!==selected?.[0]);
+ subnav317.querySelectorAll('[data-workspace]').forEach(el=>{const active=el.dataset.workspace===activeWorkspace;el.classList.toggle('active',active);if(active)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');});
+ sidebar.querySelectorAll('[data-section-button317]').forEach(el=>{const active=el.dataset.sectionButton317===selected?.[0];el.classList.toggle('active',active);if(active)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');});
+}
 const weight=$('#weights312'),weightDetails=document.createElement('details');weightDetails.id='weights313';weightDetails.innerHTML='<summary>Rating Weights & calculation guide</summary>';weight.replaceWith(weightDetails);weightDetails.appendChild(weight);
 // Keep clip-loading behavior, with a focused empty state inside the film page.
 const filmEmpty=document.createElement('div');filmEmpty.id='filmEmpty313';$('#filmCard').prepend(filmEmpty);
