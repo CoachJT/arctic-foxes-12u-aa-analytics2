@@ -46,6 +46,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
         run: |
+        $PSNativeCommandUseErrorActionPreference = $false
           $tag = "v${{ steps.version.outputs.version }}"
           gh release view $tag --repo "${{ github.repository }}"
           if ($LASTEXITCODE -eq 0) {
@@ -53,6 +54,7 @@ jobs:
           } else {
             "exists=false" >> $env:GITHUB_OUTPUT
           }
+           exit 0
 
       - name: Build and publish update
         if: steps.release_check.outputs.exists != 'true'
