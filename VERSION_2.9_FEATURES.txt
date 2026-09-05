@@ -1,0 +1,14 @@
+Arctic Foxes 12U AA Hockey Analytics 2.9
+2.2 Scouting + Film
+2.3 Playing Time & Usage 2.0
+2.4 Team Trends 2.0
+2.5 Line & Pair Analytics
+2.6 Postgame Reports
+2.7 Coach Insights
+2.8 Visual Tag Auto-Tracking Controls
+2.9 Stability / Backup / Migration / Update Readiness
+3.0 remains reserved for iPad/PWA + cloud sync.
+
+2.9.1: stability and calculation bugfix release.
+
+2.9.2: Tag Assist/Auto Track critical fix and report fallback improvements.

@@ -1,0 +1,24 @@
+ARCTIC FOXES ANALYTICS 3.0.3 - GITHUB UPDATE FEED CONNECTED
+
+Connected release repository:
+CoachJT / arctic-foxes-12u-aa-analytics2
+
+IMPORTANT:
+This 3.0.3 build is the one-time connected build. Because your installed 3.0.2
+still has the old placeholder update address, install the 3.0.3 Setup EXE manually once.
+
+After 3.0.3 is installed:
+- Future releases can be published to GitHub Releases.
+- The installed app can check that repository for newer versions.
+- The Home screen can Check for Updates, Download Update, and Restart & Install.
+- Season data remains in the stable ArcticFoxesBY14HockeyAnalytics data folder.
+
+TO PUBLISH FUTURE VERSIONS:
+1. Update package.json version (for example 3.0.4).
+2. Make sure your GitHub token is available as GH_TOKEN.
+3. Run PUBLISH_WINDOWS_UPDATE_3_0.bat.
+4. electron-builder will build and publish the release artifacts to:
+   CoachJT/arctic-foxes-12u-aa-analytics2
+5. Open the installed app and use Check for Updates.
+
+The GitHub repository needs to be accessible to the installed app. Public is the simplest setup.

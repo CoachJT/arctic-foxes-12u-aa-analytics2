@@ -1,0 +1,30 @@
+ARCTIC FOXES 12U AA HOCKEY ANALYTICS — AUTO UPDATE SETUP
+
+Version 2.0.2 is updater-ready.
+
+This build uses public GitHub Releases as the update channel. There is one setup step because your GitHub account/repository information is not known.
+
+ONE-TIME SETUP
+1. Create a public GitHub repository. Recommended name:
+   arctic-foxes-12u-aa-analytics
+2. Open package.json.
+3. Find:
+   "owner": "REPLACE_WITH_GITHUB_USERNAME"
+4. Replace it with your GitHub username.
+5. If you used another repository name, change the "repo" value too.
+
+NORMAL WINDOWS BUILD
+Run BUILD_WINDOWS_3_0.bat.
+Use the Setup EXE as the main installed app. The portable EXE remains available as a backup.
+
+PUBLISHING AN UPDATE
+1. Increase package.json version (example: 2.0.3).
+2. Set GH_TOKEN only in the Command Prompt session. Do not save your token inside the app.
+3. Run PUBLISH_WINDOWS_UPDATE.bat.
+
+electron-builder will publish the Windows NSIS installer and latest.yml metadata to GitHub Releases. Installed copies will then detect the newer version.
+
+DATA SAFETY
+Saved season data stays outside the installed app at:
+%APPDATA%\ArcticFoxesBY14HockeyAnalytics
+Do not rename this stable folder.

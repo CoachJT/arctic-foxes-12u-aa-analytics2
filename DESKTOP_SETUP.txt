@@ -1,0 +1,22 @@
+FOXES HOCKEY ANALYTICS - WINDOWS DESKTOP VERSION
+
+This folder converts the hockey tracker into a real Windows desktop application.
+
+QUICK SETUP
+1. Install Node.js LTS from nodejs.org if it is not already installed.
+2. Double-click BUILD_WINDOWS_APP.bat.
+3. Wait for setup/build to finish.
+4. Open the new dist folder.
+5. Double-click the Foxes Hockey Analytics .exe file.
+
+The app runs in its own desktop window instead of needing you to open index.html manually.
+
+IMPORTANT
+Your existing browser-local saved data does not automatically transfer into a newly packaged desktop app.
+Use the app's CSV exports for current stat exports. A full Backup/Restore feature should be added before relying on the app as the only season database.
+
+
+VERSION 1.1.0
+Backup Season and Restore Season are now included.
+Before replacing/updating your desktop app, use Backup Season and keep the downloaded JSON file somewhere safe.
+After installing a new version, use Restore Season only if your data is not already present.

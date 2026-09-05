@@ -1,0 +1,54 @@
+{
+  "name": "foxes-hockey-analytics",
+  "version": "3.0.9",
+  "description": "Arctic Foxes 12U AA coach platform with scouting center, printable game-day reports, usage, trends, settings and video library",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --publish never",
+    "release": "electron-builder --win nsis --publish always",
+    "publish": "electron-builder --win --publish always"
+  },
+  "devDependencies": {
+    "electron": "^39.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.foxes.hockeyanalytics",
+    "productName": "Arctic Foxes 12U AA Hockey Analytics 3.0",
+    "win": {
+      "target": [
+        "portable",
+        "nsis"
+      ]
+    },
+    "files": [
+      "index.html",
+      "main.js",
+      "README.txt",
+      "package.json",
+      "preload.js",
+      "SETUP_AUTO_UPDATES.txt",
+      "VERSION_2.9_FEATURES.txt"
+    ],
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Arctic Foxes 12U AA Hockey Analytics 3.0"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "CoachJT",
+        "repo": "arctic-foxes-12u-aa-analytics2",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.6.2"
+  },
+  "productName": "Arctic Foxes 12U AA Hockey Analytics 3.0"
+}
