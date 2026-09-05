@@ -71,7 +71,17 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --win nsis --publish always
+        run: npx electron-builder --win nsis --publish never
+
+       - name: Upload update files to GitHub Release
+        if: steps.release_check.outputs.exists != 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "v${{ steps.version.outputs.version }}"
+          gh release create $tag --repo "${{ github.repository }}" --title "${{ steps.version.outputs.version }}" --notes "Arctic Foxes Analytics ${{ steps.version.outputs.version }}"
+          gh release upload $tag "dist/latest.yml" "dist/*.exe" "dist/*.blockmap" --repo "${{ github.repository }}" --clobber       
 
       - name: Publish summary
         shell: pwsh
