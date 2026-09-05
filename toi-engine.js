@@ -6,6 +6,11 @@ const valid=x=>x!==null&&x!==''&&Number.isFinite(Number(x));
 const time=x=>{if(!valid(x)||Number(x)<0)throw Error('Enter a non-negative video timestamp.');return Number(x);};
 const uid=()=>globalThis.crypto.randomUUID();
 function data(g){const d=g.toi314||(g.toi314={});d.zones=d.zones||{};d.candidates=d.candidates||[];d.groundTruth=d.groundTruth||[];return d;}
+function saveZone(g,clipId,z){
+ if(!g.id||!clipId||!(g.filmClips||[]).some(c=>c.id===clipId))throw Error('Select a saved game and load its video clip first.');
+ if(!z||!['x','y','width','height','boundary'].every(k=>Number.isFinite(z[k]))||!['x','y'].includes(z.axis)||typeof z.benchLow!=='boolean'||z.x<0||z.y<0||z.width<.05||z.height<.05||z.x+z.width>1.000001||z.y+z.height>1.000001||z.boundary<z[z.axis]||z.boundary>z[z.axis]+(z.axis==='x'?z.width:z.height))throw Error('Draw a valid bench region at least 5% of the video in each dimension, with its boundary inside the region.');
+ data(g).zones[clipId]=copy(z);
+}
 function clock(g,clip,t){
  const pts=(g.syncPoints||[]).filter(p=>p.clipId===clip&&valid(p.videoTime)).sort((a,b)=>a.videoTime-b.videoTime);
  const a=pts.filter(p=>p.videoTime<=t).at(-1)||pts[0];if(!a)return null;
@@ -80,6 +85,6 @@ function review(g,{id,action,playerId,videoTime,direction}){
  data(g).groundTruth.push({id:uid(),detectionId:c.id,clipId:c.clipId,videoTime:t,direction,playerId,original:copy(c),confirmedAt:Date.now()});
 }
 function apply(g,fn){const out=copy(g);fn(out);return out;}
-const api={data,clock,view,shifts,duration,summary,transition,edit,remove,candidate,review,apply};
+const api={saveZone,data,clock,view,shifts,duration,summary,transition,edit,remove,candidate,review,apply};
 if(typeof module==='object'&&module.exports)module.exports=api;else root.FoxesTOI=api;
 })(globalThis);

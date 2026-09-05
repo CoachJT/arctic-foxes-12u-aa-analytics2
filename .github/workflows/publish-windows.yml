@@ -17,6 +17,9 @@ on:
       - 'crossing-detector.js'
       - 'toi-ui.js'
       - 'toi.css'
+      - 'stats-import.js'
+      - 'stats-import-ui.js'
+      - 'vendor/**'
       - 'package-lock.json'
       - 'tests/**'
       - '.github/workflows/publish-windows.yml'
@@ -83,8 +86,8 @@ jobs:
           gh release view $tag --repo "${{ github.repository }}" *> $null
           if ($LASTEXITCODE -ne 0) {
             $releaseTitle = "${{ steps.version.outputs.version }}"
-            if ($tag -eq "v3.0.14") { $releaseTitle = "3.0.14 - TOI Tracking + Auto Track Alpha" }
-            gh release create $tag --repo "${{ github.repository }}" --title $releaseTitle --notes "Arctic Foxes Analytics ${{ steps.version.outputs.version }}"
+            if ($tag -eq "v3.0.15") { $releaseTitle = "3.0.15 - Stats Import and Saved Bench Zones" }
+            gh release create $tag --repo "${{ github.repository }}" --title $releaseTitle --notes-file "RELEASE_${{ steps.version.outputs.version }}.md"
           } else {
             Write-Host "Release $tag already exists."
           }

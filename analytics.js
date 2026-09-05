@@ -32,7 +32,7 @@
           r.plusMinus = number(r.plusMinus ?? r.pm); r.pim = number(r.pim);
           r.fow = number(r.fow ?? r.faceoffWins);
           r.fo = number(r.fo ?? (r.fow + number(r.fol ?? r.faceoffLosses)));
-          r.fol = Math.max(0,r.fo-r.fow); r.pts = r.g+r.a;
+          r.fol = Math.max(0,r.fo-r.fow); r.pts = r.importedPoints ?? (r.g+r.a);
           r.shotPct = r.shots ? r.g/r.shots : 0; r.foPct = r.fo ? r.fow/r.fo : 0;
           if (r.toiMin != null || r.toi != null) r.toiMin = minutes(r.toiMin ?? r.toi);
         } else {
@@ -41,7 +41,7 @@
           r.saves = number(r.saves ?? r.s ?? r.sa); r.sa = r.saves+r.ga;
           r.svPct = r.sa ? r.saves/r.sa : 0; r.gaa = r.min ? r.ga*36/r.min : 0;
           for (const k of ['w','l','t']) r[k] = number(r[k] ?? (r.decision === k.toUpperCase()));
-          r.so = number(r.so); r.g = number(r.g); r.a = number(r.a); r.pts = r.g+r.a;
+          r.so = number(r.so); r.g = number(r.g); r.a = number(r.a); r.pts = r.importedPoints ?? (r.g+r.a);
         }
         if (r.gp == null) r.gp = Object.entries(r).some(([k,v]) => !['number','playerId','name','gp'].includes(k) && typeof v === 'number' && v !== 0) ? 1 : 0;
       });
@@ -77,7 +77,7 @@
         const pm=(game.events||[]).filter(e=>e.type==='goal' && (e.onIce||[]).includes(p.id)).reduce((a,e)=>a+(e.team==='us'?(e.strength==='PP'?0:1):(e.strength==='PK'?0:-1)),0);
         const fow=count('faceoff_win')+count('faceoffWin'),fol=count('faceoff_loss')+count('faceoffLoss');
         r={...p,p,type:'skater',gp:events.length||toi?1:0,g:count('goal'),a:0,shots:count('shot')+count('goal'),blocks:count('block'),plusMinus:pm,pim:0,fo:fow+fol,fow,...s};
-        r.toi=s?.toiMin!=null?minutes(s.toiMin)*60:toi; r.pm=r.plusMinus; r.pts=r.g+r.a;
+        r.toi=s?.toiMin!=null?minutes(s.toiMin)*60:toi; r.pm=r.plusMinus; r.pts=r.importedPoints ?? (r.g+r.a);
         r.shifts=shifts.length; r.takeaways=number(s?.tk ?? count('takeaway')); r.giveaways=number(s?.gv ?? count('giveaway')); r.chances=number(s?.ch ?? count('chance')); r.entries=count('entry');
       }
       r.played = number(r.gp)>0 || (!s && (events.length>0 || toi>0 || ge.length>0));
@@ -117,14 +117,14 @@
     [...games].sort((a,b)=>(a.date||'').localeCompare(b.date||'') || number(a.createdAt)-number(b.createdAt)).forEach(game=>{
       records(game).forEach(r=>{
         const a=add(r.p); if(!r.played)return;
-        for(const k of ['gp','g','a','pts','shots','pim','pm','blocks','fo','fow','toi','shifts','min','saves','sa','ga','w','l','t','so'])a[k]+=number(r[k]);
+        for(const k of ['gp','g','a','pts','shots','pim','pm','blocks','fo','fow','fol','ppg','ppa','ppp','shg','sha','shp','gwg','gtg','toi','shifts','min','saves','sa','ga','w','l','t','so'])a[k]=number(a[k])+number(r[k]);
         const rating=rate(r,custom);a.games.push({id:game.id,date:game.date,opponent:game.opponent,rating:rating.value,record:r});
         // Two neutral prior games stabilize early results; always recompute from scratch.
         a.value=(100+a.games.reduce((s,g)=>s+g.rating,0))/(2+a.games.length);
         a.history.push(a.value);a.scores=rating.scores;
       });
     });
-    return [...map.values()].map(r=>({...r,pts:r.g+r.a,shotPct:r.shots?r.g/r.shots:0,foPct:r.fo?r.fow/r.fo:0,svPct:r.sa?r.saves/r.sa:0,gaa:r.min?r.ga*36/r.min:0,delta:r.history.length>1?r.value-r.history[r.history.length-2]:0}));
+    return [...map.values()].map(r=>({...r,pts:r.pts,shotPct:r.shots?r.g/r.shots:0,foPct:r.fo?r.fow/r.fo:0,svPct:r.sa?r.saves/r.sa:0,gaa:r.min?r.ga*36/r.min:0,delta:r.history.length>1?r.value-r.history[r.history.length-2]:0}));
   }
   const api={number,minutes,weights,normalize,records,rate,season};
   if(typeof module==='object' && module.exports)module.exports=api; else root.FoxesAnalytics=api;

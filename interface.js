@@ -1,4 +1,4 @@
-/* 3.0.14 presentation only: reuse the existing save, navigation, rating and film functions. */
+/* 3.0.15 presentation only: reuse the existing save, navigation, rating and film functions. */
 'use strict';
 const UI313=FoxesInterface;
 const iconPaths313={home:'M3 10 12 3l9 7v10H3Z M9 20v-7h6v7',schedule:'M5 5h14v16H5Z M8 2v6 M16 2v6 M5 10h14',mygames:'M6 3h12v18H6Z M9 7h6 M9 11h6 M9 15h4',film:'M3 5h18v14H3Z M3 9h18 M7 5v4 M12 5v4 M17 5v4 M10 12l5 2-5 2Z',tracking:'M12 5a8 8 0 1 0 0 16 8 8 0 0 0 0-16 M9 2h6 M12 9v5l3 2',season:'M4 20V10h4v10 M10 20V4h4v16 M16 20v-8h4v8',scout:'M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14 M15 15l6 6',quickstats:'M13 2 5 14h6l-1 8 9-13h-6Z',aifilm:'M4 5h12v14H4Z M16 10l5-3v10l-5-3 M8 9l5 3-5 3Z',analytics:'M3 3v18h18 M6 15l4-5 4 3 6-8',coachlab:'M8 3h8 M10 3v7L4 20h16L14 10V3 M8 15h8',develop:'M12 3 3 7l9 4 9-4Z M6 9v7c4 4 8 4 12 0V9 M21 7v9',updates:'M12 16V3 M7 8l5-5 5 5 M4 14v7h16v-7'};
@@ -98,7 +98,7 @@ const homeMount=$('#homePrimaryMount');
 if(homeMount){[...homeMount.children].forEach(el=>{if(el.id==='coachSnapshot312')return;$('#trackingPageMount').appendChild(el);});}
 home.innerHTML='<div id="commandCenter313"></div>';
 const updates=document.createElement('section');updates.className='workspace';updates.dataset.workspacePage='updates';
-updates.innerHTML=workspaceHeader('Updates','Keep your coaching platform current. Your saved season stays with you.')+'<div id="updatesMount313"></div><div class="card"><h2>About this app</h2><p>Arctic Foxes Hockey Analytics <strong id="installed313">3.0.14</strong></p><p class="sub">Updates install through the existing GitHub release channel. Your games, roster, and season data are stored separately from the application.</p><button id="aboutStorage313">Open Save Folder</button></div>';
+updates.innerHTML=workspaceHeader('Updates','Keep your coaching platform current. Your saved season stays with you.')+'<div id="updatesMount313"></div><div class="card"><h2>About this app</h2><p>Arctic Foxes Hockey Analytics <strong id="installed313">3.0.15</strong></p><p class="sub">Updates install through the existing GitHub release channel. Your games, roster, and season data are stored separately from the application.</p><button id="aboutStorage313">Open Save Folder</button></div>';
 document.querySelector('.app').appendChild(updates);
 $('#aboutStorage313').onclick=openSeasonSaveFolder;
 $('#openUpdates').removeEventListener('click',showUpdates);

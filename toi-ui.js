@@ -33,13 +33,13 @@ function renderLive314(){
 function options314(selected){return state.players.map(p=>`<option value="${esc(p.id)}" ${p.id===selected?'selected':''}>#${esc(p.number)} ${esc(p.name)}</option>`).join('');}
 function confidence314(c){return c==null?'Manual':`${c>=.75?'HIGH':c>=.55?'MEDIUM':'LOW'} · ${(c*100).toFixed(0)} evidence score`;}
 function renderTOI314(){
- ensure314();renderLive314();const g=game314(),d=state.toi314,rows=T314.shifts(g),cs=d.candidates;
+ ensure314();syncZone314();renderLive314();const g=game314(),d=state.toi314,rows=T314.shifts(g),cs=d.candidates;
  $('#autoSummary314').textContent=`Crossings ${cs.length} · High ${cs.filter(c=>c.confidence>=.75).length} · Needs review ${cs.filter(c=>c.status==='review').length} · Rejected ${cs.filter(c=>c.status==='rejected').length} · Unknown ${cs.filter(c=>!c.assignedPlayerId&&c.status!=='rejected').length} · Confirmed ${cs.filter(c=>c.status==='confirmed').length}`;
  $('#queue314').innerHTML=cs.filter(c=>c.status==='review').map(c=>`<div class="candidate314" data-candidate314="${esc(c.id)}"><strong>UNKNOWN PLAYER · ${esc(c.direction)} · ${stamp314(c.videoTime)}</strong><span>${confidence314(c.confidence)}</span><button data-jump-candidate314="${esc(c.id)}">Review video (−4 sec)</button><label>Assign player <select data-assign314><option value="">Choose player</option>${options314('')}</select></label><label>Video seconds <input data-time314 type="number" min="0" step=".25" value="${c.videoTime.toFixed(2)}"></label><label>Direction <select data-direction314><option ${c.direction==='ON'?'selected':''}>ON</option><option ${c.direction==='OFF'?'selected':''}>OFF</option></select></label><button data-confirm314="${esc(c.id)}">Confirm</button><button data-reject314="${esc(c.id)}">Reject</button></div>`).join('')||'<p class="sub">No detections waiting for review.</p>';
  $('#shiftLog314').innerHTML=table312(['Player','Period','ON / OFF (video)','Duration','Source','Status'],rows.map(s=>row312([`<button data-shift314="${esc(s.shiftId)}">#${esc(s.jerseyNumber)} ${esc(s.playerName)}</button>`,esc(s.gameClockOn?.period||s.period||'—'),`${stamp314(s.videoOnTime)} / ${s.ended?stamp314(s.videoOffTime):'ON'}`,s.ended?`${stamp314(s.duration)}${s.duration>65?' · LONG SHIFT — Review':''}`:'Active',esc(s.source),s.legacy?'Legacy preserved':s.confirmed?`Confirmed · ${confidence314(s.confidence)}`:'Needs review'])));
  $('#toiSummary314').innerHTML=table312(['Player','Total TOI','Shifts','Average','Longest','Shortest','By period (anchored)'],T314.summary(g,null,null,true).map(r=>row312([`#${esc(r.player.number)} ${esc(r.player.name)}`,stamp314(r.total),r.count,stamp314(r.average),stamp314(r.longest),stamp314(r.shortest),Object.entries(r.byPeriod).map(([p,t])=>`P${esc(p)} ${stamp314(t)}`).join(' · ')||'—'])));
  $('#finalizeStatus314').textContent=d.finalizedAt?`Finalized ${new Date(d.finalizedAt).toLocaleString()}. Corrections remain available.`:'Not finalized. Only confirmed completed shifts are included in this summary.';
- const z=d.zones[currentClipId()];$('#zoneStatus314').textContent=z?`Zone saved for ${activeFilmClip()?.name||'this clip'} · ${z.axis==='x'?'vertical':'horizontal'} boundary`:'No zone saved for this clip.';
+ const z=d.zones[currentClipId()];$('#zoneStatus314').textContent=zoneDraft314?'Unsaved bench zone. Click Save Zone to use it for this clip.':z?`Zone saved for ${activeFilmClip()?.name||'this clip'} · ${z.axis==='x'?'vertical':'horizontal'} boundary`:'No zone saved for this clip.';
 }
 function jump314(clip,t){v314.pause();if(clip!==currentClipId()){stop314();loadFilmClip(clip);v314.addEventListener('loadedmetadata',()=>{v314.currentTime=Math.min(t,v314.duration);},{once:true});}else v314.currentTime=Math.min(t,v314.duration||t);}
 function editor314(id){const s=T314.shifts(game314()).find(s=>s.shiftId===id);if(!s)return;
@@ -52,7 +52,15 @@ function editor314(id){const s=T314.shifts(game314()).find(s=>s.shiftId===id);if
  if(s.videoOnTime!=null)jump314(s.startClipId,s.videoOnTime);
 }
 function stop314(message='Stopped. Review saved candidates below.'){analyzing314=false;detector314=null;$('#autoProgress314').textContent=message;renderTOI314();}
-function zone314(){return zoneDraft314||ensure314().zones[currentClipId()];}
+let zoneContext314='';
+function syncZone314(){
+ const key=JSON.stringify([state.currentGameId,currentClipId()]);
+ if(key!==zoneContext314){zoneContext314=key;zoneDraft314=null;drawing314=false;drag314=null;corner314=null;analyzing314=false;detector314=null;lastSample314=-1;$('#autoProgress314').textContent='Stopped. Bench zone loaded for this clip.';}
+ const z=zoneDraft314||ensure314().zones[currentClipId()];
+ $('#zoneAxis314').value=z?.axis||'y';$('#zoneSide314').value=z?.benchLow===false?'high':'low';
+ return z;
+}
+function zone314(){syncZone314();return zoneDraft314||ensure314().zones[currentClipId()];}
 function paint314(){
  const legacyCanvas=$('#tagOverlayCanvas');legacyCanvas.style.pointerEvents=zoneDrawing?'auto':'none';legacyCanvas.style.height=v314.clientHeight+'px';
  const w=v314.videoWidth||16,h=v314.videoHeight||9,boxW=v314.clientWidth,boxH=v314.clientHeight,scale=Math.min(boxW/w,boxH/h);
@@ -80,20 +88,28 @@ $('#toiPanel314').addEventListener('click',e=>{const b=e.target.closest('button'
 });
 $('#refreshQueue314').onclick=renderTOI314;
 $('#finalize314').onclick=()=>{const rows=T314.shifts(game314());if(rows.some(s=>!s.ended)||ensure314().candidates.some(c=>c.status==='review')||ensure314().seekReview){msg314('Finish/correct open shifts, resolve seeks, and confirm or reject the review queue before finalizing.');return;}commit314(g=>{T314.data(g).finalizedAt=Date.now();});};
-$('#autoStart314').onclick=()=>{try{media314();const z=ensure314().zones[currentClipId()];if(!z)throw Error('Save a bench zone for this clip first.');detector314=new FoxesCrossing.Detector(z);analyzing314=true;lastSample314=-1;v314.play().catch(e=>stop314(e.message));}catch(e){msg314(e.message);}};
+$('#autoStart314').onclick=()=>{try{syncZone314();media314();if(zoneDraft314||drawing314)throw Error('Save the bench zone before starting analysis.');const z=ensure314().zones[currentClipId()];if(!z)throw Error('Save a bench zone for this clip first.');detector314=new FoxesCrossing.Detector(z);analyzing314=true;lastSample314=-1;v314.play().catch(e=>stop314(e.message));}catch(e){msg314(e.message);}};
 $('#autoStop314').onclick=()=>stop314();$('#autoDebug314').onchange=e=>debug314=e.target.checked;
 $('#autoSetup314').onclick=()=>{exitTagFullscreen();$('#zoneDetails314').open=true;$('#zoneDetails314').scrollIntoView({block:'center'});};
-$('#drawZone314').onclick=()=>{stop314();v314.pause();drawing314=true;debug314=true;zoneDraft314=null;corner314=null;$('#gameVideo').scrollIntoView({block:'center'});msg314('Drag a rectangle or click two opposite corners, then Save Zone below.');};
-debugCanvas314.onpointerdown=e=>{const r=debugCanvas314.getBoundingClientRect();drag314={x:(e.clientX-r.left)/r.width,y:(e.clientY-r.top)/r.height};debugCanvas314.setPointerCapture(e.pointerId);};
-debugCanvas314.onpointerup=e=>{if(!drag314)return;const r=debugCanvas314.getBoundingClientRect(),x=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y=Math.max(0,Math.min(1,(e.clientY-r.top)/r.height));if(Math.hypot(x-drag314.x,y-drag314.y)<.01){if(!corner314){corner314=drag314;drag314=null;msg314('Click the opposite corner of the bench region.');return;}drag314=corner314;corner314=null;}zoneDraft314={x:Math.min(x,drag314.x),y:Math.min(y,drag314.y),width:Math.abs(x-drag314.x),height:Math.abs(y-drag314.y),axis:$('#zoneAxis314').value,benchLow:$('#zoneSide314').value==='low'};zoneDraft314.boundary=zoneDraft314.axis==='x'?zoneDraft314.x+zoneDraft314.width/2:zoneDraft314.y+zoneDraft314.height/2;drag314=null;drawing314=false;msg314('Zone drawn. Check boundary orientation and Save Zone.');};
-for(const id of ['zoneAxis314','zoneSide314'])$('#'+id).onchange=()=>{zoneDraft314={...zone314(),axis:$('#zoneAxis314').value,benchLow:$('#zoneSide314').value==='low'};zoneDraft314.boundary=zoneDraft314.axis==='x'?zoneDraft314.x+zoneDraft314.width/2:zoneDraft314.y+zoneDraft314.height/2;};
-$('#saveZone314').onclick=()=>{try{const m=media314(),z=zone314();if(!z||!Number.isFinite(z.x)||z.width<.05||z.height<.05)throw Error('Draw a bench region at least 5% of the video in each dimension.');commit314(g=>{T314.data(g).zones[m.clipId]={...z,videoName:activeFilmClip()?.name,widthPixels:v314.videoWidth,heightPixels:v314.videoHeight,updatedAt:Date.now()};});zoneDraft314=null;}catch(e){msg314(e.message);}};
-$('#resetZone314').onclick=()=>{stop314();zoneDraft314=null;commit314(g=>{delete T314.data(g).zones[currentClipId()];});};
+$('#drawZone314').onclick=()=>{try{media314();}catch(e){msg314(e.message);return;}stop314();v314.pause();drawing314=true;debug314=true;$('#autoDebug314').checked=true;zoneDraft314=null;corner314=null;$('#gameVideo').scrollIntoView({block:'center'});msg314('Drag a rectangle or click two opposite corners, then Save Zone below.');};
+debugCanvas314.onpointerdown=e=>{if(!drawing314)return;const r=debugCanvas314.getBoundingClientRect();drag314={x:(e.clientX-r.left)/r.width,y:(e.clientY-r.top)/r.height};debugCanvas314.setPointerCapture(e.pointerId);};
+debugCanvas314.onpointerup=e=>{if(!drag314)return;const r=debugCanvas314.getBoundingClientRect(),x=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y=Math.max(0,Math.min(1,(e.clientY-r.top)/r.height));if(Math.hypot(x-drag314.x,y-drag314.y)<.01){if(!corner314){corner314=drag314;drag314=null;msg314('Click the opposite corner of the bench region.');return;}drag314=corner314;corner314=null;}zoneDraft314={x:Math.min(x,drag314.x),y:Math.min(y,drag314.y),width:Math.abs(x-drag314.x),height:Math.abs(y-drag314.y),axis:$('#zoneAxis314').value,benchLow:$('#zoneSide314').value==='low'};zoneDraft314.boundary=zoneDraft314.axis==='x'?zoneDraft314.x+zoneDraft314.width/2:zoneDraft314.y+zoneDraft314.height/2;drag314=null;drawing314=false;renderTOI314();msg314('Zone drawn. Check boundary orientation and Save Zone.');};
+for(const id of ['zoneAxis314','zoneSide314'])$('#'+id).onchange=()=>{
+ const axis=$('#zoneAxis314').value,benchLow=$('#zoneSide314').value==='low',z=zone314();
+ if(!z){msg314('Draw a bench region first.');return;}
+ stop314();zoneDraft314={...z,axis,benchLow};zoneDraft314.boundary=axis==='x'?z.x+z.width/2:z.y+z.height/2;renderTOI314();
+};
+$('#saveZone314').onclick=()=>{try{const m=media314(),z=zone314();
+ if(drawing314)throw Error('Finish drawing the bench region first.');
+ if(commit314(g=>T314.saveZone(g,m.clipId,{...z,videoName:activeFilmClip()?.name,widthPixels:v314.videoWidth,heightPixels:v314.videoHeight,updatedAt:Date.now()}))){zoneDraft314=null;stop314('Zone saved. Ready to start local analysis.');msg314('Bench zone saved for this clip.');}
+}catch(e){msg314(e.message);}};
+$('#resetZone314').onclick=()=>{syncZone314();if(commit314(g=>{delete T314.data(g).zones[currentClipId()];})){zoneDraft314=null;drawing314=false;drag314=null;corner314=null;stop314('Bench zone removed for this clip.');}};
 v314.addEventListener('timeupdate',()=>{if(!v314.seeking)lastMedia314=v314.currentTime;renderLive314();});
 v314.addEventListener('seeking',()=>{detector314?.reset();if(skipSeek314){skipSeek314=false;return;}if(T314.shifts(game314()).some(s=>!s.ended&&s.toiSchema===314)){v314.pause();ensure314().seekReview=ensure314().seekReview||{from:lastMedia314,clipId:currentClipId()};save();renderLive314();}});
 v314.addEventListener('ended',()=>{if(analyzing314)stop314('Analysis reached clip end. Review candidates before finalizing.');});
-v314.addEventListener('emptied',()=>{stop314('Clip changed. Analysis stopped.');zoneDraft314=null;});
-const baseRender314=render;render=function(){baseRender314();renderLive314();};
+v314.addEventListener('emptied',()=>{zoneDraft314=null;drawing314=false;drag314=null;corner314=null;stop314('Clip changed. Analysis stopped.');});
+v314.addEventListener('loadedmetadata',()=>{syncZone314();renderTOI314();});
+const baseRender314=render;render=function(){baseRender314();renderTOI314();};
 const baseDuration314=shiftDuration;shiftDuration=function(s){if(s.toiSchema===314){if(s.ended)return Math.max(0,s.videoOffTime-s.videoOnTime);return s.startClipId===currentClipId()?Math.max(0,(ensure314().seekReview?.from??v314.currentTime)-s.videoOnTime):0;}return baseDuration314(s);};
 const baseCurrent314=currentShiftDuration;currentShiftDuration=function(p){const s=activeShift(p);return s?.toiSchema===314?shiftDuration(s):baseCurrent314(p);};
 const baseOpen314=openWorkspace;openWorkspace=function(name){baseOpen314(name);if(name==='film')renderTOI314();};

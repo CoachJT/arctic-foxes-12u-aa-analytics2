@@ -1324,15 +1324,17 @@ tr:hover td{background:rgba(255,255,255,.025)}
 
   <div class="card official-import-card" id="officialStatsCard">
     <div class="sectiontitle"><h2>Official Stats / Import</h2><span class="badge">ice time stays separate</span></div>
-    <div class="sub">Import the stats you already have, then add only ice time from film. Supports CSV/TSV exported from your current PlayerStats-style sheet.</div>
+    <div class="sub">Import the stats you already have, then add only ice time from film. Choose an Excel (.xlsx) or CSV file, or paste cells copied from Google Sheets. Preview and confirm before saving to this game.</div>
 
     <div class="import-actions" style="margin-top:10px">
-      <label class="file-label">Import Stats File<input id="statsImportFile" type="file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values"></label>
-      <button id="importPastedStats">Import Pasted Stats</button>
-      <button id="downloadStatsTemplate">Download CSV Template</button>
+      <label class="file-label">Import Stats File<input id="statsImportFile" type="file" accept=".xlsx,.csv,.tsv,.txt"></label>
+      <button id="importPastedStats">Preview Pasted Stats</button>
+      <select id="statsTemplateFormat" aria-label="Template format"><option value="csv">CSV template</option><option value="xlsx">Excel template</option></select><button id="downloadStatsTemplate">Download Foxes Stats Template</button>
       <button id="clearOfficialStats" class="danger">Clear Imported Stats</button>
     </div>
-    <textarea id="importPaste" placeholder="Optional: paste rows copied from Excel here, then click Import Pasted Stats."></textarea>
+    <textarea id="importPaste" placeholder="Paste cells including headers from Google Sheets or Excel, then click Preview Pasted Stats."></textarea>
+    <label id="statsSheetChoice" hidden>Worksheet <select id="statsSheet"></select></label>
+    <section id="statsPreview" hidden aria-label="Stats import preview"><h3>Import Preview</h3><p id="statsPreviewSummary" role="status"></p><div class="official-table-wrap"><table class="official-table"><thead><tr><th>Row</th><th>Source</th><th>Foxes player</th><th>Values to import</th><th>Warnings / status</th></tr></thead><tbody id="statsPreviewBody"></tbody></table></div><button id="confirmStatsImport" class="good">Confirm Import</button><button id="cancelStatsImport">Cancel</button></section>
     <div id="importStatus" class="import-status">No official stats imported yet.</div>
     <div class="official-note sub">Ice time, shifts, average shift, EV/PP/PK TOI and video timestamps are never imported here. They remain film-tracked.</div>
 
@@ -1912,6 +1914,8 @@ tr:hover td{background:rgba(255,255,255,.025)}
 </div>
 
 
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="stats-import.js"></script>
 <script src="analytics.js"></script>
 <script>
 const $ = s => document.querySelector(s);
@@ -3390,107 +3394,6 @@ function csvRows(text){
 }
 function normalizeHeader(s){return String(s||"").trim().toUpperCase().replace(/\s+/g," ");}
 
-function importOfficialStatsText(text,sourceName="pasted stats"){
-  if(!state.currentGameId) throw new Error('Create or open a saved game in My Games before importing stats.');
-  const rows=csvRows(text);
-  if(!rows.length) throw new Error("No rows found.");
-  const out=emptyOfficialStats();
-  out.imported=true; out.importedAt=new Date().toISOString(); out.sourceName=sourceName;
-  let mode="", skHeader=null, gHeader=null, importedSkaters=0, importedGoalies=0;
-
-  // Normalized TYPE template support.
-  const first=rows[0].map(normalizeHeader);
-  if(first.includes("TYPE")){
-    const idx={}; first.forEach((h,i)=>idx[h]=i);
-    for(let r=1;r<rows.length;r++){
-      const row=rows[r]; const type=normalizeHeader(row[idx.TYPE]);
-      if(type==="SKATER"){
-        const n=String(row[idx["#"]]||row[idx["NUMBER"]]||"").trim(); if(!n) continue;
-        out.skaters[n]={
-          number:n,name:row[idx.PLAYER]||"",
-          gp:num(row[idx.GP]),g:num(row[idx.G]),a:num(row[idx.A]),pts:num(row[idx.PTS]),
-          shots:num(row[idx.S]),shotPct:pctValue(row[idx["S%"]]),pim:num(row[idx.PIM]),plusMinus:num(row[idx["+/-"]]),
-          blocks:num(row[idx.BLOCKS]),fo:num(row[idx.FO]),fow:num(row[idx.FOW]),foPct:pctValue(row[idx["FO%"]]),
-          ppg:num(row[idx.PPG]),ppp:num(row[idx.PPP]),shg:num(row[idx.SHG]),shp:num(row[idx.SHP]),gwg:num(row[idx.GWG]),gtg:num(row[idx.GTG])
-        }; importedSkaters++;
-      } else if(type==="GOALIE"){
-        const n=String(row[idx["#"]]||row[idx["NUMBER"]]||"").trim(); if(!n) continue;
-        out.goalies[n]={
-          number:n,name:row[idx.PLAYER]||"",gp:num(row[idx.GP]),min:num(row[idx.MIN]),
-          saves:num(row[idx.SAVES]??row[idx.S]),sa:num(row[idx.SA]),ga:num(row[idx.GA]),svPct:pctValue(row[idx["SV%"]]??row[idx["S%"]]),gaa:num(row[idx.GAA]),
-          w:num(row[idx.W]),l:num(row[idx.L]),t:num(row[idx.T]),so:num(row[idx.SO]),
-          g:num(row[idx.G]),a:num(row[idx.A]),pts:num(row[idx.PTS]),ppg:num(row[idx.PPG]),ppp:num(row[idx.PPP]),shg:num(row[idx.SHG]),shp:num(row[idx.SHP])
-        }; importedGoalies++;
-      }
-    }
-  } else {
-    // PlayerStats-style sheet support.
-    for(let i=0;i<rows.length;i++){
-      const row=rows[i], H=row.map(normalizeHeader);
-      const joined=H.join("|");
-      if(H.includes("PLAYER") && H.includes("GP") && H.includes("BLOCKS") && H.includes("FOW")){
-        mode="skater"; skHeader=H; continue;
-      }
-      if(H.includes("PLAYER") && H.includes("GP") && H.includes("MIN") && H.includes("GAA")){
-        mode="goalie"; gHeader=H; continue;
-      }
-      if(H.some(x=>x==="TEAM STATS")){mode="team";continue}
-      const label=normalizeHeader(row.find(x=>String(x).trim()!=="")||"");
-
-      if(mode==="skater" && skHeader){
-        if(!/^\d+$/.test(String(row[0]||"").trim())) continue;
-        const map={}; skHeader.forEach((h,j)=>map[h]=j);
-        const n=String(row[map["#"]]??row[0]??"").trim(); if(!n) continue;
-        out.skaters[n]={
-          number:n,name:row[map.PLAYER]||"",gp:num(row[map.GP]),g:num(row[map.G]),a:num(row[map.A]),pts:num(row[map.PTS]),
-          shots:num(row[map.S]),shotPct:pctValue(row[map["S%"]]),pim:num(row[map.PIM]),plusMinus:num(row[map["+/-"]]),
-          blocks:num(row[map.BLOCKS]),fo:num(row[map.FO]),fow:num(row[map.FOW]),foPct:pctValue(row[map["FO%"]]),
-          ppg:num(row[map.PPG]),ppp:num(row[map.PPP]),shg:num(row[map.SHG]),shp:num(row[map.SHP]),gwg:num(row[map.GWG]),gtg:num(row[map.GTG])
-        }; importedSkaters++; continue;
-      }
-      if(mode==="goalie" && gHeader){
-        if(!/^\d+$/.test(String(row[0]||"").trim())) continue;
-        const map={}; gHeader.forEach((h,j)=>map[h]=j);
-        const n=String(row[map["#"]]??row[0]??"").trim(); if(!n) continue;
-        out.goalies[n]={
-          number:n,name:row[map.PLAYER]||"",gp:num(row[map.GP]),min:num(row[map.MIN]),saves:num(row[map.S]),sa:num(row[map.S])+num(row[map.GA]),ga:num(row[map.GA]),
-          svPct:pctValue(row[map["S%"]]),gaa:num(row[map.GAA]),w:num(row[map.W]),l:num(row[map.L]),t:num(row[map.T]),so:num(row[map.SO]),
-          g:num(row[map.G]),a:num(row[map.A]),pts:num(row[map.PTS]),ppg:num(row[map.PPG]),ppp:num(row[map.PPP]),shg:num(row[map.SHG]),shp:num(row[map.SHP])
-        }; importedGoalies++; continue;
-      }
-
-      // Team / period rows are recognized regardless of current mode.
-      if(label==="POWER PLAY"){
-        const vals=row.filter((x,j)=>j>0 && String(x).trim()!=="");
-        out.team.ppChances=num(vals[0]); out.team.ppSuccess=num(vals[1]); out.team.ppPct=pctValue(vals[2]); out.team.shga=num(vals[3]); continue;
-      }
-      if(label==="PENALTY KILL"){
-        const vals=row.filter((x,j)=>j>0 && String(x).trim()!=="");
-        out.team.pkChances=num(vals[0]); out.team.pkSuccess=num(vals[1]); out.team.pkPct=pctValue(vals[2]); continue;
-      }
-      if(label==="FACE-OFF" || label==="FACEOFF"){
-        const vals=row.filter((x,j)=>j>0 && String(x).trim()!=="");
-        out.team.fo=num(vals[0]); out.team.fow=num(vals[1]); out.team.foPct=pctValue(vals[2]); continue;
-      }
-      if(["GOALS FOR","GOALS AGAINST","SHOTS FOR","SHOTS AGAINST"].includes(label)){
-        const start=row.findIndex(x=>normalizeHeader(x)===label);
-        const vals=row.slice(start+1).filter(x=>String(x).trim()!=="").map(num);
-        const obj={p1:vals[0]||0,p2:vals[1]||0,p3:vals[2]||0,ot:vals[3]||0,total:vals[4]??((vals[0]||0)+(vals[1]||0)+(vals[2]||0)+(vals[3]||0))};
-        if(label==="GOALS FOR") out.team.goalsFor=obj;
-        if(label==="GOALS AGAINST") out.team.goalsAgainst=obj;
-        if(label==="SHOTS FOR") out.team.shotsFor=obj;
-        if(label==="SHOTS AGAINST") out.team.shotsAgainst=obj;
-      }
-    }
-  }
-
-  if(!importedSkaters && !importedGoalies && !out.team.ppChances && !out.team.pkChances && !out.team.fo){
-    throw new Error("I could not recognize this stat sheet. Export the game sheet as CSV or copy/paste the cells from Excel.");
-  }
-  state.officialStats=out;
-  save(); renderOfficialStats(); renderSavedGames();
-  return {skaters:importedSkaters,goalies:importedGoalies};
-}
 function officialSkaterRow(p){
   ensureOfficialStats();
   return state.officialStats.skaters[String(p.number)] || null;
@@ -3506,7 +3409,7 @@ function numInput(value, scope, key, field, step="1"){
   return `<input class="stat-edit" type="number" step="${step}" data-stat-scope="${scope}" data-stat-key="${escapeHtml(String(key))}" data-stat-field="${field}" value="${escapeHtml(String(v))}">`;
 }
 function recalcOfficialSkater(s){
-  s.g=Number(s.g||0); s.a=Number(s.a||0); s.pts=s.g+s.a;
+  s.g=Number(s.g||0); s.a=Number(s.a||0); s.pts=s.importedPoints ?? (s.g+s.a);
   s.shots=Number(s.shots||0); s.shotPct=s.shots>0?s.g/s.shots:0;
   s.fo=Number(s.fo||0); s.fow=Number(s.fow||0); s.foPct=s.fo>0?s.fow/s.fo:0;
 }
@@ -3525,7 +3428,7 @@ function normalizeOfficialGoalieRecord(s){
   }
   s.svPct=s.sa>0?s.saves/s.sa:0;
   s.gaa=s.min>0?s.ga*36/s.min:0;
-  s.g=Number(s.g||0); s.a=Number(s.a||0); s.pts=s.g+s.a;
+  s.g=Number(s.g||0); s.a=Number(s.a||0); s.pts=s.importedPoints ?? (s.g+s.a);
   return s;
 }
 function recalcOfficialGoalie(s){
@@ -3540,11 +3443,13 @@ function bindOfficialStatEditors(){
       if(scope==="skater"){
         if(!state.officialStats.skaters[key]) state.officialStats.skaters[key]={};
         state.officialStats.skaters[key][field]=v;
+        if(field==="g"||field==="a")state.officialStats.skaters[key].importedPoints=null;
         if(field!=="gp" && v!==0 && !state.officialStats.skaters[key].gp) state.officialStats.skaters[key].gp=1;
         recalcOfficialSkater(state.officialStats.skaters[key]);
       }else if(scope==="goalie"){
         if(!state.officialStats.goalies[key]) state.officialStats.goalies[key]={};
         state.officialStats.goalies[key][field]=v;
+        if(field==="g"||field==="a")state.officialStats.goalies[key].importedPoints=null;
         if(field!=="gp" && v!==0 && !state.officialStats.goalies[key].gp) state.officialStats.goalies[key].gp=1;
         recalcOfficialGoalie(state.officialStats.goalies[key]);
       }
@@ -3565,7 +3470,7 @@ function renderOfficialStats(){
     tr.innerHTML=`<td>${escapeHtml(p.number)}</td><td>${escapeHtml(p.name)}</td>
     <td>${numInput(s.gp,key?"skater":"skater",key,"gp")}</td>
     <td>${numInput(s.g,"skater",key,"g")}</td><td>${numInput(s.a,"skater",key,"a")}</td>
-    <td class="stat-derived">${Number(s.g||0)+Number(s.a||0)}</td>
+    <td class="stat-derived">${s.importedPoints ?? (Number(s.g||0)+Number(s.a||0))}</td>
     <td>${numInput(s.shots,"skater",key,"shots")}</td><td class="stat-derived">${fmtPct(Number(s.shots||0)>0?Number(s.g||0)/Number(s.shots||0):0)}</td>
     <td>${numInput(s.pim,"skater",key,"pim","0.5")}</td><td>${numInput(s.plusMinus,"skater",key,"plusMinus")}</td>
     <td>${numInput(s.blocks,"skater",key,"blocks")}</td><td>${numInput(s.fo,"skater",key,"fo")}</td><td>${numInput(s.fow,"skater",key,"fow")}</td>
@@ -3588,7 +3493,7 @@ function renderOfficialStats(){
     <td class="stat-derived">${Number(s.min||0)>0?(Number(s.ga||0)*36/Number(s.min||0)).toFixed(3):"0.000"}</td>
     <td>${numInput(s.w,"goalie",key,"w")}</td><td>${numInput(s.l,"goalie",key,"l")}</td><td>${numInput(s.t,"goalie",key,"t")}</td>
     <td>${numInput(s.so,"goalie",key,"so")}</td><td>${numInput(s.g,"goalie",key,"g")}</td><td>${numInput(s.a,"goalie",key,"a")}</td>
-    <td class="stat-derived">${Number(s.g||0)+Number(s.a||0)}</td>
+    <td class="stat-derived">${s.importedPoints ?? (Number(s.g||0)+Number(s.a||0))}</td>
     <td>${numInput(s.ppg,"goalie",key,"ppg")}</td><td>${numInput(s.ppp,"goalie",key,"ppp")}</td>
     <td>${numInput(s.shg,"goalie",key,"shg")}</td><td>${numInput(s.shp,"goalie",key,"shp")}</td>`;
     gb.appendChild(tr);
@@ -3608,18 +3513,6 @@ function renderOfficialStats(){
     ? `Stats loaded${state.officialStats.sourceName?" from "+state.officialStats.sourceName:""} • click a stat to correct it.`
     : "No official stats imported yet — you can import a game file first.";
 }
-function downloadOfficialStatsTemplate(){
-  const h=["TYPE","#","Player","GP","G","A","PTS","S","S%","PIM","+/-","Blocks","FO","FOW","FO%","PPG","PPP","SHG","SHP","GWG","GTG"];
-  const rows=[h];
-  state.players.filter(p=>p.pos!=="G").forEach(p=>rows.push(["SKATER",p.number,p.name,0,0,0,0,0,"",0,0,0,0,0,"",0,0,0,0,0,0]));
-  const gh=["TYPE","#","Player","GP","MIN","SA","GA","SV%","GAA","W","L","T","SO","G","A","PTS","PPG","PPP","SHG","SHP"];
-  rows.push([]);rows.push(gh);
-  state.players.filter(p=>p.pos==="G").forEach(p=>rows.push(["GOALIE",p.number,p.name,0,0,0,0,"",0,0,0,0,0,0,0,0,0,0,0,0]));
-  const csv=rows.map(r=>r.map(v=>`"${String(v??"").replaceAll('"','""')}"`).join(",")).join("\n");
-  const blob=new Blob([csv],{type:"text/csv"}),url=URL.createObjectURL(blob),a=document.createElement("a");
-  a.href=url;a.download="Arctic_Foxes_BY14_Stats_Import_Template.csv";a.click();URL.revokeObjectURL(url);
-}
-
 
 function resetWorkingGameData(){
   state.toi314={zones:{},candidates:[],groundTruth:[]};
@@ -5146,25 +5039,6 @@ $("#startTagAssist").addEventListener("click",startTagAssist);
 $("#stopTagAssist").addEventListener("click",stopTagAssist);
 setupBenchZoneDrawing();
 
-$("#statsImportFile").addEventListener("change",e=>{
-  const file=e.target.files&&e.target.files[0]; if(!file)return;
-  const reader=new FileReader();
-  reader.onload=()=>{
-    try{
-      const result=importOfficialStatsText(String(reader.result||""),file.name);
-      alert(`Stats imported: ${result.skaters} skaters, ${result.goalies} goalies. Ice time was left untouched.`);
-    }catch(err){alert(err.message||"Could not import stats.");}
-    e.target.value="";
-  };
-  reader.readAsText(file);
-});
-$("#importPastedStats").addEventListener("click",()=>{
-  try{
-    const result=importOfficialStatsText($("#importPaste").value,"pasted Excel/CSV data");
-    alert(`Stats imported: ${result.skaters} skaters, ${result.goalies} goalies. Ice time was left untouched.`);
-  }catch(err){alert(err.message||"Could not import stats.");}
-});
-$("#downloadStatsTemplate").addEventListener("click",downloadOfficialStatsTemplate);
 $("#clearOfficialStats").addEventListener("click",()=>{
   if(!confirm("Clear imported official stats for this game? Ice time and film events will stay."))return;
   state.officialStats=emptyOfficialStats();save();renderOfficialStats();renderSavedGames();
@@ -6363,7 +6237,7 @@ bindSaveLocationControls(); render();
 setInterval(()=>{ if(state.players.some(p=>p.active)) render(); },1000);
 
 // -------------------- 2.0.2 UPDATE UI --------------------
-let foxesUpdateState={status:'idle',percent:0,currentVersion:'3.0.14'};
+let foxesUpdateState={status:'idle',percent:0,currentVersion:'3.0.15'};
 function showUpdates(){
   $("#updateModal")?.classList.add("open");
   $("#updateModal")?.setAttribute("aria-hidden","false");
@@ -6380,8 +6254,8 @@ function renderUpdateState(s={}){
   const bar=$("#updateProgressBar"), dl=$("#downloadUpdateBtn"), install=$("#installUpdateBtn");
   const release=$("#releasePageBtn"), badge=$("#updateNavBadge"), note=$("#updateNote");
   if(text) text.textContent=foxesUpdateState.message||'Ready to check for updates.';
-  if(ver) ver.textContent=`Current version ${foxesUpdateState.currentVersion||'3.0.14'}`;
-  if(pill) pill.textContent=foxesUpdateState.availableVersion ? `v${foxesUpdateState.availableVersion}` : `v${foxesUpdateState.currentVersion||'3.0.14'}`;
+  if(ver) ver.textContent=`Current version ${foxesUpdateState.currentVersion||'3.0.15'}`;
+  if(pill) pill.textContent=foxesUpdateState.availableVersion ? `v${foxesUpdateState.availableVersion}` : `v${foxesUpdateState.currentVersion||'3.0.15'}`;
   if(bar) bar.style.width=`${Math.max(0,Math.min(100,Number(foxesUpdateState.percent||0)))}%`;
   if(dl) dl.style.display=status==='available'?'inline-flex':'none';
   if(install) install.style.display=status==='downloaded'?'inline-flex':'none';
@@ -6429,7 +6303,7 @@ setTimeout(refreshUpdateState,1200);
     <div class="update-status-card">
       <div class="update-status-row">
         <div class="update-status-text" id="updateStatusText">Ready to check for updates.</div>
-        <div class="update-version-pill" id="updateVersionPill">v3.0.14</div>
+        <div class="update-version-pill" id="updateVersionPill">v3.0.15</div>
       </div>
       <div class="update-progress"><i id="updateProgressBar"></i></div>
     </div>
@@ -6548,7 +6422,7 @@ function ensureUpdateCenter302(){
  const host=document.querySelector('#updatesMount313');
  if(!host||host.querySelector("#updateCenter302"))return;
  const box=document.createElement("div");box.id="updateCenter302";box.className="update302";
- box.innerHTML=`<div><div class="update302-title">App Updates</div><div class="update302-sub" id="updateStatus302">3.0.14 • GitHub auto updates • GitHub Releases</div></div>
+ box.innerHTML=`<div><div class="update302-title">App Updates</div><div class="update302-sub" id="updateStatus302">3.0.15 • GitHub auto updates • GitHub Releases</div></div>
  <div class="update302-actions"><button type="button" id="updateCheck302">Check for Updates</button><button type="button" id="updateDownload302" style="display:none">Download Update</button><button type="button" id="updateInstall302" class="primary" style="display:none">Restart & Install</button><button type="button" id="updateReleases302">Open Releases</button><button type="button" id="updateLog302">Open Updater Log</button></div>`;
  host.insertBefore(box,host.firstChild);
  $("#updateCheck302")?.addEventListener("click",async()=>{
@@ -6557,7 +6431,7 @@ function ensureUpdateCenter302(){
      const timeout=new Promise((_,reject)=>setTimeout(()=>reject(new Error("No response from updater after 30 seconds.")),30000));
      const r=await Promise.race([window.foxesStorage?.updateCheck?.(),timeout]);
      if(r?.message) $("#updateStatus302").textContent=r.message;
-     else if(r?.status==="current") $("#updateStatus302").textContent=`You're up to date • ${r.currentVersion||"3.0.14"}`;
+     else if(r?.status==="current") $("#updateStatus302").textContent=`You're up to date • ${r.currentVersion||"3.0.15"}`;
    }catch(e){ $("#updateStatus302").textContent=`Update check failed: ${String(e?.message||e)}`; }
  });
  $("#updateDownload302")?.addEventListener("click",()=>window.foxesStorage?.updateDownload?.());
@@ -6611,7 +6485,7 @@ setTimeout(()=>{
 </script>
 <script>
 // ===== 3.0.5 UPDATE CENTER FIX =====
-function ensureUpdateTest305(){ /* Historical promotional banner retired in 3.0.14. */ }
+function ensureUpdateTest305(){ /* Historical promotional banner retired in 3.0.15. */ }
 setTimeout(ensureUpdateTest305, 1200);
 setInterval(ensureUpdateTest305, 3000);
 </script>
@@ -6623,5 +6497,6 @@ setInterval(ensureUpdateTest305, 3000);
 <script src="toi-engine.js"></script>
 <script src="crossing-detector.js"></script>
 <script src="toi-ui.js"></script>
+<script src="stats-import-ui.js"></script>
 </body>
 </html>
