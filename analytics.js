@@ -3,6 +3,8 @@
   'use strict';
   const number = v => Number.isFinite(Number(v)) ? Number(v) : 0;
   const clamp = v => Math.max(0, Math.min(100, v));
+  // Raw neutral remains 50; the overall starts at 70 with smooth limits at 0 and 100.
+  const scaleRating = value => {const delta=clamp(number(value))-50,span=delta>=0?30:70;return 70+span*Math.tanh(3*delta/span);};
   const weights = { production:30, shots:15, efficiency:10, results:15, faceoffs:10, defense:15, discipline:5 };
   const copy = x => JSON.parse(JSON.stringify(x));
   function minutes(v) {
@@ -85,7 +87,7 @@
     });
   }
   function rate(r, custom = weights) {
-    if (!r.played) return {value:50,scores:{}};
+    if (!r.played) return {value:70,rawValue:50,scores:{}};
     let scores, w;
     const useTime=custom?.includeIceTime===true;
     if (r.type === 'goalie') {
@@ -109,19 +111,20 @@
     for(const k of Object.keys(w)) if(scores[k]!=null) {const n=Math.max(0,number(w[k]));sum+=scores[k]*n;den+=n;}
     let value=den?sum/den:50;
     if(r.type==='goalie') value=50+(value-50)*Math.min(1,Math.max(r.sa/15,useTime?r.min/36:0));
-    return {value:clamp(value),scores};
+    return {value:scaleRating(value),rawValue:clamp(value),scores};
   }
   function season(games, roster = [], custom = weights) {
     const map=new Map();
-    const add=p=>{const key=String(p.number ?? p.id); if(!map.has(key))map.set(key,{p,type:p.pos==='G'?'goalie':'skater',gp:0,g:0,a:0,pts:0,shots:0,pim:0,pm:0,blocks:0,fo:0,fow:0,toi:0,shifts:0,min:0,saves:0,sa:0,ga:0,w:0,l:0,t:0,so:0,history:[50],games:[],value:50,scores:{}});return map.get(key);};
+    const add=p=>{const key=String(p.number ?? p.id); if(!map.has(key))map.set(key,{p,type:p.pos==='G'?'goalie':'skater',gp:0,g:0,a:0,pts:0,shots:0,pim:0,pm:0,blocks:0,fo:0,fow:0,toi:0,shifts:0,min:0,saves:0,sa:0,ga:0,w:0,l:0,t:0,so:0,history:[70],games:[],value:70,rawValue:50,scores:{}});return map.get(key);};
     roster.forEach(add);
     [...games].sort((a,b)=>(a.date||'').localeCompare(b.date||'') || number(a.createdAt)-number(b.createdAt)).forEach(game=>{
       records(game).forEach(r=>{
         const a=add(r.p); if(!r.played)return;
         for(const k of ['gp','g','a','pts','shots','pim','pm','blocks','fo','fow','fol','ppg','ppa','ppp','shg','sha','shp','gwg','gtg','toi','shifts','min','saves','sa','ga','w','l','t','so'])a[k]=number(a[k])+number(r[k]);
-        const rating=rate(r,custom);a.games.push({id:game.id,date:game.date,opponent:game.opponent,rating:rating.value,record:r});
+        const rating=rate(r,custom);a.games.push({id:game.id,date:game.date,opponent:game.opponent,rating:rating.value,rawRating:rating.rawValue,record:r});
         // Two neutral prior games stabilize early results; always recompute from scratch.
-        a.value=(100+a.games.reduce((s,g)=>s+g.rating,0))/(2+a.games.length);
+        a.rawValue=(100+a.games.reduce((s,g)=>s+g.rawRating,0))/(2+a.games.length);
+        a.value=scaleRating(a.rawValue);
         a.history.push(a.value);a.scores=rating.scores;
       });
     });
@@ -145,6 +148,6 @@
     }
     return {totals:[...totals.values()],byGame};
   }
-  const api={number,minutes,weights,normalize,records,rate,season,honors};
+  const api={scaleRating,number,minutes,weights,normalize,records,rate,season,honors};
   if(typeof module==='object' && module.exports)module.exports=api; else root.FoxesAnalytics=api;
 })(globalThis);

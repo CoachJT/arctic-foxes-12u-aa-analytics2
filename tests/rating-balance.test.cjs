@@ -10,12 +10,12 @@ test('balanced categories sum to 100 and disabled efficiency redistributes witho
  assert.equal(Object.values(A.weights).reduce((n,w)=>n+w,0),100);
  const r={...base,g:1,pts:1,shots:4,blocks:2};const rating=A.rate(r);
  const available=Object.entries(A.weights).filter(([key])=>rating.scores[key]!=null);
- assert.equal(rating.value,available.reduce((n,[k,w])=>n+w*rating.scores[k],0)/available.reduce((n,[,w])=>n+w,0));
+ assert.equal(rating.rawValue,available.reduce((n,[k,w])=>n+w*rating.scores[k],0)/available.reduce((n,[,w])=>n+w,0));
  assert.equal(A.rate({...r,toi:600}).value,rating.value);
  assert.equal(A.rate({...base,blocks:2}).value>A.rate(base).value,true);
  assert.equal(A.rate({...base,pim:4}).value<A.rate(base).value,true);
 });
 test('custom category weights continue to be honored',()=>{
  const custom=Object.fromEntries(Object.keys(A.weights).map(k=>[k,k==='production'?100:0]));
- const r={...base,g:1,pts:1};assert.equal(A.rate(r,custom).value,A.rate(r).scores.production);
+ const r={...base,g:1,pts:1};assert.equal(A.rate(r,custom).rawValue,A.rate(r).scores.production);
 });

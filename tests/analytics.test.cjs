@@ -25,8 +25,8 @@ test('season aggregates, edits and deletion are recalculated without double coun
  a.officialStats.skaters[13].g=0;assert.equal(A.season([a,b],[p])[0].g,2);assert.equal(A.season([a],[p])[0].g,0);
  assert.deepEqual(A.season([a,b],[p]),A.season([b,a],[p]));
 });
-test('ratings start at 50, favor impact efficiency, and do not accumulate indefinitely',()=>{
- assert.equal(A.season([],[p])[0].value,50);
+test('ratings start at 70, favor impact efficiency, and do not accumulate indefinitely',()=>{
+ assert.equal(A.season([],[p])[0].value,70);
  const a=game(1,{gp:1,g:1,a:1,shots:4,toiMin:12,plusMinus:2});const b=game(2,{gp:1,g:0,a:0,shots:1,toiMin:18,plusMinus:-2});
  assert.ok(A.rate(A.records(a)[0]).value>A.rate(A.records(b)[0]).value);
  const many=Array.from({length:100},(_,i)=>({...a,id:String(i)}));const r=A.season(many,[p])[0];assert.ok(r.value<=100);assert.ok(r.value<A.rate(A.records(a)[0]).value);
@@ -38,7 +38,7 @@ test('goalie formula excludes skater offense and uses 36-minute GAA',()=>{
  const half=A.normalize({goalies:{35:{gp:1,min:18,saves:9,ga:1}}},[goalie]);assert.equal(half.goalies[35].gaa,2);
 });
 test('unplayed players and empty games do not move ratings',()=>{
- const r=A.season([{id:'empty',players:[p,goalie]}],[p,goalie]);assert.ok(r.every(x=>x.gp===0&&x.value===50&&x.history.length===1));
+ const r=A.season([{id:'empty',players:[p,goalie]}],[p,goalie]);assert.ok(r.every(x=>x.gp===0&&x.value===70&&x.history.length===1));
 });
 test('film-only faceoffs and goalie events use existing event property names',()=>{
  const g={players:[p,goalie],events:[{type:'faceoff_win',playerId:'p',team:'us'},{type:'faceoff_loss',playerId:'p',team:'us'}],goalieEvents:[{type:'save',goalieId:'g'},{type:'ga',goalieId:'g'}]};
@@ -47,6 +47,6 @@ test('film-only faceoffs and goalie events use existing event property names',()
 test('all renderer scripts parse and release invariants hold',()=>{
  const html=fs.readFileSync('index.html','utf8');for(const m of html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))new vm.Script(m[1]);
  for(const path of ['analytics.js','release-ui.js','interface-model.js','interface.js','toi-engine.js','crossing-detector.js','toi-ui.js','main.js','preload.js'])new vm.Script(fs.readFileSync(path,'utf8'),{filename:path});
- const pkg=require('../package.json');assert.equal(pkg.version,'4.1.4');assert.equal(pkg.build.artifactName,'Arctic-Foxes-12U-AA-Hockey-Analytics-${version}.${ext}');assert.equal(pkg.build.publish[0].repo,'arctic-foxes-12u-aa-analytics2');assert.equal(pkg.build.publish[0].owner,'CoachJT');
+ const pkg=require('../package.json');assert.equal(pkg.version,'4.1.5');assert.equal(pkg.build.artifactName,'Arctic-Foxes-12U-AA-Hockey-Analytics-${version}.${ext}');assert.equal(pkg.build.publish[0].repo,'arctic-foxes-12u-aa-analytics2');assert.equal(pkg.build.publish[0].owner,'CoachJT');
  assert.match(fs.readFileSync('main.js','utf8'),/app.setPath\('userData', path.join\(app.getPath\('appData'\), 'ArcticFoxesBY14HockeyAnalytics'\)\)/);assert.ok(!html.includes('GitHub Auto-Publish Ready'));assert.ok(!html.includes('FOXES  /  2.0'));
 });
