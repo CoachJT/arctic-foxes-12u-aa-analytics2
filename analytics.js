@@ -1,6 +1,7 @@
 /* Shared, non-destructive game normalization and Foxes Player Rating calculations. */
 (function (root) {
   'use strict';
+  const iceTime=typeof module==='object'&&module.exports?require('./ice-time'):root.FoxesIceTime;
   const number = v => Number.isFinite(Number(v)) ? Number(v) : 0;
   const clamp = v => Math.max(0, Math.min(100, v));
   // Raw neutral remains 50; the overall starts at 70 with smooth limits at 0 and 100.
@@ -68,7 +69,7 @@
       const events = (game.events || []).filter(e => e.playerId === p.id);
       const ge = (game.goalieEvents || []).filter(e => e.goalieId === p.id);
       const shifts = (p.shifts || []).filter(s => s.ended || s.endElapsed != null);
-      const toi = shifts.reduce((a,s) => a+Math.max(0,number(s.endElapsed)-number(s.startElapsed)),0);
+      const toi = shifts.reduce((a,s) => a+iceTime.seconds(s),0);
       const count = t => events.filter(e => e.type === t && e.team !== 'them').length;
       let r;
       if (goalie) {

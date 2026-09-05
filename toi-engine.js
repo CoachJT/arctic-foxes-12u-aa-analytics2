@@ -1,6 +1,7 @@
 /* Video-time tracking; legacy shifts remain in the existing per-player arrays. */
 (function(root){
 'use strict';
+const I=typeof module==='object'&&module.exports?require('./ice-time'):root.FoxesIceTime;
 const copy=x=>JSON.parse(JSON.stringify(x));
 const valid=x=>x!==null&&x!==''&&Number.isFinite(Number(x));
 const time=x=>{if(!valid(x)||Number(x)<0)throw Error('Enter a non-negative video timestamp.');return Number(x);};
@@ -30,11 +31,11 @@ function view(s,p,g){
  const known=valid(on)&&!!s.startClipId;
  return {...s,shiftId:s.shiftId||s.id,gameId:g.id,playerId:p.id,playerName:p.name,jerseyNumber:p.number,position:p.pos,
   videoOnTime:known?Number(on):null,videoOffTime:s.ended&&known&&valid(off)?Number(off):null,
-  duration:native?(s.ended?Math.max(0,Number(off)-Number(on)):0):Math.max(0,Number(s.endElapsed||0)-Number(s.startElapsed||0)),
+  duration:native?(s.ended?I.seconds(s):0):Math.max(0,Number(s.endElapsed||0)-Number(s.startElapsed||0)),
   source:s.source||'manual',confirmed:s.confirmed!==false,legacy:!native};
 }
 function shifts(g){return(g.players||[]).flatMap(p=>(p.shifts||[]).map(s=>view(s,p,g)));}
-function duration(s,t,clip){return s.ended?s.duration:(!s.legacy&&s.startClipId===clip&&valid(t)?Math.max(0,t-s.videoOnTime):0);}
+function duration(s,t,clip){return s.ended?s.duration:(!s.legacy&&s.startClipId===clip&&valid(t)?I.seconds(s,t):0);}
 function summary(g,t,clip,confirmedOnly=false){return(g.players||[]).map(p=>{
  const rows=shifts(g).filter(s=>s.playerId===p.id&&(!confirmedOnly||s.confirmed));
  const done=rows.filter(s=>s.ended),values=done.map(s=>s.duration),total=rows.reduce((n,s)=>n+duration(s,t,clip),0),byPeriod={};
@@ -55,7 +56,7 @@ function transition(g,{playerId,direction,videoTime,clipId,source='manual',confi
    period:c?.period||null,strength:g.strength||'EV',videoOnTime:t,videoOffTime:null,gameClockOn:c,gameClockOff:null,
    startVideoTime:t,endVideoTime:null,startClipId:clipId,endClipId:null,startElapsed:t,endElapsed:null,
    startClock:c?.remainingSec??t,startClockType:c?'synced-game':'video',endClock:null,ended:false,duration:0,
-   source,confidence,confirmed:true,detectionIds:detectionId?[detectionId]:[],createdAt:now,updatedAt:now});
+   iceTimePauses:copy(data(g).whistles?.[clipId]||[]),source,confidence,confirmed:true,detectionIds:detectionId?[detectionId]:[],createdAt:now,updatedAt:now});
  }else if(direction==='OFF'){
   const s=active[0];if(!s)throw Error('OFF without ON: inspect the video and record/correct the missing start first.');
   if(s.toiSchema!==314)throw Error('This legacy open shift needs explicit timestamp correction in the Shift Log.');
@@ -63,6 +64,7 @@ function transition(g,{playerId,direction,videoTime,clipId,source='manual',confi
   if(t<s.videoOnTime)throw Error('OFF precedes ON. Correct the timestamp or seek back to the shift.');
   const c=clock(g,clipId,t);Object.assign(s,{videoOffTime:t,endVideoTime:t,endClipId:clipId,endElapsed:t,endClock:c?.remainingSec??t,
    gameClockOff:c,duration:t-s.videoOnTime,ended:true,updatedAt:now});if(detectionId)s.detectionIds.push(detectionId);
+  s.iceTimePauses=copy(data(g).whistles?.[clipId]||s.iceTimePauses||[]);s.duration=I.seconds(s);
   if(source==='auto'){s.source='auto';s.confidence=Math.min(s.confidence??confidence,confidence);}
  }else throw Error('Choose ON or OFF.');
  p.active=p.shifts.some(s=>!s.ended);data(g).finalizedAt=null;
@@ -76,8 +78,8 @@ function edit(g,{shiftId,playerId,on,off,clipId}){
   toiSchema:314,shiftId,gameId:g.id,playerId:p.id,playerName:p.name,jerseyNumber:p.number,position:p.pos,
   videoOnTime:start,videoOffTime:end,startVideoTime:start,endVideoTime:end,startElapsed:start,endElapsed:end,
   startClipId:clipId,endClipId:clipId,startClock:c?.remainingSec??start,endClock:d?.remainingSec??end,startClockType:c?'synced-game':'video',
-  gameClockOn:c,gameClockOff:d,period:c?.period||null,duration:end-start,ended:true,source:'corrected',confirmed:true,updatedAt:Date.now()};
- owner.shifts=owner.shifts.filter(s=>s!==old);p.shifts=p.shifts||[];p.shifts.push(changed);owner.active=owner.shifts.some(s=>!s.ended);p.active=p.shifts.some(s=>!s.ended);
+  iceTimePauses:copy(data(g).whistles?.[clipId]||[]),gameClockOn:c,gameClockOff:d,period:c?.period||null,duration:end-start,ended:true,source:'corrected',confirmed:true,updatedAt:Date.now()};
+ changed.duration=I.seconds(changed);owner.shifts=owner.shifts.filter(s=>s!==old);p.shifts=p.shifts||[];p.shifts.push(changed);owner.active=owner.shifts.some(s=>!s.ended);p.active=p.shifts.some(s=>!s.ended);
  data(g).groundTruth.push({id:uid(),kind:'shift-correction',shiftId,playerId,clipId,on:start,off:end,confirmedAt:Date.now()});data(g).finalizedAt=null;
 }
 function remove(g,id){const removed=shifts(g).find(s=>s.shiftId===id);for(const p of g.players){p.shifts=(p.shifts||[]).filter(s=>(s.shiftId||s.id)!==id);p.active=p.shifts.some(s=>!s.ended);}if(removed)data(g).groundTruth.push({id:uid(),kind:'shift-deleted',shiftId:id,previous:removed,confirmedAt:Date.now()});data(g).finalizedAt=null;}
@@ -93,6 +95,15 @@ function review(g,{id,action,playerId,videoTime,direction}){
  data(g).groundTruth.push({id:uid(),detectionId:c.id,clipId:c.clipId,videoTime:t,direction,playerId,original:copy(c),confirmedAt:Date.now()});
 }
 function apply(g,fn){const out=copy(g);fn(out);const before=shifts(g),after=shifts(out),changes=[];for(const s of after){const old=before.find(x=>x.shiftId===s.shiftId);if(JSON.stringify(old)!==JSON.stringify(s))changes.push({shiftId:s.shiftId,before:old||null,after:s});}for(const s of before)if(!after.some(x=>x.shiftId===s.shiftId))changes.push({shiftId:s.shiftId,before:s,after:null});if(changes.length){const d=data(out);d.audit=d.audit||[];d.audit.push({at:Date.now(),changes});}return out;}
-const api={benchLine,saveZone,data,clock,view,shifts,duration,summary,transition,edit,remove,candidate,review,apply};
+function whistle(g,{clipId,videoTime,paused}){
+ const t=time(videoTime),clip=(g.filmClips||[]).find(c=>c.id===clipId);
+ if(!g.id||!clip||!Number.isFinite(clip.duration)||t>clip.duration)throw Error('Load a saved clip first.');
+ const d=data(g);d.whistles=d.whistles||{};const spans=d.whistles[clipId]||(d.whistles[clipId]=[]),open=spans.find(p=>p.end==null);
+ if(paused){if(open)throw Error('Ice time is already paused.');if(spans.some(p=>t<p.end))throw Error('Return past the last recorded whistle before pausing.');spans.push({id:uid(),start:t,end:null});}
+ else{if(!open)throw Error('Ice time is already running.');if(t<open.start)throw Error('Resume must follow the whistle.');open.end=t;}
+ for(const p of g.players||[])for(const s of p.shifts||[])if(s.toiSchema===314&&s.startClipId===clipId){s.iceTimePauses=copy(spans);if(s.ended)s.duration=I.seconds(s);}
+ d.finalizedAt=null;
+}
+const api={whistle,benchLine,saveZone,data,clock,view,shifts,duration,summary,transition,edit,remove,candidate,review,apply};
 if(typeof module==='object'&&module.exports)module.exports=api;else root.FoxesTOI=api;
 })(globalThis);

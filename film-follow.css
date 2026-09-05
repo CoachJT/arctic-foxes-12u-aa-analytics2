@@ -1,0 +1,38 @@
+/* One visible tool panel; the video never scrolls with its controls. */
+.film-quick416{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+#volume416{width:62px;padding:0}
+#whistle416.whistle-paused416{background:#704e12;border-color:#f4c55c;color:#fff}
+#labelCanvas416{position:absolute;pointer-events:none;z-index:8}
+.drawer-head416{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.follow-player416{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1px solid #34404b}
+#tagOverlayWrap .film-side316>[hidden]{display:none!important}
+#tagOverlayWrap .film-side-heading316{display:none!important}
+#tagOverlayWrap .film-side316{display:none!important}
+#tagOverlayWrap .film-side316.drawer-open416{display:block!important}
+#tagOverlayWrap.film-workstation316{grid-template-columns:minmax(0,1fr)!important}
+#tagOverlayWrap.film-workstation316.tools-open416{grid-template-columns:minmax(0,1fr) 310px!important}
+#tagOverlayWrap .film-transport316{grid-column:1/-1!important}
+#toiPanel314.bench-only416>:not(#zoneDetails314){display:none!important}
+#toiPanel314.review-only416>#zoneDetails314{display:none!important}
+#attachDialog416{width:min(1000px,92vw);max-height:92vh;overflow:auto;background:#121e2c;color:#fff;border:1px solid #456;border-radius:14px;padding:18px}
+#attachDialog416::backdrop{background:#000b}
+#attachFrame416{display:block;width:100%;max-height:65vh;object-fit:contain;touch-action:none;cursor:crosshair}
+body.ui313 #tagOverlayWrap.tag-fullscreen,body.ui313 #tagOverlayWrap:fullscreen{display:grid!important;grid-template-columns:minmax(0,1fr)!important;grid-template-rows:minmax(0,1fr) auto!important;overflow:hidden!important;height:100dvh!important;width:100vw!important;padding:0!important;gap:0!important}
+body.ui313 #tagOverlayWrap.tag-fullscreen.tools-open416,body.ui313 #tagOverlayWrap:fullscreen.tools-open416{grid-template-columns:minmax(0,1fr) 310px!important}
+body.ui313 #tagOverlayWrap.tag-fullscreen #gameVideo,body.ui313 #tagOverlayWrap:fullscreen #gameVideo{grid-row:1!important;grid-column:1!important;width:100%!important;height:100%!important;min-height:0!important;max-height:none!important;object-fit:contain}
+body.ui313 #tagOverlayWrap.tag-fullscreen .film-side316,body.ui313 #tagOverlayWrap:fullscreen .film-side316{grid-row:1!important;grid-column:2!important;height:100%!important;max-height:none!important;min-height:0!important;overflow-y:auto!important}
+body.ui313 #tagOverlayWrap.tag-fullscreen .film-transport316,body.ui313 #tagOverlayWrap:fullscreen .film-transport316{grid-row:2!important;min-height:0!important;padding:8px 12px!important}
+#tagOverlayWrap.tag-fullscreen #filmStatus31:empty{display:none}
+#tagOverlayWrap.tag-fullscreen #filmStatus31{font-size:12px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:800px){#tagOverlayWrap.film-workstation316.tools-open416,body.ui313 #tagOverlayWrap.tag-fullscreen.tools-open416{grid-template-columns:minmax(0,1fr)!important}#tagOverlayWrap .film-side316.drawer-open416{position:absolute!important;right:0;top:0;bottom:120px;width:min(310px,85vw)!important;z-index:30}#volume416,#theater31,#fill31{display:none!important}}
+
+body.ui313 #tagOverlayWrap.film-workstation316:is(:fullscreen,.tag-fullscreen){grid-template-columns:minmax(0,1fr)!important;padding:0!important}
+body.ui313 #tagOverlayWrap.film-workstation316.tools-open416:is(:fullscreen,.tag-fullscreen){grid-template-columns:minmax(0,1fr) 310px!important}
+body.ui313 #tagOverlayWrap.film-workstation316:is(:fullscreen,.tag-fullscreen) .film-transport316{grid-column:1/-1!important}
+body.ui313 #tagOverlayWrap.film-workstation316:is(:fullscreen,.tag-fullscreen) .film-side316{grid-row:1!important}
+body.ui313 #tagOverlayWrap .film-transport316 .film-tools31{display:flex!important;align-items:center;flex-wrap:wrap;gap:6px!important}
+body.ui313 #tagOverlayWrap .film-transport316 #filmStatus31{flex-basis:100%;margin:0!important;line-height:1.3;min-height:0}
+body.ui313 #tagOverlayWrap .film-control-group315:empty{display:none}
+body.ui313 #tagOverlayWrap .film-transport316 .film-tools31 button{padding:8px 10px!important;font-size:12px!important;min-height:34px}
+body.ui313 #tagOverlayWrap .film-transport316 #filmStatus31:empty{display:none!important}
+@media(max-width:800px){body.ui313 #tagOverlayWrap.film-workstation316.tools-open416:is(:fullscreen,.tag-fullscreen){grid-template-columns:minmax(0,1fr)!important}body.ui313 #tagOverlayWrap.film-workstation316:is(:fullscreen,.tag-fullscreen) .film-side316.drawer-open416{display:block!important}}

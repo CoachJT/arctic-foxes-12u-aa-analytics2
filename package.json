@@ -1,6 +1,6 @@
 {
   "name": "foxes-hockey-analytics",
-  "version": "4.1.5",
+  "version": "4.1.6",
   "description": "Arctic Foxes 12U AA coach platform with scouting center, printable game-day reports, usage, trends, settings and video library.",
   "main": "main.js",
   "scripts": {
@@ -27,6 +27,7 @@
       ]
     },
     "files": [
+      "ice-time.js",
       "player-learning.js",
       "player-learning-ui.js",
       "opponent-model.js",
@@ -64,7 +65,10 @@
       "scouting-main.js",
       "scouting-preload.js",
       "scouting-ui.js",
-      "scouting-launch.js"
+      "scouting-launch.js",
+      "player-tracker.js",
+      "film-follow-ui.js",
+      "film-follow.css"
     ],
     "asarUnpack": [
       "scoresheet-ocr.ps1"

@@ -15,8 +15,8 @@ function overview(games,roster){
 function intervals(g){return T.shifts(g).filter(s=>s.ended&&s.confirmed&&s.videoOnTime!=null&&s.videoOffTime!=null&&s.videoOffTime>=s.videoOnTime&&(!s.endClipId||s.endClipId===s.startClipId));}
 function overlaps(g){
  const rows=intervals(g),out=new Map();
- for(const clip of new Set(rows.map(s=>s.startClipId))){const r=rows.filter(s=>s.startClipId===clip),cuts=[...new Set(r.flatMap(s=>[s.videoOnTime,s.videoOffTime]))].sort((a,b)=>a-b);
-  for(let i=1;i<cuts.length;i++)for(const [pos,size] of [['F',3],['D',2]]){const players=[...new Map(r.filter(s=>s.position===pos&&s.videoOnTime<=cuts[i-1]&&s.videoOffTime>=cuts[i]).map(s=>[s.playerId,s])).values()].sort((a,b)=>String(a.playerId).localeCompare(String(b.playerId)));
+ for(const clip of new Set(rows.map(s=>s.startClipId))){const r=rows.filter(s=>s.startClipId===clip),cuts=[...new Set(r.flatMap(s=>[s.videoOnTime,s.videoOffTime,...(s.iceTimePauses||[]).flatMap(p=>[Math.max(s.videoOnTime,p.start),Math.min(s.videoOffTime,p.end??s.videoOffTime)])]))].sort((a,b)=>a-b);
+  for(let i=1;i<cuts.length;i++)for(const [pos,size] of [['F',3],['D',2]]){const players=[...new Map(r.filter(s=>s.position===pos&&s.videoOnTime<=cuts[i-1]&&s.videoOffTime>=cuts[i]&&!(s.iceTimePauses||[]).some(p=>p.start<cuts[i]&&(p.end??Infinity)>cuts[i-1])).map(s=>[s.playerId,s])).values()].sort((a,b)=>String(a.playerId).localeCompare(String(b.playerId)));
    if(players.length!==size)continue;const key=JSON.stringify([pos,...players.map(p=>p.playerId)]),v=out.get(key)||{pos,players,seconds:0};v.seconds+=cuts[i]-cuts[i-1];out.set(key,v);
   }
  }return [...out.values()].sort((a,b)=>b.seconds-a.seconds);
