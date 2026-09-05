@@ -91,6 +91,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             $releaseTitle = "${{ steps.version.outputs.version }}"
             if ($tag -eq "v3.0.15") { $releaseTitle = "3.0.15 - Stats Import and Saved Bench Zones" }
+            if ($tag -eq "v3.1.0") { $releaseTitle = "3.1.0 - Coach Command Center" }
             if ($tag -eq "v3.1.0-dev.1") { $releaseTitle = "3.1.0-dev.1 - Coach Command Center" }
             $releaseArgs = @("release", "create", $tag, "--repo", "${{ github.repository }}", "--title", $releaseTitle, "--notes-file", "RELEASE_${{ steps.version.outputs.version }}.md", "--draft")
             if ("${{ steps.version.outputs.version }}".Contains("-")) { $releaseArgs += "--prerelease" }
@@ -109,7 +110,9 @@ jobs:
           $tag = "v${{ steps.version.outputs.version }}"
           gh release upload $tag "dist/latest.yml" "dist/*.exe" "dist/*.blockmap" --repo "${{ github.repository }}"
           if ($LASTEXITCODE -ne 0) { throw "Release asset upload failed." }
-          gh release edit $tag --draft=false --repo "${{ github.repository }}"
+          $publishArgs = @("release", "edit", $tag, "--draft=false", "--repo", "${{ github.repository }}")
+          if (-not "${{ steps.version.outputs.version }}".Contains("-")) { $publishArgs += "--latest" }
+          gh @publishArgs
           if ($LASTEXITCODE -ne 0) { throw "Release publication failed." }
 
       - name: Publish summary
