@@ -3,7 +3,7 @@
   'use strict';
   const number = v => Number.isFinite(Number(v)) ? Number(v) : 0;
   const clamp = v => Math.max(0, Math.min(100, v));
-  const weights = { production:25, shots:15, efficiency:20, results:15, faceoffs:10, defense:10, discipline:5 };
+  const weights = { production:30, shots:15, efficiency:10, results:15, faceoffs:10, defense:15, discipline:5 };
   const copy = x => JSON.parse(JSON.stringify(x));
   function minutes(v) {
     if (typeof v === 'string' && v.includes(':')) {
@@ -101,7 +101,7 @@
       const m=r.toi/60, per36=useTime&&m>0?36/Math.max(m,3):null;
       scores={production:clamp(50+r.g*12+r.a*8),shots:clamp(50+(r.shots-2)*8),
         efficiency:per36==null?null:clamp(50+((r.pts+r.shots*.15)*per36-2)*12),
-        results:clamp(50+r.pm*10),faceoffs:r.fo>0?clamp(50+(r.fow/r.fo-.5)*100):null,
+        results:clamp(50+r.pm*10),faceoffs:r.fo>0?clamp(50+(r.fow/r.fo-.5)*100*(r.fo/(r.fo+10))):null,
         defense:clamp(50+r.blocks*10),discipline:clamp(50-r.pim*6)};
       w={...weights,...custom};
     }
