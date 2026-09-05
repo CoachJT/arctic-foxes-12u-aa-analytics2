@@ -47,12 +47,15 @@ document.addEventListener('keydown',e=>{if(activeWorkspace!=='film'||e.target.cl
 const oldOpen31=openWorkspace;openWorkspace=function(name){if(name!=='film'){document.body.classList.remove('theater31');if(document.fullscreenElement||wrap31.classList.contains('tag-fullscreen'))exitTagFullscreen();}return oldOpen31(name);};
 // Display transforms never enter detector sampling or saved normalized coordinates.
 paint314=function(){
- const legacy=$('#tagOverlayCanvas');legacy.style.pointerEvents=zoneDrawing?'auto':'none';
+ const legacy=$('#tagOverlayCanvas');legacy.style.pointerEvents='none';legacy.style.display='none';
  const w=v314.videoWidth||16,h=v314.videoHeight||9,bw=v314.clientWidth,bh=v314.clientHeight,fill=document.body.classList.contains('film-fill31'),scale=(fill?Math.max:Math.min)(bw/w,bh/h);
  const geometry={left:`${v314.offsetLeft+(bw-w*scale)/2}px`,top:`${v314.offsetTop+(bh-h*scale)/2}px`,width:`${w*scale}px`,height:`${h*scale}px`};Object.assign(legacy.style,geometry);
- Object.assign(debugCanvas314.style,geometry,{display:debug314||drawing314?'block':'none',pointerEvents:drawing314?'auto':'none'});
+ Object.assign(debugCanvas314.style,geometry,{display:v314.videoWidth>0&&v314.readyState>=1&&(debug314||drawing314)?'block':'none',pointerEvents:drawing314?'auto':'none'});
  debugCanvas314.width=320;debugCanvas314.height=Math.max(1,Math.round(320*h/w));const c=debugCanvas314.getContext('2d'),cw=debugCanvas314.width,ch=debugCanvas314.height,z=zone314();
- if(z&&(layers31.bench||drawing314)){c.strokeStyle='#ff6672';c.lineWidth=2;c.strokeRect(z.x*cw,z.y*ch,z.width*cw,z.height*ch);c.beginPath();if(z.axis==='x'){c.moveTo(z.boundary*cw,z.y*ch);c.lineTo(z.boundary*cw,(z.y+z.height)*ch);}else{c.moveTo(z.x*cw,z.boundary*ch);c.lineTo((z.x+z.width)*cw,z.boundary*ch);}c.stroke();}
+ if(z&&(layers31.bench||drawing314)){
+ const l=z.line||(z.axis==='x'?{x1:z.boundary,y1:z.y,x2:z.boundary,y2:z.y+z.height}:{x1:z.x,y1:z.boundary,x2:z.x+z.width,y2:z.boundary});
+ c.strokeStyle='#ff6672';c.lineCap='round';c.lineWidth=2;c.beginPath();c.moveTo(l.x1*cw,l.y1*ch);c.lineTo(l.x2*cw,l.y2*ch);c.stroke();c.fillStyle='#ff6672';for(const [x,y] of [[l.x1,l.y1],[l.x2,l.y2]]){c.beginPath();c.arc(x*cw,y*ch,2.5,0,Math.PI*2);c.fill();}
+ }
  c.fillStyle='white';c.font='10px sans-serif';for(const b of detector314?.regions||[]){if(layers31.motion){c.strokeStyle='#94e4b9';c.strokeRect(b.left*cw,b.top*ch,b.width*cw,b.height*ch);}if(layers31.tracks)c.fillText(`Track ${b.id}`,b.left*cw,b.top*ch-3);}
  const recent=ensure314().candidates.at(-1);if(layers31.crossings&&recent)c.fillText(`Track ${recent.trackId} ${recent.direction} ${stamp314(recent.videoTime)} ${confidence314(recent.confidence)}`,5,ch-8);
 };
@@ -112,3 +115,7 @@ for(const event of ['loadedmetadata','emptied','loadstart'])v314.addEventListene
 const emptyVideo413=document.createElement('div');emptyVideo413.className='film-empty413';emptyVideo413.innerHTML='<strong>Add a video to begin</strong><button type="button">Add Clip</button>';emptyVideo413.querySelector('button').onclick=()=>chooseFilmClips();wrap31.appendChild(emptyVideo413);
 const readyBase413=filmReady316;filmReady316=function(){readyBase413();emptyVideo413.hidden=!!v314.currentSrc||!!v314.getAttribute('src')||!!v314.srcObject;};
 for(const event of ['loadedmetadata','emptied','loadstart'])v314.addEventListener(event,filmReady316);filmReady316();
+
+// Retire the game-wide marker display; all visible bench lines belong to a clip.
+drawBenchZone=function(){const c=$('#tagOverlayCanvas');c.getContext('2d').clearRect(0,0,c.width,c.height);c.style.display='none';zoneDrawing=false;};drawBenchZone();
+$('#armBenchZone').onclick=()=>{$('#autoSetup314').click();$('#drawZone314').click();};

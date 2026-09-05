@@ -6,8 +6,16 @@ const valid=x=>x!==null&&x!==''&&Number.isFinite(Number(x));
 const time=x=>{if(!valid(x)||Number(x)<0)throw Error('Enter a non-negative video timestamp.');return Number(x);};
 const uid=()=>globalThis.crypto.randomUUID();
 function data(g){const d=g.toi314||(g.toi314={});d.zones=d.zones||{};d.candidates=d.candidates||[];d.groundTruth=d.groundTruth||[];return d;}
+function benchLine(line,benchLow=true){
+ if(!line||!['x1','y1','x2','y2'].every(k=>Number.isFinite(line[k])&&line[k]>=0&&line[k]<=1)||Math.hypot(line.x2-line.x1,line.y2-line.y1)<.06||typeof benchLow!=='boolean')throw Error('Draw a longer line within the video.');
+ let {x1,y1,x2,y2}=line;const axis=Math.abs(x2-x1)>=Math.abs(y2-y1)?'y':'x';
+ if(axis==='y'?x1>x2:y1>y2){[x1,x2]=[x2,x1];[y1,y2]=[y2,y1];}
+ const x=Math.max(0,Math.min(x1,x2)-.08),y=Math.max(0,Math.min(y1,y2)-.08),right=Math.min(1,Math.max(x1,x2)+.08),bottom=Math.min(1,Math.max(y1,y2)+.08);
+ return {x,y,width:right-x,height:bottom-y,axis,boundary:axis==='x'?(x1+x2)/2:(y1+y2)/2,benchLow,line:{x1,y1,x2,y2}};
+}
 function saveZone(g,clipId,z){
  if(!g.id||!clipId||!(g.filmClips||[]).some(c=>c.id===clipId))throw Error('Select a saved game and load its video clip first.');
+ if(z?.line)z={...z,...benchLine(z.line,z.benchLow)};
  if(!z||!['x','y','width','height','boundary'].every(k=>Number.isFinite(z[k]))||!['x','y'].includes(z.axis)||typeof z.benchLow!=='boolean'||z.x<0||z.y<0||z.width<.05||z.height<.05||z.x+z.width>1.000001||z.y+z.height>1.000001||z.boundary<z[z.axis]||z.boundary>z[z.axis]+(z.axis==='x'?z.width:z.height))throw Error('Draw a valid bench region at least 5% of the video in each dimension, with its boundary inside the region.');
  data(g).zones[clipId]=copy(z);
 }
@@ -85,6 +93,6 @@ function review(g,{id,action,playerId,videoTime,direction}){
  data(g).groundTruth.push({id:uid(),detectionId:c.id,clipId:c.clipId,videoTime:t,direction,playerId,original:copy(c),confirmedAt:Date.now()});
 }
 function apply(g,fn){const out=copy(g);fn(out);const before=shifts(g),after=shifts(out),changes=[];for(const s of after){const old=before.find(x=>x.shiftId===s.shiftId);if(JSON.stringify(old)!==JSON.stringify(s))changes.push({shiftId:s.shiftId,before:old||null,after:s});}for(const s of before)if(!after.some(x=>x.shiftId===s.shiftId))changes.push({shiftId:s.shiftId,before:s,after:null});if(changes.length){const d=data(out);d.audit=d.audit||[];d.audit.push({at:Date.now(),changes});}return out;}
-const api={saveZone,data,clock,view,shifts,duration,summary,transition,edit,remove,candidate,review,apply};
+const api={benchLine,saveZone,data,clock,view,shifts,duration,summary,transition,edit,remove,candidate,review,apply};
 if(typeof module==='object'&&module.exports)module.exports=api;else root.FoxesTOI=api;
 })(globalThis);

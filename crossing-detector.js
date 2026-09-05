@@ -2,7 +2,7 @@
    Confidence is a heuristic evidence score, not a calibrated probability. */
 (function(root){'use strict';
 class Detector{
- constructor(zone){if(!zone||!['x','y'].includes(zone.axis)||!['x','y','width','height','boundary'].every(k=>Number.isFinite(zone[k]))||zone.x<0||zone.y<0||zone.width<=0||zone.height<=0||zone.x+zone.width>1.001||zone.y+zone.height>1.001||zone.boundary<0||zone.boundary>1)throw Error('Invalid bench zone. Draw and save it again.');this.zone=zone;this.reset();}
+ constructor(zone){if(!zone||!['x','y'].includes(zone.axis)||!['x','y','width','height','boundary'].every(k=>Number.isFinite(zone[k]))||zone.x<0||zone.y<0||zone.width<=0||zone.height<=0||zone.x+zone.width>1.001||zone.y+zone.height>1.001||zone.boundary<0||zone.boundary>1)throw Error('Invalid bench zone. Draw and save it again.');if(zone.line&&(!['x1','y1','x2','y2'].every(k=>Number.isFinite(zone.line[k])&&zone.line[k]>=0&&zone.line[k]<=1)||Math.hypot(zone.line.x2-zone.line.x1,zone.line.y2-zone.line.y1)<.06))throw Error('Invalid bench line.');this.zone=zone;this.reset();}
  reset(){this.previous=null;this.tracks=[];this.serial=0;this.lastTime=null;this.regions=[];this.events=[];}
  frame(rgba,w,h,t){
   if(this.lastTime!==null&&(t<=this.lastTime||t-this.lastTime>.8))this.reset();
@@ -25,7 +25,10 @@ class Detector{
   for(const b of blobs.slice(0,80)){
    let best=null,dist=.12;for(const tr of this.tracks){const d=Math.hypot(tr.x-b.x,tr.y-b.y);if(!used.has(tr.id)&&t-tr.time<.6&&d<dist){best=tr;dist=d;}}
    const tr=best||{id:++this.serial,hits:0,side:0,lastCross:-10};used.add(tr.id);
-   const axis=z.axis==='x'?b.x:b.y,signed=(axis-z.boundary)*(z.benchLow?1:-1),side=Math.abs(signed)<.015?0:Math.sign(signed);
+   const axis=z.axis==='x'?b.x:b.y;
+   let distance=axis-z.boundary;
+   if(z.line){const l=z.line,dx=l.x2-l.x1,dy=l.y2-l.y1;distance=(dx*(b.y-l.y1)-dy*(b.x-l.x1))/Math.hypot(dx,dy)*(z.axis==='x'?-1:1);}
+   const signed=distance*(z.benchLow?1:-1),side=Math.abs(signed)<.015?0:Math.sign(signed);
    if(side&&tr.side&&side!==tr.side&&tr.hits>=3&&t-tr.lastCross>1){
     const confidence=Math.min(.95,.4+Math.min(tr.hits,12)*.035+Math.min(b.pixels,100)/1000);
     events.push({videoTime:t,direction:side>0?'ON':'OFF',confidence,trackId:tr.id});tr.lastCross=t;
