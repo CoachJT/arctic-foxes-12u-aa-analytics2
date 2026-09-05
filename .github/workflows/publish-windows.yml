@@ -1,0 +1,74 @@
+name: Build and Publish Windows Update
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'package.json'
+      - 'index.html'
+      - 'main.js'
+      - 'preload.js'
+      - '.github/workflows/publish-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+        continue-on-error: true
+
+      - name: Install dependencies
+        shell: pwsh
+        run: npm install
+
+      - name: Read app version
+        id: version
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "App version: $version"
+
+      - name: Check whether release already exists
+        id: release_check
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "v${{ steps.version.outputs.version }}"
+          gh release view $tag --repo "${{ github.repository }}" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            "exists=true" >> $env:GITHUB_OUTPUT
+            Write-Host "Release $tag already exists. Nothing to publish."
+          } else {
+            "exists=false" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Build and publish update
+        if: steps.release_check.outputs.exists != 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --win nsis --publish always
+
+      - name: Publish summary
+        shell: pwsh
+        run: |
+          if ("${{ steps.release_check.outputs.exists }}" -eq "true") {
+            "### Arctic Foxes ${{ steps.version.outputs.version }} already published ✅" >> $env:GITHUB_STEP_SUMMARY
+          } else {
+            "### Arctic Foxes ${{ steps.version.outputs.version }} published automatically ✅" >> $env:GITHUB_STEP_SUMMARY
+            "The Windows installer, blockmap, and latest.yml were created by GitHub Actions." >> $env:GITHUB_STEP_SUMMARY
+          }
