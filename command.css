@@ -265,3 +265,18 @@ body.ui313 #playerValuePage .rating-person.selected{background:#20344f!important
 @media(max-width:1200px){#playerValuePage #ratingFocus{grid-template-columns:1fr}#playerValuePage .rating-player-hero{grid-row:auto;min-height:300px}#playerValuePage .rating-stat-strip,#playerValuePage .rating-development{grid-column:1}}
 @media(max-width:900px){body.ui313 #commandCenter313 .report-grid316>.card{grid-column:1;grid-row:auto}.score-stage317>strong{font-size:54px}.score-stage317>div{font-size:18px}}
 @media(max-width:700px){body.ui313 .app{padding:0 16px 90px!important}body.ui313 #workspaceNav{width:100%!important;height:auto!important;top:auto!important;bottom:0!important;flex-direction:row!important;overflow-x:auto!important;padding:5px!important}body.ui313 #workspaceNav button{width:76px!important;min-width:76px}.sidebar-brand313,.nav-section313{display:none!important}.score-stage317{grid-template-columns:1fr;text-align:center}.score-stage317>div:last-child{text-align:center}.periods317{gap:12px}#playerValuePage .rating-workspace{grid-template-columns:1fr}}
+
+/* Fullscreen reserves space for playback; only review tools scroll. */
+body.ui313 #tagOverlayWrap.film-workstation316:is(:fullscreen,.tag-fullscreen){position:fixed!important;inset:0!important;box-sizing:border-box!important;width:100vw!important;height:100dvh!important;max-width:none!important;padding:12px!important;border:0!important;border-radius:0!important;display:grid!important;grid-template-columns:minmax(0,1fr) 300px!important;grid-template-rows:minmax(0,1fr) auto!important;overflow:hidden!important;gap:0!important}
+body.ui313 #tagOverlayWrap.film-workstation316:is(:fullscreen,.tag-fullscreen) #gameVideo{grid-column:1;grid-row:1;width:100%!important;height:100%!important;max-height:none!important;min-height:0!important;min-width:0!important;aspect-ratio:auto!important;object-fit:contain!important;border-radius:0!important}
+body.ui313 #tagOverlayWrap.film-workstation316:is(:fullscreen,.tag-fullscreen) .film-side316{grid-column:2;grid-row:1 / span 2;height:100%;max-height:none!important;min-height:0;box-sizing:border-box;overflow:auto}
+body.ui313 #tagOverlayWrap.film-workstation316:is(:fullscreen,.tag-fullscreen) .film-transport316{grid-column:1;grid-row:2;min-width:0}
+body.ui313 #tagOverlayWrap.film-workstation316:is(:fullscreen,.tag-fullscreen) #tagFullscreenTop{display:none!important}
+body.ui313 .schedule-301-grid{grid-template-columns:1fr}
+body.ui313 #scheduleForm412>summary{cursor:pointer;font-weight:700;padding:8px}
+body.ui313 #scheduleForm412[open] .schedule-301-fields{margin-top:12px}
+@media(max-width:900px){body.ui313 #tagOverlayWrap.film-workstation316:is(:fullscreen,.tag-fullscreen){grid-template-columns:minmax(0,1fr)!important}body.ui313 #tagOverlayWrap.film-workstation316:is(:fullscreen,.tag-fullscreen) .film-side316{display:none!important}}
+
+body.ui313.film-fill31 #tagOverlayWrap.film-workstation316:is(:fullscreen,.tag-fullscreen) #gameVideo{object-fit:cover!important}
+
+#filmStatus31{flex-basis:100%;white-space:normal;overflow-wrap:anywhere}#filmStatus31:empty{display:none}

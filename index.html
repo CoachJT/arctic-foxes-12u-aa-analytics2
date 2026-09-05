@@ -1958,6 +1958,10 @@ function resolveClipUrl(c){
   if(!c) return "";
   return clipSessionUrls.get(c.id)||c.url||"";
 }
+function filmLoadMessage412(message){
+  const status=document.querySelector('#filmStatus31');
+  if(status)status.textContent=message;
+}
 function loadFilmClip(id, preservePlayback=false){
   const v=document.querySelector("#gameVideo");
   if(!v) return;
@@ -1966,15 +1970,24 @@ function loadFilmClip(id, preservePlayback=false){
   if(!c) return;
   state.activeClipId=c.id;
   const src=resolveClipUrl(c);
+  v.onloadedmetadata=null;v.onerror=null;
   if(!src){
+    filmLoadMessage412('This clip needs to be selected again. Use Add Clip to locate '+(c.name||'the video')+'.');
     v.removeAttribute("src");v.load();
     renderFilmClips();
     return;
   }
   const wasPlaying=!v.paused;
-  v.src=src;
-  v.load();
+  filmLoadMessage412('Loading '+(c.name||c.label||'video')+'…');
+  v.onerror=()=>{
+    if(state.activeClipId!==c.id)return;
+    const code=v.error?.code;
+    const reason=code===3?'The video could not be decoded. Try an MP4 exported with H.264 video.':code===2?'The file could not be read. Check that it is available on this computer.':'The file is unavailable or its video format is unsupported. Select a local playable video with Add Clip.';
+    filmLoadMessage412('Could not load '+(c.name||'video')+'. '+reason);
+  };
   v.onloadedmetadata=()=>{
+    if(state.activeClipId!==c.id)return;
+    filmLoadMessage412('Ready: '+(c.name||c.label||'video'));
     c.duration=Number(v.duration||c.duration||0);
     const pos=Math.min(Number(c.lastPosition||0),Number(v.duration||0));
     if(Number.isFinite(pos)) v.currentTime=pos;
@@ -1982,6 +1995,8 @@ function loadFilmClip(id, preservePlayback=false){
     save();renderFilmClips();renderSyncPoints();
     if(preservePlayback && wasPlaying) v.play().catch(()=>{});
   };
+  v.src=src;
+  v.load();
   state.useVideoTime=true;
   save();
   renderFilmClips();
@@ -1989,10 +2004,13 @@ function loadFilmClip(id, preservePlayback=false){
 }
 function addFilmClipRecords(files){
   ensureFilmClipState();
+  let selectedId=null;
   for(const f of files||[]){
     const duplicate=(state.filmClips||[]).find(c=>c.path && f.path && c.path===f.path);
     if(duplicate){
       if(f.url) duplicate.url=f.url;
+      if(f.sessionUrl)clipSessionUrls.set(duplicate.id,f.sessionUrl);
+      selectedId ||= duplicate.id;
       continue;
     }
     const id=crypto.randomUUID();
@@ -2007,17 +2025,19 @@ function addFilmClipRecords(files){
       order:state.filmClips.length
     });
     if(f.sessionUrl) clipSessionUrls.set(id,f.sessionUrl);
-    if(!state.activeClipId) state.activeClipId=id;
+    selectedId ||= id;
   }
   save();
   renderFilmClips();
-  if(state.activeClipId) loadFilmClip(state.activeClipId);
+  if(selectedId) loadFilmClip(selectedId);
 }
 async function chooseFilmClips(){
   if(window.foxesStorage?.chooseVideoFiles){
-    const res=await window.foxesStorage.chooseVideoFiles();
-    if(!res || res.canceled) return;
-    addFilmClipRecords(res.files||[]);
+    try{
+      const res=await window.foxesStorage.chooseVideoFiles();
+      if(!res || res.canceled) return;
+      addFilmClipRecords(res.files||[]);
+    }catch(e){filmLoadMessage412('Could not open the video chooser. Please try Add Clip again. '+String(e?.message||e));}
     return;
   }
   $("#videoFile")?.click();
@@ -3806,7 +3826,7 @@ function playerEventStats(p){
   const pm=plus-minus;
   const faceoffTotal=faceoffWins+faceoffLosses;
   const faceoffPct=faceoffTotal ? Math.round((faceoffWins/faceoffTotal)*100) : 0;
-  const gradeRaw = 50 + goals*8 + shots*1.5 + chances*2 + entries*1.2 + takeaways*3 + blocks*2 - giveaways*3 + pm*4;
+  const gradeRaw = 50 + goals*8 + shots*1.5 + entries*1.2 + takeaways*3 + blocks*2 - giveaways*3 + pm*4;
   const grade=Math.max(0,Math.min(100,Math.round(gradeRaw)));
   return {shots,goals,chances,entries,takeaways,giveaways,blocks, faceoffWins, faceoffLosses, faceoffPct,plus,minus,pm,grade};
 }
@@ -3867,7 +3887,7 @@ function gameRecordToRows(g){
       }
     }
     const pm=plus-minus;
-    const gradeRaw = 50 + goals*8 + shots*1.5 + chances*2 + entries*1.2 + takeaways*3 + blocks*2 - giveaways*3 + pm*4;
+    const gradeRaw = 50 + goals*8 + shots*1.5 + entries*1.2 + takeaways*3 + blocks*2 - giveaways*3 + pm*4;
     const grade=Math.max(0,Math.min(100,Math.round(gradeRaw)));
     return {shots,goals,chances,entries,takeaways,giveaways,blocks,plus,minus,pm,grade};
   }
@@ -3955,7 +3975,7 @@ function aggregateAllSavedGames(){
   const rows=[...playerMap.values()].map(a=>{
     a.t.avg=a.t.count?a.t.total/a.t.count:0;
     a.e.grade=Math.max(0,Math.min(100,Math.round(
-      50 + a.e.goals*8 + a.e.shots*1.5 + a.e.chances*2 + a.e.entries*1.2 + a.e.takeaways*3 + a.e.blocks*2 - a.e.giveaways*3 + a.e.pm*4
+      50 + a.e.goals*8 + a.e.shots*1.5 + a.e.entries*1.2 + a.e.takeaways*3 + a.e.blocks*2 - a.e.giveaways*3 + a.e.pm*4
     )));
     return a;
   }).sort((a,b)=>b.t.total-a.t.total);
@@ -4148,7 +4168,6 @@ function calculateMVP(rows, officialStatsOverride=null, goaliePlayersOverride=nu
       a*7 +
       pts*2 +
       shots*1.25 +
-      chances*2 +
       entries*1 +
       takeaways*3 +
       blocks*2.5 -
@@ -4162,7 +4181,7 @@ function calculateMVP(rows, officialStatsOverride=null, goaliePlayersOverride=nu
       gtg*4 +
       Math.max(0,foPct-.50)*20 +
       Math.min(fo,20)*0.15 +
-      Math.min(toiMin,22)*0.25 +
+      (includeIceTime294()?Math.min(toiMin,22)*0.25:0) +
       grade*0.18 -
       Math.max(0,pim-4)*0.5;
 
@@ -4191,7 +4210,7 @@ function calculateMVP(rows, officialStatsOverride=null, goaliePlayersOverride=nu
       w*10 +
       so*18 +
       pts*7 +
-      Math.min(min,60)*0.12 -
+      (includeIceTime294()?Math.min(min,60)*0.12:0) -
       ga*4 -
       l*2;
 
@@ -4363,11 +4382,11 @@ function scoreSkaterValue(records){
   if(!records.length) return [];
   const raw=records.map(r=>{
     const gp=Math.max(1,Number(r.gp||0) || ((r.pts||r.shots||r.blocks||r.toi)?1:0));
-    const prod=(r.pts/gp)*4 + (r.g/gp)*2.2 + (r.shots/gp)*0.28 + (r.chances/gp)*0.5;
+    const prod=(r.pts/gp)*4 + (r.g/gp)*2.2 + (r.shots/gp)*0.28;
     const twoWay=(r.blocks/gp)*1.15 + (r.pm/gp)*1.25 + (r.takeaways/gp)*1.4 - (r.giveaways/gp)*1.1;
     const special=(r.ppp/gp)*2 + (r.shp/gp)*2.6 + (r.gwg/gp)*2.5 + (r.gtg/gp)*1.8;
     const discipline=-(r.pim/gp);
-    const usage=r.toi>0 ? r.toi/gp : NaN;
+    const usage=includeIceTime294()&&r.toi>0 ? r.toi/gp : NaN;
     const foPct=r.fo>0?r.fow/r.fo:NaN;
     const faceoff=Number.isFinite(foPct)? (foPct-.5)*8 + Math.min(r.fo/gp,20)*.05 : NaN;
     return {...r,_gp:gp,_raw:{prod,twoWay,special,discipline,usage,faceoff}};
@@ -5525,15 +5544,10 @@ function setupWorkspaceLayout(){
     <div id="homePrimaryMount"></div>`;
 
   workspaces.schedule.innerHTML=
-    workspaceHeader("Season Schedule","Add games once, then open them on game day with one click.",`<button type="button" id="scheduleQuickToday301">＋ Quick Add Game</button>`)+
-    `<div class="quick-add-301">
-      <div><label>Date</label><input id="scheduleQuickDate301" type="date"></div>
-      <div><label>Opponent</label><input id="scheduleQuickOpp301" placeholder="Opponent"></div>
-      <button type="button" class="primary" id="scheduleQuickSave301">Add to Schedule</button>
-    </div>
-    <div class="schedule-301-grid">
-      <div class="schedule-301-form">
-        <h3>Add / Edit Game</h3>
+    workspaceHeader("Season Schedule","Add games once, then open them on game day with one click.",`<button type="button" id="scheduleQuickToday301">＋ Add Game</button>`)+
+    `    <div class="schedule-301-grid">
+      <details class="schedule-301-form" id="scheduleForm412">
+        <summary>Add / Edit Game</summary>
         <div class="schedule-301-fields">
           <div><label>Date</label><input id="scheduleDate301" type="date"></div>
           <div><label>Time</label><input id="scheduleTime301" type="time"></div>
@@ -5546,7 +5560,7 @@ function setupWorkspaceLayout(){
         <input id="scheduleEditId301" type="hidden">
         <button type="button" class="primary schedule-301-save" id="scheduleSave301">＋ Add Game to Schedule</button>
         <button type="button" id="scheduleCancel301" style="width:100%;margin-top:7px;display:none">Cancel Edit</button>
-      </div>
+      </details>
       <div class="schedule-301-list">
         <div class="schedule-301-toolbar">
           <div><h3 style="margin:0">Games</h3><div class="sub" id="scheduleCount301">0 scheduled</div></div>
@@ -5624,9 +5638,9 @@ function setupWorkspaceLayout(){
   workspaces.aifilm.innerHTML=`<div id="aiFilm296Mount"></div>`;
 
   workspaces.coachlab.innerHTML=
-    workspaceHeader("Coach Lab","Film scouting, usage, trends, combinations, reports, insights and automation.",`<span id="labAnalyticsModeBadge"></span>${analyticsToggle294()}<button type="button" id="labGenerateReportTop">Generate Postgame Report</button>`)+
+    workspaceHeader("Coach Lab","Prepare your game plan, review performances, and create reports.",`<span id="labAnalyticsModeBadge"></span>${analyticsToggle294()}<button type="button" id="labGenerateReportTop">Generate Postgame Report</button>`)+
     `<div class="lab-tabs">
-      <button class="active" data-lab="filmScout">2.2 Scout + Film</button><button data-lab="usage2">2.3 Usage</button><button data-lab="trends2">2.4 Trends</button><button data-lab="combos">2.5 Lines/Pairs</button><button data-lab="report">2.6 Reports</button><button data-lab="insights">2.7 Insights</button><button data-lab="autotrack">2.8 Auto Track</button><button data-lab="stability">2.9 Stability</button>
+      <button class="active" data-lab="filmScout">Game preparation</button><button data-lab="usage2">Ice time</button><button data-lab="trends2">Team trends</button><button data-lab="combos">Lines & pairs</button><button data-lab="report">Reports</button><button data-lab="insights">Player ratings</button><button data-lab="autotrack">Tracking settings</button><button data-lab="stability">Backup & updates</button>
     </div>
     <div id="lab-filmScout" class="lab-panel active"><div class="lab-grid"><div class="lab-card"><h3>Film Clip Tags</h3><div id="labClipTags" class="row"></div><div id="labTaggedClips"></div></div><div class="lab-card"><h3>Player-Facing Game Plan</h3><button id="labBuildGamePlan">Build from Current Scout</button><div id="labGamePlan" class="report-preview">Build a simplified game plan from the current opponent scout.</div></div><div class="lab-card lab-wide"><h3>Opponent History</h3><div id="labOpponentHistory"></div></div></div></div>
     <div id="lab-usage2" class="lab-panel"><div class="lab-card lab-wide"><h3>Playing Time & Usage</h3><div id="labUsage2"></div></div></div>
@@ -5753,7 +5767,7 @@ function saveSchedule301(){
     createdAt:all.find(x=>x.id===edit)?.createdAt||Date.now(),updatedAt:Date.now()
   };
   const ix=all.findIndex(x=>x.id===rec.id);if(ix>=0)all[ix]=rec;else all.push(rec);
-  writeSchedule301(all);clearScheduleForm301();renderSchedule301();updateCoachCenter?.();
+  writeSchedule301(all);clearScheduleForm301();$("#scheduleForm412").open=false;renderSchedule301();updateCoachCenter?.();
 }
 function quickSchedule301(){
   const d=$("#scheduleQuickDate301")?.value||"",o=($("#scheduleQuickOpp301")?.value||"").trim();
@@ -5764,6 +5778,7 @@ function quickSchedule301(){
   writeSchedule301(all);$("#scheduleQuickOpp301").value="";renderSchedule301();
 }
 function editSchedule301(id){
+  $("#scheduleForm412").open=true;
   const g=readSchedule301().find(x=>x.id===id);if(!g)return;
   $("#scheduleEditId301").value=g.id;$("#scheduleDate301").value=g.date||"";$("#scheduleTime301").value=g.time||"";
   $("#scheduleOpponent301").value=g.opponent||"";$("#scheduleHA301").value=g.homeAway||"Home";$("#scheduleType301").value=g.type||"League";
@@ -5824,7 +5839,7 @@ function initSchedule301(){
   if(qd&&!qd.value)qd.value=localDate301();if(fd&&!fd.value)fd.value=localDate301();
   $("#scheduleSave301")?.addEventListener("click",saveSchedule301);
   $("#scheduleQuickSave301")?.addEventListener("click",quickSchedule301);
-  $("#scheduleQuickToday301")?.addEventListener("click",()=>{$("#scheduleQuickDate301").value=localDate301();$("#scheduleQuickOpp301")?.focus()});
+  $("#scheduleQuickToday301")?.addEventListener("click",()=>{clearScheduleForm301();$("#scheduleForm412").open=true;$("#scheduleDate301").value=localDate301();$("#scheduleOpponent301")?.focus()});
   $("#scheduleCancel301")?.addEventListener("click",clearScheduleForm301);
   document.querySelectorAll("[data-schfilter301]").forEach(b=>b.addEventListener("click",()=>{
     scheduleFilter301=b.dataset.schfilter301;document.querySelectorAll("[data-schfilter301]").forEach(x=>x.classList.toggle("active",x===b));renderSchedule301();
@@ -6074,8 +6089,8 @@ function initQuickStats295(){document.querySelectorAll('[data-workspace="quickst
 // ===== 2.9.4 Ice-Time Analytics Toggle =====
 const ANALYTICS_PREF_KEY_294="foxes-294-analytics-prefs";
 function analyticsPrefs294(){
-  try{return JSON.parse(localStorage.getItem(ANALYTICS_PREF_KEY_294)||'{"includeIceTime":true}')}
-  catch(e){return {includeIceTime:true}}
+  try{return JSON.parse(localStorage.getItem(ANALYTICS_PREF_KEY_294)||'{"includeIceTime":false}')}
+  catch(e){return {includeIceTime:false}}
 }
 function setAnalyticsPrefs294(v){
   localStorage.setItem(ANALYTICS_PREF_KEY_294,JSON.stringify(v));
@@ -6087,7 +6102,7 @@ function hasTrackedIceTime293(){
     return end!==null && end>start;
   }));
 }
-function includeIceTime294(){ return analyticsPrefs294().includeIceTime!==false; }
+function includeIceTime294(){ return analyticsPrefs294()?.includeIceTime===true; }
 function analyticsMode293(){
   return includeIceTime294() && hasTrackedIceTime293() ? "stats+toi" : "stats-only";
 }
@@ -6096,21 +6111,24 @@ function statsOnlyBadge293(){
   if(!hasTrackedIceTime293()) return `<span class="pill warn">Ice Time ON • No TOI Recorded</span>`;
   return `<span class="pill good">Ice Time ON • Stats + TOI</span>`;
 }
-function analyticsToggle294(){
+function analyticsToggle294(id="includeIceTimeAnalytics294"){
   const on=includeIceTime294();
   return `<label class="toggle-row" style="display:inline-flex;align-items:center;gap:8px;margin-right:10px">
-    <input type="checkbox" id="includeIceTimeAnalytics294" ${on?"checked":""}>
-    <span>Include Ice Time in Analytics</span>
+    <input type="checkbox" id="${id}" data-ice-time-analytics ${on?"checked":""}>
+    <span>Use ice time in ratings</span>
   </label>`;
 }
 function bindAnalyticsToggle294(){
-  const el=$("#includeIceTimeAnalytics294");
-  if(!el || el.dataset.bound)return;
-  el.dataset.bound="1";
-  el.addEventListener("change",()=>{
-    setAnalyticsPrefs294({includeIceTime:!!el.checked});
-    renderLab29?.(labTab29||"filmScout");
-    render?.();
+  document.querySelectorAll('[data-ice-time-analytics]').forEach(el=>{
+    if(el.dataset.bound)return;el.dataset.bound='1';
+    el.addEventListener('change',()=>{
+      setAnalyticsPrefs294({...analyticsPrefs294(),includeIceTime:el.checked});
+      document.querySelectorAll('[data-ice-time-analytics]').forEach(input=>input.checked=el.checked);
+      renderLab29?.(labTab29||'filmScout');
+      render?.();
+      if(typeof renderSeason312==='function')renderSeason312();
+      if(typeof renderGameHub312==='function')renderGameHub312();
+    });
   });
 }
 
@@ -6178,7 +6196,7 @@ bindSaveLocationControls(); render();
 setInterval(()=>{ if(state.players.some(p=>p.active)) render(); },1000);
 
 // -------------------- 2.0.2 UPDATE UI --------------------
-let foxesUpdateState={status:'idle',percent:0,currentVersion:'4.1.0'};
+let foxesUpdateState={status:'idle',percent:0,currentVersion:'4.1.1'};
 function showUpdates(){
   $("#updateModal")?.classList.add("open");
   $("#updateModal")?.setAttribute("aria-hidden","false");
@@ -6195,8 +6213,8 @@ function renderUpdateState(s={}){
   const bar=$("#updateProgressBar"), dl=$("#downloadUpdateBtn"), install=$("#installUpdateBtn");
   const release=$("#releasePageBtn"), badge=$("#updateNavBadge"), note=$("#updateNote");
   if(text) text.textContent=foxesUpdateState.message||'Ready to check for updates.';
-  if(ver) ver.textContent=`Current version ${foxesUpdateState.currentVersion||'4.1.0'}`;
-  if(pill) pill.textContent=foxesUpdateState.availableVersion ? `v${foxesUpdateState.availableVersion}` : `v${foxesUpdateState.currentVersion||'4.1.0'}`;
+  if(ver) ver.textContent=`Current version ${foxesUpdateState.currentVersion||'4.1.1'}`;
+  if(pill) pill.textContent=foxesUpdateState.availableVersion ? `v${foxesUpdateState.availableVersion}` : `v${foxesUpdateState.currentVersion||'4.1.1'}`;
   if(bar) bar.style.width=`${Math.max(0,Math.min(100,Number(foxesUpdateState.percent||0)))}%`;
   if(dl) dl.style.display=status==='available'?'inline-flex':'none';
   if(install) install.style.display=status==='downloaded'?'inline-flex':'none';
@@ -6244,7 +6262,7 @@ setTimeout(refreshUpdateState,1200);
     <div class="update-status-card">
       <div class="update-status-row">
         <div class="update-status-text" id="updateStatusText">Ready to check for updates.</div>
-        <div class="update-version-pill" id="updateVersionPill">v4.1.0</div>
+        <div class="update-version-pill" id="updateVersionPill">v4.1.1</div>
       </div>
       <div class="update-progress"><i id="updateProgressBar"></i></div>
     </div>
@@ -6363,7 +6381,7 @@ function ensureUpdateCenter302(){
  const host=document.querySelector('#updatesMount313');
  if(!host||host.querySelector("#updateCenter302"))return;
  const box=document.createElement("div");box.id="updateCenter302";box.className="update302";
- box.innerHTML=`<div><div class="update302-title">App Updates</div><div class="update302-sub" id="updateStatus302">4.1.0 • GitHub auto updates • GitHub Releases</div></div>
+ box.innerHTML=`<div><div class="update302-title">App Updates</div><div class="update302-sub" id="updateStatus302">4.1.1 • GitHub auto updates • GitHub Releases</div></div>
  <div class="update302-actions"><button type="button" id="updateCheck302">Check for Updates</button><button type="button" id="updateDownload302" style="display:none">Download Update</button><button type="button" id="updateInstall302" class="primary" style="display:none">Restart & Install</button><button type="button" id="updateReleases302">Open Releases</button><button type="button" id="updateLog302">Open Updater Log</button></div>`;
  host.insertBefore(box,host.firstChild);
  $("#updateCheck302")?.addEventListener("click",async()=>{
@@ -6372,7 +6390,7 @@ function ensureUpdateCenter302(){
      const timeout=new Promise((_,reject)=>setTimeout(()=>reject(new Error("No response from updater after 30 seconds.")),30000));
      const r=await Promise.race([window.foxesStorage?.updateCheck?.(),timeout]);
      if(r?.message) $("#updateStatus302").textContent=r.message;
-     else if(r?.status==="current") $("#updateStatus302").textContent=`You're up to date • ${r.currentVersion||"4.1.0"}`;
+     else if(r?.status==="current") $("#updateStatus302").textContent=`You're up to date • ${r.currentVersion||"4.1.1"}`;
    }catch(e){ $("#updateStatus302").textContent=`Update check failed: ${String(e?.message||e)}`; }
  });
  $("#updateDownload302")?.addEventListener("click",()=>window.foxesStorage?.updateDownload?.());
@@ -6426,7 +6444,7 @@ setTimeout(()=>{
 </script>
 <script>
 // ===== 3.0.5 UPDATE CENTER FIX =====
-function ensureUpdateTest305(){ /* Historical promotional banner retired in 4.1.0. */ }
+function ensureUpdateTest305(){ /* Historical promotional banner retired in 4.1.1. */ }
 setTimeout(ensureUpdateTest305, 1200);
 setInterval(ensureUpdateTest305, 3000);
 </script>

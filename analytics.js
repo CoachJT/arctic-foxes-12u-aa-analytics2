@@ -87,17 +87,18 @@
   function rate(r, custom = weights) {
     if (!r.played) return {value:50,scores:{}};
     let scores, w;
+    const useTime=custom?.includeIceTime===true;
     if (r.type === 'goalie') {
-      const rate36=r.min>0?r.sa*36/r.min:null;
+      const rate36=useTime&&r.min>0?r.sa*36/r.min:null;
       scores={production:r.sa?clamp(50+(r.svPct-.85)*250):null,
-        twoWay:r.min>0?clamp(50+(3-r.gaa)*10):null,
+        twoWay:useTime&&r.min>0?clamp(50+(3-r.gaa)*10):null,
         usage:rate36!=null&&r.sa?clamp(50+(rate36-20)*(r.svPct-.85)*8):null,
         special:r.w||r.l||r.t?clamp(50+20*r.w-20*r.l):null,
-        shutout:r.min>0?clamp(50+(r.so?25:0)):null};
+        shutout:(!useTime||r.min>0)?clamp(50+(r.so?25:0)):null};
       w={production:50,twoWay:25,usage:10,special:10,shutout:5};
       // Playing time and shot count determine confidence, never a minutes bonus.
     } else {
-      const m=r.toi/60, per36=m>0?36/Math.max(m,3):null;
+      const m=r.toi/60, per36=useTime&&m>0?36/Math.max(m,3):null;
       scores={production:clamp(50+r.g*12+r.a*8),shots:clamp(50+(r.shots-2)*8),
         efficiency:per36==null?null:clamp(50+((r.pts+r.shots*.15)*per36-2)*12),
         results:clamp(50+r.pm*10),faceoffs:r.fo>0?clamp(50+(r.fow/r.fo-.5)*100):null,
@@ -107,7 +108,7 @@
     let sum=0,den=0;
     for(const k of Object.keys(w)) if(scores[k]!=null) {const n=Math.max(0,number(w[k]));sum+=scores[k]*n;den+=n;}
     let value=den?sum/den:50;
-    if(r.type==='goalie') value=50+(value-50)*Math.min(1,Math.max(r.sa/15,r.min/36));
+    if(r.type==='goalie') value=50+(value-50)*Math.min(1,Math.max(r.sa/15,useTime?r.min/36:0));
     return {value:clamp(value),scores};
   }
   function season(games, roster = [], custom = weights) {
@@ -127,15 +128,15 @@
     return [...map.values()].map(r=>({...r,pts:r.pts,shotPct:r.shots?r.g/r.shots:0,foPct:r.fo?r.fow/r.fo:0,svPct:r.sa?r.saves/r.sa:0,gaa:r.min?r.ga*36/r.min:0,delta:r.history.length>1?r.value-r.history[r.history.length-2]:0}));
   }
   // Automatic game honors use the existing MVP impact weights, from that game only.
-  function honors(games, roster=[]) {
+  function honors(games, roster=[], options={}) {
     const totals=new Map(roster.map(p=>[String(p.number),{p,mvp:0,first:0,second:0,third:0,so:0}])), byGame=[];
     const seen=new Set();
     for(const game of games){
       if(game.id&&seen.has(game.id))continue;if(game.id)seen.add(game.id);
       const ranked=records(game).filter(r=>r.played).map(r=>{
         const n=k=>number(r[k]);
-        const score=r.type==='goalie'?n('saves')*.9+Math.max(0,n('svPct')-.85)*140+n('w')*10+n('so')*18+n('pts')*7+Math.min(n('min'),60)*.12-n('ga')*4-n('l')*2:
-          n('g')*12+n('a')*7+n('pts')*2+n('shots')*1.25+n('chances')*2+n('entries')+n('takeaways')*3+n('blocks')*2.5-n('giveaways')*3+n('pm')*3.5+n('ppg')*2+n('ppp')*1.5+n('shg')*4+n('shp')*2+n('gwg')*5+n('gtg')*4+Math.max(0,(r.fo?r.fow/r.fo:0)-.5)*20+Math.min(n('fo'),20)*.15+Math.min(n('toi')/60,22)*.25+50*.18-Math.max(0,n('pim')-4)*.5;
+        const score=r.type==='goalie'?n('saves')*.9+Math.max(0,n('svPct')-.85)*140+n('w')*10+n('so')*18+n('pts')*7+(options.includeIceTime===true?Math.min(n('min'),60)*.12:0)-n('ga')*4-n('l')*2:
+          n('g')*12+n('a')*7+n('pts')*2+n('shots')*1.25+n('entries')+n('takeaways')*3+n('blocks')*2.5-n('giveaways')*3+n('pm')*3.5+n('ppg')*2+n('ppp')*1.5+n('shg')*4+n('shp')*2+n('gwg')*5+n('gtg')*4+Math.max(0,(r.fo?r.fow/r.fo:0)-.5)*20+Math.min(n('fo'),20)*.15+(options.includeIceTime===true?Math.min(n('toi')/60,22)*.25:0)+50*.18-Math.max(0,n('pim')-4)*.5;
         return {r,score};
       }).sort((a,b)=>b.score-a.score||String(a.r.p.number).localeCompare(String(b.r.p.number)));
       let place=0;

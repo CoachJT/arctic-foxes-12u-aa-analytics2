@@ -23,7 +23,7 @@ ratings312=function(rows=season312()){
 };
 function renderCommand313(){
   const root=$('#commandCenter313');if(!root)return;
-  const d=UI313.dashboard(state.savedGames||[],state.players,readSchedule301(),state.ratingWeights312),n=d.next;
+  const d=UI313.dashboard(state.savedGames||[],state.players,readSchedule301(),ratingConfig412()),n=d.next;
   const leaderCard=(title,l,format,context,empty)=>`<article class="leader313"><span class="eyebrow313">${title}</span>${l?`<div class="leader-value313">${format(l.value)}</div>${player312(l.row)}<small>${l.ties>1?`Joint leader · ${l.ties} players. `:''}${context(l.row)}</small>`:`<div class="leader-value313">—</div><small>${empty}</small>`}</article>`;
   const coverage=d.scored?`${d.scored} scored game${d.scored===1?'':'s'}`:'Enter final scores';
   const metric=(label,value,note)=>`<div class="metric313"><span>${label}</span><strong>${value??'—'}</strong><small>${note}</small></div>`;

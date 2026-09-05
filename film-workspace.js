@@ -15,14 +15,36 @@ const analysis31=document.createElement('details');analysis31.id='analysis31';an
 function fit31(fill){document.body.classList.toggle('film-fill31',fill);$('#fit31').setAttribute('aria-pressed',String(!fill));$('#fill31').setAttribute('aria-pressed',String(fill));}
 $('#fit31').onclick=()=>fit31(false);$('#fill31').onclick=()=>fit31(true);
 $('#theater31').onclick=()=>{$('#theater31').setAttribute('aria-pressed',String(document.body.classList.toggle('theater31')));};
-$('#fullscreen31').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await wrap31.requestFullscreen();}catch(e){$('#filmStatus31').textContent='Fullscreen unavailable: '+e.message;}};
+// All fullscreen entry points share one viewport layout and exit behavior.
+function syncFullscreen412(on){
+ wrap31.classList.toggle('tag-fullscreen',on);
+ document.body.classList.toggle('tag-fullscreen-open',on);
+ $('#fullscreen31').textContent=on?'Exit fullscreen':'Fullscreen';
+ $('#fullscreen31').setAttribute('aria-pressed',String(on));
+ requestAnimationFrame(()=>{if(typeof paint314==='function')paint314();});
+}
+$('#tagFullscreenBtn').removeEventListener('click',enterTagFullscreen);
+$('#exitTagFullscreen').removeEventListener('click',exitTagFullscreen);
+enterTagFullscreen=async function(){
+ syncFullscreen412(true);
+ try{if(document.fullscreenElement!==wrap31)await wrap31.requestFullscreen();}
+ catch(e){$('#filmStatus31').textContent='Expanded view active. Press Escape to exit.';}
+};
+exitTagFullscreen=async function(){
+ try{if(document.fullscreenElement)await document.exitFullscreen();}
+ finally{syncFullscreen412(false);}
+};
+document.addEventListener('fullscreenchange',()=>syncFullscreen412(document.fullscreenElement===wrap31));
+$('#fullscreen31').onclick=()=>document.fullscreenElement||wrap31.classList.contains('tag-fullscreen')?exitTagFullscreen():enterTagFullscreen();
+$('#tagFullscreenBtn').onclick=()=>enterTagFullscreen();
+$('#exitTagFullscreen').onclick=()=>exitTagFullscreen();
 $('#play31').onclick=()=>{if(v314.paused)v314.play().catch(e=>$('#filmStatus31').textContent=e.message);else v314.pause();};
 const seek31=delta=>{if(Number.isFinite(v314.duration))v314.currentTime=Math.max(0,Math.min(v314.duration,v314.currentTime+delta));};$('#back31').onclick=()=>seek31(-5);$('#forward31').onclick=()=>seek31(5);
 tools31.querySelectorAll('[data-layer31]').forEach(e=>e.onchange=()=>{layers31[e.dataset.layer31]=e.checked;debug314=true;});
 tools31.querySelector('details:last-of-type').addEventListener('toggle',()=>{$('#bookmarkPlayer31').innerHTML='<option value="">Team</option>'+state.players.map(p=>`<option value="${esc(p.id)}">#${esc(p.number)} ${esc(p.name)}</option>`).join('');});
 $('#bookmark31').onclick=()=>{try{const m=media314();snapshot();state.command31=state.command31||{};state.command31.bookmarks=state.command31.bookmarks||[];const p=state.players.find(p=>p.id===$('#bookmarkPlayer31').value);state.command31.bookmarks.push({id:crypto.randomUUID(),gameId:state.currentGameId,clipId:m.clipId,time:m.videoTime,tag:$('#bookmarkTag31').value,playerId:p?.id||null,playerName:p?.name||null,team:'Arctic Foxes',createdAt:Date.now()});save();$('#filmStatus31').textContent='Bookmark saved';}catch(e){$('#filmStatus31').textContent=e.message;}};
-document.addEventListener('keydown',e=>{if(activeWorkspace!=='film'||e.target.closest('input,textarea,select,[contenteditable="true"]')||e.ctrlKey||e.metaKey||e.altKey)return;const keys={' ':()=>$('#play31').click(),ArrowLeft:()=>seek31(-5),ArrowRight:()=>seek31(5),t:()=>$('#theater31').click(),f:()=>$('#fullscreen31').click(),b:()=>$('#bookmark31').click(),Escape:()=>{document.body.classList.remove('theater31');$('#theater31').setAttribute('aria-pressed','false');}};if(keys[e.key]){e.preventDefault();e.stopImmediatePropagation();keys[e.key]();}},true);
-const oldOpen31=openWorkspace;openWorkspace=function(name){if(name!=='film')document.body.classList.remove('theater31');return oldOpen31(name);};
+document.addEventListener('keydown',e=>{if(activeWorkspace!=='film'||e.target.closest('input,textarea,select,[contenteditable="true"]')||e.ctrlKey||e.metaKey||e.altKey)return;const keys={' ':()=>$('#play31').click(),ArrowLeft:()=>seek31(-5),ArrowRight:()=>seek31(5),t:()=>$('#theater31').click(),f:()=>$('#fullscreen31').click(),b:()=>$('#bookmark31').click(),Escape:()=>{exitTagFullscreen();document.body.classList.remove('theater31');$('#theater31').setAttribute('aria-pressed','false');}};if(keys[e.key]){e.preventDefault();e.stopImmediatePropagation();keys[e.key]();}},true);
+const oldOpen31=openWorkspace;openWorkspace=function(name){if(name!=='film'){document.body.classList.remove('theater31');if(document.fullscreenElement||wrap31.classList.contains('tag-fullscreen'))exitTagFullscreen();}return oldOpen31(name);};
 // Display transforms never enter detector sampling or saved normalized coordinates.
 paint314=function(){
  const legacy=$('#tagOverlayCanvas');legacy.style.pointerEvents=zoneDrawing?'auto':'none';
