@@ -25,7 +25,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-        continue-on-error: true
 
       - name: Install dependencies
         shell: pwsh
@@ -39,22 +38,25 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           Write-Host "App version: $version"
 
-          - name: Check whether release already exists
+      - name: Check whether release already exists
         id: release_check
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
         run: |
-        $PSNativeCommandUseErrorActionPreference = $false
           $tag = "v${{ steps.version.outputs.version }}"
-          gh release view $tag --repo "${{ github.repository }}"
-          if ($LASTEXITCODE -eq 0) {
+          gh release view $tag --repo "${{ github.repository }}" *> $null
+          $releaseExists = ($LASTEXITCODE -eq 0)
+
+          if ($releaseExists) {
             "exists=true" >> $env:GITHUB_OUTPUT
+            Write-Host "Release $tag already exists. Nothing to publish."
           } else {
             "exists=false" >> $env:GITHUB_OUTPUT
+            Write-Host "Release $tag does not exist yet. It will be published."
           }
-           exit 0
+
+          exit 0
 
       - name: Build and publish update
         if: steps.release_check.outputs.exists != 'true'
