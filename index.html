@@ -494,7 +494,7 @@ body.tag-fullscreen-open{overflow:hidden!important}
 .clip-current{font-size:12px;color:var(--muted);margin-left:auto}
 
 
-/* v1.20 Player Value Page */
+/* v1.20 Foxes Player Rating Page */
 .value-page{display:none;position:fixed;inset:0;z-index:120;background:var(--bg);overflow:auto}
 .value-page.open{display:block}
 .value-page-inner{max-width:1180px;margin:0 auto;padding:18px 16px 80px}
@@ -668,7 +668,7 @@ body{min-height:100vh}
   box-shadow:18px 0 50px rgba(0,0,0,.18)!important;backdrop-filter:none!important
 }
 .workspace-nav:before{
-  content:"FOXES  /  2.0";position:absolute;left:18px;top:24px;
+  content:"ARCTIC FOXES / 3.0";position:absolute;left:18px;top:24px;
   font-size:12px;font-weight:1000;letter-spacing:.14em;color:#fff
 }
 .workspace-nav:after{
@@ -722,7 +722,7 @@ input,select,textarea{background:#090e14!important;border-color:#263342!importan
   margin-bottom:14px
 }
 .coach-center-hero:after{
-  content:"2.0";position:absolute;right:20px;bottom:-24px;
+  content:"3.0.12";position:absolute;right:20px;bottom:-24px;
   font-size:110px;font-weight:1000;letter-spacing:-.08em;color:rgba(255,255,255,.025)
 }
 .coach-eyebrow{font-size:9px;font-weight:900;letter-spacing:.18em;color:#ff767e;text-transform:uppercase}
@@ -1211,13 +1211,26 @@ tr:hover td{background:rgba(255,255,255,.025)}
 /* 3.0.5 updater navigation fix */
 .update305-highlight{outline:2px solid #d61f2c;box-shadow:0 0 0 5px rgba(214,31,44,.14),0 16px 45px rgba(0,0,0,.35)!important}
 </style>
-</head>
+<style>
+#precision312{background:rgba(12,18,26,.96);padding:12px;position:relative;z-index:50;border:1px solid #536579;border-radius:8px}
+#precision312 .row{gap:6px;margin:5px 0;flex-wrap:wrap}#precision312 button{padding:7px;font-size:12px}
+#tagOverlayWrap.tag-fullscreen{display:flex!important;flex-direction:column!important;background:#05080d!important}
+#tagOverlayWrap.tag-fullscreen #gameVideo{height:calc(100vh - 245px)!important;flex:1;min-height:0;width:100%;object-fit:contain}
+#tagOverlayWrap.tag-fullscreen #precision312{flex:none;width:100%;box-sizing:border-box;max-height:45vh;overflow:auto}
+#tagOverlayWrap.tag-fullscreen #tagFullscreenHud{position:absolute;bottom:230px;max-height:100px;overflow:auto}
+#tagOverlayWrap:fullscreen{width:100vw;height:100vh}
+#precision312 #livePickBar{position:static!important;max-height:24vh;overflow:auto}
+#gameVideo::-webkit-media-controls-fullscreen-button{display:none}
+@media print{body.print-game312 #gameDetail312 td button{display:inline!important;border:0;background:none!important;color:inherit}}
+.workspace-nav{overflow-y:auto!important}
+@media print{body.print-game312 *{visibility:hidden}body.print-game312 #gameDetail312,body.print-game312 #gameDetail312 *{visibility:visible}body.print-game312 #gameDetail312{position:absolute;left:0;top:0;width:100%}body.print-game312 #gameDetail312 button{display:none}}
+</style></head>
 <body>
 <div id="v2Splash" aria-hidden="true">
   <div class="v2-splash-inner">
     <div class="v2-splash-logo">🦊</div>
     <div class="v2-splash-title">Arctic Foxes 12U AA Analytics</div>
-    <div class="v2-splash-sub">12U AA • 2026–2027 Season • Version 3.0</div>
+    <div class="v2-splash-sub">12U AA • 2026–2027 Season • Version 3.0.12</div>
     <div class="v2-splash-line"><i></i></div>
   </div>
 </div>
@@ -1418,7 +1431,7 @@ tr:hover td{background:rgba(255,255,255,.025)}
   </div>
 
 
-  <div class="quick-nav"><button type="button" id="openPlayerValue" class="value-open-btn">📊 Player Value</button><button type="button" data-jump="gameManagerCard">➕ Games</button>
+  <div class="quick-nav"><button type="button" id="openPlayerValue" class="value-open-btn">📊 Foxes Player Rating</button><button type="button" data-jump="gameManagerCard">➕ Games</button>
     <button type="button" data-jump="filmCard">🎥 Film</button>
     <button type="button" data-jump="lineChangeCard">🔄 Line Change</button>
     <button type="button" data-jump="analyticsDashboard">📈 Dashboard</button>
@@ -1773,7 +1786,7 @@ tr:hover td{background:rgba(255,255,255,.025)}
   <div class="value-page-inner">
     <div class="value-page-head">
       <div>
-        <div class="value-page-title">Player Value to the Team</div>
+        <div class="value-page-title">Foxes Player Rating</div>
         <div class="sub" style="margin:3px 0 0">Stat-based impact view. Higher scores mean stronger statistical contribution in the selected scope.</div>
       </div>
       <button id="closePlayerValue" type="button">← Back to Analytics</button>
@@ -1830,8 +1843,8 @@ tr:hover td{background:rgba(255,255,255,.025)}
       <table class="value-table">
         <thead>
           <tr>
-            <th>Rank</th><th>Player</th><th>Value</th><th>Trend</th><th>Production</th><th>Two-Way</th>
-            <th>Special Teams</th><th>Discipline</th><th>Usage</th><th>Key Stats</th><th>Biggest Driver</th>
+            <th>Rank</th><th>Player</th><th>Rating</th><th>Trend</th><th>Production / SV%</th><th>Results / GAA</th>
+            <th>Defense / Result</th><th>Discipline</th><th>Efficiency / Workload</th><th>Key Stats</th><th>Biggest Driver</th>
           </tr>
         </thead>
         <tbody id="playerValueBody"></tbody>
@@ -1839,7 +1852,7 @@ tr:hover td{background:rgba(255,255,255,.025)}
     </div>
 
     <div class="value-info" style="margin-top:12px">
-      Trend arrows compare each player’s two most recent saved-game Value scores: ↑ improved by 3+ points, ↓ dropped by 3+ points, and → stayed within 3 points. The Value Index is a coaching aid, not a scouting verdict. Skaters are compared with teammates using production, two-way play, special teams/clutch stats, discipline and available ice-time usage. Goalies use save percentage, goals-against rate, results and workload. Missing film/TOI data is not treated as a penalty; that category is reweighted out.
+      Foxes Player Rating starts at 50.0 and recalculates from individual Game Ratings. Season history and movement update after every game edit. Skaters use impact and efficiency; more minutes alone never add points. Goalies use a separate formula. Adjust Rating Weights on Season Stats. Missing TOI and unused faceoffs are excluded and remaining weights are normalized.
     </div>
   </div>
 </div>
@@ -1862,7 +1875,7 @@ tr:hover td{background:rgba(255,255,255,.025)}
     </div>
 
     <div class="profile-grid">
-      <div class="profile-stat"><div class="label">Player Value</div><div class="big" id="profileValue">—</div><div class="sub" id="profileValueTier" style="margin:1px 0 0"></div></div>
+      <div class="profile-stat"><div class="label">Foxes Player Rating</div><div class="big" id="profileValue">—</div><div class="sub" id="profileValueTier" style="margin:1px 0 0"></div></div>
       <div class="profile-stat"><div class="label">Trend</div><div class="big" id="profileTrend">→</div><div class="sub" id="profileTrendText" style="margin:1px 0 0"></div></div>
       <div class="profile-stat"><div class="label" id="profileKpi3Label">Points</div><div class="big" id="profileKpi3">—</div><div class="sub" id="profileKpi3Sub" style="margin:1px 0 0"></div></div>
       <div class="profile-stat"><div class="label" id="profileKpi4Label">TOI</div><div class="big" id="profileKpi4">—</div><div class="sub" id="profileKpi4Sub" style="margin:1px 0 0"></div></div>
@@ -1898,6 +1911,7 @@ tr:hover td{background:rgba(255,255,255,.025)}
 </div>
 
 
+<script src="analytics.js"></script>
 <script>
 const $ = s => document.querySelector(s);
 const LSKEY = "hockeyIceTimeEngineV1";
@@ -2337,10 +2351,11 @@ function syncCurrentGameSnapshot(){
   snap.id=state.currentGameId;
   snap.createdAt=state.savedGames[idx].createdAt||Date.now();
   snap.updatedAt=Date.now();
-  state.savedGames[idx]=snap;
+  state.savedGames[idx]={...state.savedGames[idx],...snap};
 }
 function save(){
   // Once a game has been created/opened, normal edits automatically update it.
+  state.officialStats=FoxesAnalytics.normalize(state.officialStats,state.players);
   syncCurrentGameSnapshot();
   const payload=JSON.stringify({...state, running:false});
   try{ localStorage.setItem(LSKEY,payload); }catch(e){}
@@ -3333,6 +3348,7 @@ function emptyOfficialStats(){
   };
 }
 function ensureOfficialStats(){
+  if(typeof FoxesAnalytics!=="undefined") state.officialStats=FoxesAnalytics.normalize(state.officialStats,state.players);
   if(!state.officialStats || typeof state.officialStats!=="object") state.officialStats=emptyOfficialStats();
   if(!state.officialStats.skaters) state.officialStats.skaters={};
   if(!state.officialStats.goalies) state.officialStats.goalies={};
@@ -3374,6 +3390,7 @@ function csvRows(text){
 function normalizeHeader(s){return String(s||"").trim().toUpperCase().replace(/\s+/g," ");}
 
 function importOfficialStatsText(text,sourceName="pasted stats"){
+  if(!state.currentGameId) throw new Error('Create or open a saved game in My Games before importing stats.');
   const rows=csvRows(text);
   if(!rows.length) throw new Error("No rows found.");
   const out=emptyOfficialStats();
@@ -3516,15 +3533,18 @@ function recalcOfficialGoalie(s){
 function bindOfficialStatEditors(){
   document.querySelectorAll(".stat-edit").forEach(inp=>{
     inp.addEventListener("change",()=>{
+      if(!state.currentGameId){alert("Create or open a game in My Games first.");renderOfficialStats();return;}
       const scope=inp.dataset.statScope,key=inp.dataset.statKey,field=inp.dataset.statField;
       let v=Number(inp.value); if(!Number.isFinite(v))v=0;
       if(scope==="skater"){
         if(!state.officialStats.skaters[key]) state.officialStats.skaters[key]={};
         state.officialStats.skaters[key][field]=v;
+        if(field!=="gp" && v!==0 && !state.officialStats.skaters[key].gp) state.officialStats.skaters[key].gp=1;
         recalcOfficialSkater(state.officialStats.skaters[key]);
       }else if(scope==="goalie"){
         if(!state.officialStats.goalies[key]) state.officialStats.goalies[key]={};
         state.officialStats.goalies[key][field]=v;
+        if(field!=="gp" && v!==0 && !state.officialStats.goalies[key].gp) state.officialStats.goalies[key].gp=1;
         recalcOfficialGoalie(state.officialStats.goalies[key]);
       }
       state.officialStats.imported=true;
@@ -3698,6 +3718,7 @@ function loadSavedGame(id){
   const g=(state.savedGames||[]).find(x=>x.id===id);
   if(!g) return;
 
+  normalizedGame312(g);
   state.currentGameId=g.id;
   state.dashboardGameId=g.id;
   state.gameDate=g.date||"";
@@ -4029,6 +4050,11 @@ function gameRecordToRows(g){
     e:statsForPlayer(p)
   }));
 
+  const officialRows=FoxesAnalytics.records(g);
+  rows.forEach(row=>{const r=officialRows.find(r=>r.p.id===row.p.id);if(!r)return;
+    Object.assign(row.e,{goals:r.g,assists:r.a,shots:r.shots,blocks:r.blocks,pm:r.pm,faceoffWins:r.fow,faceoffLosses:r.fo-r.fow,grade:FoxesAnalytics.rate(r,state.ratingWeights312).value});
+    row.t.total=r.toi;row.t.avg=row.t.count?r.toi/row.t.count:0;
+  });
   return {players,events,goalieEvents,rows};
 }
 
@@ -4429,7 +4455,7 @@ function aggregateValueSkatersFromGames(games){
       });
       const a=map.get(key), s=off[String(p.number)]||{}, e=row.e||{};
       a.gp+=Number(s.gp||0);
-      a.g+=Number(s.g||e.goals||0);
+      a.g+=Number(s.g ?? e.goals ?? 0);
       a.a+=Number(s.a||0);
       a.pts+=Number(s.pts ?? (Number(s.g||0)+Number(s.a||0)));
       a.shots+=Number(s.shots ?? e.shots ?? 0);
@@ -4452,7 +4478,7 @@ function currentValueSkaters(){
   return (d.rows||[]).filter(r=>r.p?.pos!=="G").map(r=>{
     const p=r.p,s=off[String(p.number)]||{},e=r.e||{};
     return {
-      p:{...p},gp:Number(s.gp||0),g:Number(s.g||e.goals||0),a:Number(s.a||0),
+      p:{...p},gp:Number(s.gp||0),g:Number(s.g ?? e.goals ?? 0),a:Number(s.a||0),
       pts:Number(s.pts ?? (Number(s.g||0)+Number(s.a||0))),shots:Number(s.shots ?? e.shots ?? 0),
       pim:Number(s.pim||0),pm:Number(s.plusMinus ?? e.pm ?? 0),blocks:Number(s.blocks ?? e.blocks ?? 0),
       fo:Number(s.fo ?? ((e.faceoffWins||0)+(e.faceoffLosses||0))),fow:Number(s.fow ?? e.faceoffWins ?? 0),
@@ -4873,8 +4899,8 @@ function renderDashboard(){
   }
   const mvp=state.dashboardScope==="all" ? calculateSeasonMVP(d.rows) : calculateMVP(d.rows,mvpStats,mvpGoalies);
   if(mvp){
-    $("#mvpName").textContent=`#${mvp.winner.p.number} ${mvp.winner.p.name}`;
-    $("#mvpReason").textContent=`MVP Score ${mvp.winner.mvpScore.toFixed(1)} • ${mvp.reason}`;
+    $("#mvpName").textContent=`#${mvp.p.number} ${mvp.p.name}`;
+    $("#mvpReason").textContent=`MVP Score ${mvp.score.toFixed(1)} • ${mvp.reason}`;
   }else{
     $("#mvpName").textContent="Not enough data yet";
     $("#mvpReason").textContent="Track shifts and game events to generate an MVP.";
@@ -5616,10 +5642,7 @@ function updateCoachCenter(){
         const row=document.createElement("div");
         row.className="coach-game";
         row.innerHTML=`<div><strong>${escapeHtml(g.opponent||"Opponent")}</strong><br><span>${escapeHtml(g.date||"No date")}</span></div><span>${shifts} shifts</span>`;
-        row.onclick=()=>{
-          const card=document.querySelector(`[data-game-id="${CSS.escape(g.id||"")}"]`);
-          if(card) card.click();
-        };
+        row.onclick=()=>loadSavedGame(g.id);
         recent.appendChild(row);
       });
     }
@@ -5672,7 +5695,7 @@ function setupWorkspaceLayout(){
           <button class="coach-action" type="button" data-open-workspace="stats"><strong>📋 Stats</strong><span>Official stats and game events.</span></button>
           <button class="coach-action" type="button" data-open-workspace="analytics"><strong>📊 Analyze</strong><span>Game and season performance.</span></button>
           <button class="coach-action" type="button" data-open-workspace="scout"><strong>🔎 Scout</strong><span>Opponent reports and game-day sheets.</span></button>
-          <button class="coach-action" type="button" id="coachDevelop"><strong>⭐ Develop</strong><span>Player Value and profiles.</span></button>
+          <button class="coach-action" type="button" id="coachDevelop"><strong>⭐ Develop</strong><span>Foxes Player Rating and profiles.</span></button>
         </div>
       </div>
       <div class="coach-panel">
@@ -5730,7 +5753,7 @@ function setupWorkspaceLayout(){
     `<div id="statsPageMount"></div>`;
 
   workspaces.analytics.innerHTML=
-    workspaceHeader("Performance Analytics","Game, season and ice-time insights for coaching decisions.",`<button type="button" id="analyticsPlayerValue">⭐ Open Player Value</button>`)+
+    workspaceHeader("Performance Analytics","Game, season and ice-time insights for coaching decisions.",`<button type="button" id="analyticsPlayerValue">⭐ Open Foxes Player Rating</button>`)+
     `<div id="analyticsPageMount"></div>`;
 
   workspaces.scout.innerHTML=
@@ -5787,8 +5810,8 @@ function setupWorkspaceLayout(){
       <button class="active" data-lab="filmScout">2.2 Scout + Film</button><button data-lab="usage2">2.3 Usage</button><button data-lab="trends2">2.4 Trends</button><button data-lab="combos">2.5 Lines/Pairs</button><button data-lab="report">2.6 Reports</button><button data-lab="insights">2.7 Insights</button><button data-lab="autotrack">2.8 Auto Track</button><button data-lab="stability">2.9 Stability</button>
     </div>
     <div id="lab-filmScout" class="lab-panel active"><div class="lab-grid"><div class="lab-card"><h3>Film Clip Tags</h3><div id="labClipTags" class="row"></div><div id="labTaggedClips"></div></div><div class="lab-card"><h3>Player-Facing Game Plan</h3><button id="labBuildGamePlan">Build from Current Scout</button><div id="labGamePlan" class="report-preview">Build a simplified game plan from the current opponent scout.</div></div><div class="lab-card lab-wide"><h3>Opponent History</h3><div id="labOpponentHistory"></div></div></div></div>
-    <div id="lab-usage2" class="lab-panel"><div class="lab-card lab-wide"><h3>Playing Time & Usage 2.0</h3><div id="labUsage2"></div></div></div>
-    <div id="lab-trends2" class="lab-panel"><div class="lab-card lab-wide"><h3>Team Trends 2.0</h3><div id="labTrends2"></div></div></div>
+    <div id="lab-usage2" class="lab-panel"><div class="lab-card lab-wide"><h3>Playing Time & Usage</h3><div id="labUsage2"></div></div></div>
+    <div id="lab-trends2" class="lab-panel"><div class="lab-card lab-wide"><h3>Team Trends</h3><div id="labTrends2"></div></div></div>
     <div id="lab-combos" class="lab-panel"><div class="lab-card lab-wide"><h3>Line & Pair Analytics</h3><div id="labCombos"></div></div></div>
     <div id="lab-report" class="lab-panel"><div class="lab-card lab-wide"><div class="row"><button class="primary" id="labGenerateReport">Coach Report</button><button id="labParentReport">Team / Parent Report</button></div><div id="labReportPreview" class="report-preview">Generate after a game.</div></div></div>
     <div id="lab-insights" class="lab-panel"><div class="lab-card lab-wide"><h3>Evidence-Based Coach Insights</h3><div id="labInsights"></div></div></div>
@@ -5940,10 +5963,7 @@ function openOrCreateScheduledGame301(id){
   const all=readSchedule301(),g=all.find(x=>x.id===id);if(!g)return;
   const existing=findSavedGameForSchedule301(g);
   if(existing){
-    const card=document.querySelector(`[data-game-id="${CSS.escape(existing.id)}"]`);
-    if(card){openWorkspace("home");card.click();return}
-    // Fallback through app state if card is not rendered.
-    const snap=clone(existing);Object.assign(state,snap);state.currentGameId=existing.id;save();render();openWorkspace("tracking");return;
+    loadSavedGame(existing.id);return;
   }
   $("#createGameDate").value=g.date||localDate301();
   $("#createOpponent").value=g.opponent||"";
@@ -6161,7 +6181,7 @@ function overlayAction297(a){
  if(a==="clean")p.clean=!p.clean;
  if(a==="labels")p.labels=!p.labels;
  if(a==="confidence")p.confidence=!p.confidence;
- if(a==="fullscreen"){const h=overlayHost297();if(h){if(document.fullscreenElement)document.exitFullscreen?.();else h.requestFullscreen?.()}return}
+ if(a==="fullscreen"){if(document.fullscreenElement || $("#tagOverlayWrap")?.classList.contains('tag-fullscreen'))exitTagFullscreen();else enterTagFullscreen();return}
  overlaySave297(p);overlayRefresh297();
 }
 function overlayRefresh297(){
@@ -6331,7 +6351,7 @@ async function import29(e){const f=e.target.files?.[0];if(!f)return;try{const o=
 // ===== end Coach Lab =====
 
 setupWorkspaceLayout();
-setTimeout(()=>{try{initV21()}catch(e){console.error("2.1 init",e)}try{initCoachLab29()}catch(e){console.error("2.9 Coach Lab init",e)}},0);
+window.addEventListener('load',()=>{try{initV21()}catch(e){console.error("2.1 init",e)}try{initCoachLab29()}catch(e){console.error("2.9 Coach Lab init",e)}});
 load();
 renderPersistentDataStatus();
 setTimeout(()=>document.getElementById("v2Splash")?.classList.add("hide"),850);
@@ -6339,7 +6359,7 @@ bindSaveLocationControls(); render();
 setInterval(()=>{ if(state.players.some(p=>p.active)) render(); },1000);
 
 // -------------------- 2.0.2 UPDATE UI --------------------
-let foxesUpdateState={status:'idle',percent:0,currentVersion:'3.0.5'};
+let foxesUpdateState={status:'idle',percent:0,currentVersion:'3.0.12'};
 function showUpdates(){
   $("#updateModal")?.classList.add("open");
   $("#updateModal")?.setAttribute("aria-hidden","false");
@@ -6356,8 +6376,8 @@ function renderUpdateState(s={}){
   const bar=$("#updateProgressBar"), dl=$("#downloadUpdateBtn"), install=$("#installUpdateBtn");
   const release=$("#releasePageBtn"), badge=$("#updateNavBadge"), note=$("#updateNote");
   if(text) text.textContent=foxesUpdateState.message||'Ready to check for updates.';
-  if(ver) ver.textContent=`Current version ${foxesUpdateState.currentVersion||'3.0.9'}`;
-  if(pill) pill.textContent=foxesUpdateState.availableVersion ? `v${foxesUpdateState.availableVersion}` : `v${foxesUpdateState.currentVersion||'3.0.9'}`;
+  if(ver) ver.textContent=`Current version ${foxesUpdateState.currentVersion||'3.0.12'}`;
+  if(pill) pill.textContent=foxesUpdateState.availableVersion ? `v${foxesUpdateState.availableVersion}` : `v${foxesUpdateState.currentVersion||'3.0.12'}`;
   if(bar) bar.style.width=`${Math.max(0,Math.min(100,Number(foxesUpdateState.percent||0)))}%`;
   if(dl) dl.style.display=status==='available'?'inline-flex':'none';
   if(install) install.style.display=status==='downloaded'?'inline-flex':'none';
@@ -6405,7 +6425,7 @@ setTimeout(refreshUpdateState,1200);
     <div class="update-status-card">
       <div class="update-status-row">
         <div class="update-status-text" id="updateStatusText">Ready to check for updates.</div>
-        <div class="update-version-pill" id="updateVersionPill">v2.9.0</div>
+        <div class="update-version-pill" id="updateVersionPill">v3.0.12</div>
       </div>
       <div class="update-progress"><i id="updateProgressBar"></i></div>
     </div>
@@ -6524,7 +6544,7 @@ function ensureUpdateCenter302(){
  const host=document.querySelector('.workspace[data-workspace-page="home"],.workspace[data-workspace-page="dashboard"],.workspace[data-workspace-page="coach"]');
  if(!host||host.querySelector("#updateCenter302"))return;
  const box=document.createElement("div");box.id="updateCenter302";box.className="update302";
- box.innerHTML=`<div><div class="update302-title">App Updates</div><div class="update302-sub" id="updateStatus302">3.0.9 • Updater connection fix • GitHub Releases</div></div>
+ box.innerHTML=`<div><div class="update302-title">App Updates</div><div class="update302-sub" id="updateStatus302">3.0.12 • GitHub auto updates • GitHub Releases</div></div>
  <div class="update302-actions"><button type="button" id="updateCheck302">Check for Updates</button><button type="button" id="updateDownload302" style="display:none">Download Update</button><button type="button" id="updateInstall302" class="primary" style="display:none">Restart & Install</button><button type="button" id="updateReleases302">Open Releases</button><button type="button" id="updateLog302">Open Updater Log</button></div>`;
  host.insertBefore(box,host.firstChild);
  $("#updateCheck302")?.addEventListener("click",async()=>{
@@ -6533,7 +6553,7 @@ function ensureUpdateCenter302(){
      const timeout=new Promise((_,reject)=>setTimeout(()=>reject(new Error("No response from updater after 30 seconds.")),30000));
      const r=await Promise.race([window.foxesStorage?.updateCheck?.(),timeout]);
      if(r?.message) $("#updateStatus302").textContent=r.message;
-     else if(r?.status==="current") $("#updateStatus302").textContent=`You're up to date • ${r.currentVersion||"3.0.9"}`;
+     else if(r?.status==="current") $("#updateStatus302").textContent=`You're up to date • ${r.currentVersion||"3.0.12"}`;
    }catch(e){ $("#updateStatus302").textContent=`Update check failed: ${String(e?.message||e)}`; }
  });
  $("#updateDownload302")?.addEventListener("click",()=>window.foxesStorage?.updateDownload?.());
@@ -6600,6 +6620,6 @@ setTimeout(ensureUpdateTest305, 1200);
 setInterval(ensureUpdateTest305, 3000);
 </script>
 
-<div id="update308Success" style="position:fixed;right:18px;bottom:18px;z-index:99999;background:#163b24;border:1px solid #3da35a;border-radius:12px;padding:12px 16px;box-shadow:0 8px 28px rgba(0,0,0,.35);font-family:Arial,sans-serif;color:#fff;max-width:340px"><div style="font-weight:800">✅ 3.0.9 GitHub Auto-Publish Ready</div><div style="font-size:12px;opacity:.85;margin-top:4px">GitHub Actions publishing is now built into this version.</div></div>
+<script src="release-ui.js"></script>
 </body>
 </html>

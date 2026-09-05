@@ -8,6 +8,10 @@ on:
       - 'index.html'
       - 'main.js'
       - 'preload.js'
+      - 'analytics.js'
+      - 'release-ui.js'
+      - 'package-lock.json'
+      - 'tests/**'
       - '.github/workflows/publish-windows.yml'
   workflow_dispatch:
 
@@ -38,6 +42,10 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           Write-Host "App version: $version"
 
+      - name: Validate release source
+        shell: pwsh
+        run: npm test
+
       - name: Ensure release tag exists
         shell: pwsh
         run: |
@@ -49,7 +57,10 @@ jobs:
             git tag $tag
             git push origin $tag
           } else {
-            Write-Host "Tag $tag already exists."
+            $tagCommit = git rev-list -n 1 $tag
+            if ($tagCommit -ne "${{ github.sha }}") {
+              throw "Tag $tag belongs to another commit; refusing to overwrite a previous release."
+            }
           }
 
       - name: Build update files
@@ -76,7 +87,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $tag = "v${{ steps.version.outputs.version }}"
-          gh release upload $tag "dist/latest.yml" "dist/*.exe" "dist/*.blockmap" --repo "${{ github.repository }}" --clobber
+          gh release upload $tag "dist/latest.yml" "dist/*.exe" "dist/*.blockmap" --repo "${{ github.repository }}"
 
       - name: Publish summary
         shell: pwsh
