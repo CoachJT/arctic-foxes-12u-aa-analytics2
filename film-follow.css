@@ -36,3 +36,10 @@ body.ui313 #tagOverlayWrap .film-control-group315:empty{display:none}
 body.ui313 #tagOverlayWrap .film-transport316 .film-tools31 button{padding:8px 10px!important;font-size:12px!important;min-height:34px}
 body.ui313 #tagOverlayWrap .film-transport316 #filmStatus31:empty{display:none!important}
 @media(max-width:800px){body.ui313 #tagOverlayWrap.film-workstation316.tools-open416:is(:fullscreen,.tag-fullscreen){grid-template-columns:minmax(0,1fr)!important}body.ui313 #tagOverlayWrap.film-workstation316:is(:fullscreen,.tag-fullscreen) .film-side316.drawer-open416{display:block!important}}
+/* Arctic Foxes film workspace controls and drawers. */
+body.ui313 #attachDialog416{background:#17191C!important;border-color:#3b4047!important;color:#FFFFFF!important}
+body.ui313 .follow-player416{border-top-color:#3b4047!important}
+body.ui313 #whistle416.whistle-paused416{background:#5b4317!important;border-color:#d9a92e!important}
+body.ui313 #tagOverlayWrap .film-side316{background:#101113!important;border-left-color:#30343a!important}
+body.ui313 #tagOverlayWrap .film-transport316{background:#17191C!important;border-top-color:#30343a!important}
+body.ui313 #tagOverlayWrap .film-transport316 #play31,body.ui313 #tagOverlayWrap .film-transport316 .primary{background:#D71920!important;border-color:#D71920!important;color:#FFFFFF!important}

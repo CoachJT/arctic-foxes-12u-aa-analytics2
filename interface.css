@@ -116,3 +116,41 @@ body.ui313 #officialStatsCard summary{padding:12px 0;cursor:pointer}
 body.ui313 .footerbar{position:relative!important;margin-top:12px!important}
 body.ui313 .saved-grid{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
 @media(max-width:800px){body.ui313 .team-fields314{grid-template-columns:repeat(2,minmax(0,1fr))}body.ui313 #quickStatsMount>.workspace-page-head{gap:10px!important}body.ui313 .brand-header{height:68px!important}}
+
+/* Arctic Foxes platform theme: shared surfaces, hierarchy, and accessible focus states. */
+body.ui313{--fox-red:#D71920;--fox-black:#0D0E10;--fox-charcoal:#101113;--fox-card:#17191C;--fox-white:#FFFFFF;--fox-ice:#F2F3F4;--fox-gray:#B7BBC1;--fox-muted:#858B93;--bg:var(--fox-charcoal);--card:var(--fox-card);--text:var(--fox-white);--muted:var(--fox-gray);--border:#30343a;--accent:var(--fox-red);--red:var(--fox-red);background:var(--fox-charcoal)!important;color:var(--fox-white)!important}
+body.ui313 *{scrollbar-color:#4b5058 var(--fox-charcoal)}
+body.ui313 #workspaceNav{background:var(--fox-black)!important;border-right-color:#25282d!important}
+body.ui313 .sidebar-brand313 strong,body.ui313 .brand-title{color:var(--fox-white)!important}
+body.ui313 .sidebar-brand313 span,body.ui313 .brand-season,body.ui313 .brand-mark{color:var(--fox-gray)!important}
+body.ui313 .fox-logo{background:var(--fox-red)!important;border-color:var(--fox-red)!important;color:var(--fox-white)!important}
+body.ui313 #workspaceNav button{color:var(--fox-gray)!important}
+body.ui313 #workspaceNav button:hover{background:#17191C!important;color:var(--fox-white)!important}
+body.ui313 #workspaceNav button.active{background:#35171a!important;color:var(--fox-white)!important;box-shadow:inset 3px 0 var(--fox-red)!important}
+body.ui313 .nav-icon313{color:var(--fox-muted)}
+body.ui313 #workspaceNav button.active .nav-icon313{color:var(--fox-red)}
+body.ui313 :is(.card,.coach-panel,.lab-card,.v21-card,.chart-box,.workspace-launch-card,.schedule-301-form,.schedule-301-list,.value-top-card,.profile-panel,.profile-stat,.update-status-card){background:var(--fox-card)!important;border-color:#2b2f34!important}
+body.ui313 :is(.card .card,.card .chart-box,.lab-card .card),body.ui313 .metric313,body.ui313 .leader313{background:#1d2024!important}
+body.ui313 :is(button,.file-label){background:#24272c!important;border-color:#3b4047!important;color:var(--fox-ice)!important}
+body.ui313 button:hover{background:#30343a!important;border-color:#555b64!important}
+body.ui313 button:focus-visible,body.ui313 input:focus-visible,body.ui313 select:focus-visible,body.ui313 summary:focus-visible{outline-color:var(--fox-red)!important}
+body.ui313 :is(button.primary,button.good,.file-label,.primary313){background:var(--fox-red)!important;border-color:var(--fox-red)!important;color:var(--fox-white)!important}
+body.ui313 :is(button.primary,button.good,.file-label,.primary313):hover{background:#b9151b!important}
+body.ui313 button.danger{background:#35171a!important;color:#ffb5b8!important;border-color:#7b252b!important}
+body.ui313 :is(input,select,textarea){background:#0f1113!important;border-color:#3b4047!important;color:var(--fox-white)!important}
+body.ui313 input[type=checkbox]{accent-color:var(--fox-red)}
+body.ui313 th{background:#1d2024!important;color:var(--fox-gray)!important}
+body.ui313 td{border-bottom-color:#2b2f34!important}
+body.ui313 tr:hover td{background:#202328!important}
+body.ui313 .badge,body.ui313 .pill,body.ui313 .status-pill{background:#25292e!important;color:var(--fox-gray)!important}
+body.ui313 .next-game313{background:linear-gradient(105deg,#241417,#17191C 66%)!important}
+body.ui313 .next-game313:before{background:var(--fox-red)!important}
+body.ui313 .metric313 strong,body.ui313 .leader313 .leader-value313,.ui313 .score313{color:var(--fox-white)}
+body.ui313 .result313.W{color:#9de0bb;background:#20382d}
+body.ui313 .result313.L{color:#ffb1b5;background:#3b1f23}
+body.ui313 .trend313.rising{color:#9de0bb}
+body.ui313 .trend313.falling{color:#ffb1b5}
+body.ui313 .game-tabs313 button[aria-selected=true],body.ui313 .lab-tabs button.active,body.ui313 .v21-tabs button.active{background:#35171a!important;border-color:#7b252b!important;color:#ffced0!important}
+body.ui313 .schedule-date-301{background:#35171a!important}
+body.ui313 .entry-help314,body.ui313 .sub,body.ui313 .lab-muted,body.ui313 .value-muted{color:var(--fox-gray)!important}
+body.ui313 #entryStatus312:not(:empty){border-color:#356247;background:#1d3428;color:#b9e7c9}

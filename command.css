@@ -359,3 +359,13 @@ body.ui313.film-fill31 #tagOverlayWrap.film-workstation316:is(:fullscreen,.tag-f
 #filmStatus31{flex-basis:100%;white-space:normal;overflow-wrap:anywhere}#filmStatus31:empty{display:none}
 
 .film-help413{margin:8px 0;font-size:12px}.film-help413>summary{cursor:pointer;color:#b5c2d5}.film-help413 p{line-height:1.5;margin:8px 0}.film-empty413{grid-column:1;grid-row:1;align-self:stretch;justify-self:stretch;z-index:4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#0b0e13;min-height:180px}.film-empty413[hidden]{display:none!important}.film-empty413 strong{font-size:20px}body.ui313 #filmEmpty313{display:none}body.ui313 #tagOverlayWrap #finalize314[hidden]{display:none!important}
+/* Arctic Foxes feature controls: red for emphasis, green and gold retain their semantic roles. */
+body.ui313 .film-tools31,body.ui313 .film-auto31{background:#17191C!important;border-color:#30343a!important}
+body.ui313 .film-control-group315{border-color:#3b4047}
+body.ui313 #play31,body.ui313 .film-tools31 .primary{background:#D71920!important;border-color:#D71920!important;color:#FFFFFF!important}
+body.ui313 .team-snapshot315 .metric313:first-child{background:#241417!important;border-color:#7b252b!important}
+body.ui313 .game-focus315{background:linear-gradient(110deg,#241417,#17191C)!important;border-color:#5b2a2f!important}
+body.ui313 .focus-actions315{border-color:#3b3033}
+body.ui313 .film-auto31[data-running="true"]{border-left-color:#73d49b!important}
+body.ui313 .film-auto31[data-running="true"] [role="status"]:before{color:#73d49b!important}
+body.ui313 #whistle416.whistle-paused416{background:#5b4317!important;border-color:#d9a92e!important}

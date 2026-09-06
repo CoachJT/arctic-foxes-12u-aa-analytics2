@@ -28,3 +28,12 @@ body.ui313 .tag-fullscreen #precision312{position:static!important;flex:none!imp
 body.ui313 .tag-fullscreen #toiControls314{flex:none;max-height:43vh;overflow:auto}
 body.ui313 .tag-fullscreen .tag-overlay{pointer-events:none}
 @media(max-width:1050px){#roster314{grid-template-columns:1fr}.roster-buttons314{grid-template-columns:repeat(3,minmax(0,1fr))}.toi-live314{gap:10px}}
+/* Arctic Foxes TOI states: red marks active play; green/gold remain semantic. */
+body.ui313 #toiControls314{background:#17191C!important;border-top-color:#3b4047!important}
+body.ui313 [data-mode314].active{background:#35171a!important;border-color:#D71920!important;color:#FFFFFF!important}
+body.ui313 .roster-buttons314 .on314{background:#35171a!important;border-color:#D71920!important}
+body.ui313 .roster-buttons314 .on314 span{color:#ffced0!important}
+body.ui313 #zoneDetails314,body.ui313 .candidate314{background:#202328!important}
+body.ui313 #shiftEditor314:not(:empty){background:#241b1d!important}
+body.ui313 .toi-live314 .position-F{border-left-color:#D71920!important}
+body.ui313 #seekReview314:not(:empty){background:#3d3021!important;border-left:3px solid #d9a92e}
