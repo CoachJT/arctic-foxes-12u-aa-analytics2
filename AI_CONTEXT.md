@@ -2,7 +2,7 @@
 
 ## Project identity
 
-This is the Arctic Foxes 12U AA analytics application: a Windows-first Electron desktop platform for hockey game tracking, film review, scouting, player development, statistics, and coaching decisions. The current reviewed release is **v4.1.9**.
+This is the Arctic Foxes 12U AA analytics application: a Windows-first Electron desktop platform for hockey game tracking, film review, scouting, player development, statistics, and coaching decisions. The current reviewed release is **v4.2.0**.
 
 This document is the persistent handoff for coding agents. Read it before changing code, then read `ROADMAP.md`, `NEXT_TASKS.md`, and the latest applicable `RELEASE_*.md` file.
 
@@ -95,4 +95,4 @@ Automatic video/player tracking is review-first and experimental. Uncertain dete
 
 ## Current development state
 
-v4.1.9 is a tested, tagged release with stable core manual workflows. The main unfinished areas are full-game validation of automatic film intelligence, richer coaching visualizations and reports, deeper line/goalie analytics, and long-term companion-device synchronization.
+v4.2.0 is a locally validated release with stable core manual workflows, improved Film workspace presentation, and the Coach Command Center dashboard. The main unfinished areas are full-game validation of automatic film intelligence, deeper line/goalie analytics, account permissions, and long-term companion-device synchronization.

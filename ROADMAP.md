@@ -2,7 +2,7 @@
 
 ## Current implemented state
 
-The v4.1.9 release provides a Windows Electron coaching platform with saved games, schedules, rosters, stats import/export, season analytics, ratings, film review, manual and preview automatic TOI tracking, whistle timing, scoreboard-clock suggestions, opponent scouting, private player development, backups, and GitHub-based updates.
+The v4.2.0 release provides a Windows Electron coaching platform with saved games, schedules, rosters, stats import/export, season analytics, ratings, Film workspace review, the Coach Command Center dashboard, manual and preview automatic TOI tracking, whistle timing, scoreboard-clock suggestions, opponent scouting, private player development, backups, and GitHub-based updates.
 
 Core manual workflows are test-covered and data is stored in a stable location outside the installed application. Automatic player-follow and scoreboard-clock functionality is intentionally preview/review-first and has not been validated across a complete real game recording.
 

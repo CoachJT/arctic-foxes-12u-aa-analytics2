@@ -1,6 +1,6 @@
 {
   "name": "foxes-hockey-analytics",
-  "version": "4.1.9",
+  "version": "4.2.0",
   "description": "Arctic Foxes 12U AA coach platform with scouting center, printable game-day reports, usage, trends, settings and video library.",
   "main": "main.js",
   "scripts": {
@@ -18,7 +18,7 @@
   },
   "build": {
     "appId": "com.foxes.hockeyanalytics",
-    "productName": "Arctic Foxes 12U AA Hockey Analytics 4.1",
+    "productName": "Arctic Foxes 12U AA Hockey Analytics 4.2",
     "artifactName": "Arctic-Foxes-12U-AA-Hockey-Analytics-${version}.${ext}",
     "win": {
       "target": [
@@ -90,7 +90,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Arctic Foxes 12U AA Hockey Analytics 4.1"
+      "shortcutName": "Arctic Foxes 12U AA Hockey Analytics 4.2"
     },
     "publish": [
       {
@@ -105,5 +105,5 @@
     "electron-updater": "^6.6.2",
     "onnxruntime-node": "1.22.0"
   },
-  "productName": "Arctic Foxes 12U AA Hockey Analytics 4.1"
+  "productName": "Arctic Foxes 12U AA Hockey Analytics 4.2"
 }

@@ -2,6 +2,14 @@
 
 This file summarizes major milestones. The detailed release notes remain in the existing `RELEASE_*.md` files and are not replaced by this summary.
 
+## v4.2.0
+
+- Improved the Film workspace video sizing, cropping behavior, controls, and clip navigation layout.
+- Added the Coach Command Center dashboard with Top-5 leaders for points, goals, assists, player rating, recorded TOI, shots, Faceoff %, and blocked shots.
+- Added a 10-attempt minimum for Faceoff % leaderboard eligibility.
+- Added GF/GA and shots-for/shots-against game trends, selected-player rating trends, recorded TOI/player usage, recent team performance, and clearer missing-data states.
+- Added Accounts, Roles & Permissions to the future roadmap; authentication and permissions are not implemented in v4.2.0.
+
 ## v4.1.9
 
 - Added a scoreboard-clock preview that detects observed countdown, stoppage, and restart patterns.
