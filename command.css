@@ -142,6 +142,18 @@ body.ui313 #commandCenter313 .report-recent316>button{display:block;width:100%;t
 body.ui313 #commandCenter313 .trend31{max-height:190px;display:block}
 body.ui313 #commandCenter313 .report-leaders316 td{padding:7px 10px!important}
 body.ui313 #commandCenter313 .eyebrow313{text-transform:none;letter-spacing:.03em;font-size:12px}
+.command-report319{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(280px,1fr);gap:16px;margin-top:18px}
+.command-report319>.card{margin:0!important;min-width:0}
+.leaders-report319{grid-column:1/-1}
+.leader-grid319{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.leader-card319{padding:10px;background:#151f2e;border:1px solid #27364a;border-radius:9px;min-width:0}
+.leader-card319 h3{font-size:13px;margin:0 0 5px}.leader-card319 table{width:100%;min-width:0;table-layout:fixed;margin:0}.leader-card319 th,.leader-card319 td{padding:5px 6px!important;font-size:11px;overflow:hidden}.leader-card319 th:first-child,.leader-card319 td:first-child{width:18%}.leader-card319 th:nth-child(2),.leader-card319 td:nth-child(2){width:52%;overflow-wrap:anywhere}.leader-card319 th:last-child,.leader-card319 td:last-child{width:30%;white-space:nowrap}.leader-card319 td button{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:normal}.leader-note319{font-size:10px;color:#a3b3c9;margin:0 0 5px}
+.leader-empty319{font-size:12px;color:#a3b3c9;margin:12px 0}
+.trend-report319{grid-column:1}.usage-report319{grid-column:2}.player-report319{grid-column:1}.recent-report319{grid-column:2}
+.trend-pair319{display:grid;grid-template-columns:1fr 1fr;gap:12px}.trend-pair319 .trend31{height:150px}.trend-legend31{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:#a3b3c9}.trend-legend31 span{display:inline-flex;align-items:center;gap:5px}.trend-legend31 i{display:inline-block;width:9px;height:9px;border-radius:50%}
+.recent-summary319{display:grid;grid-template-columns:repeat(3,1fr);gap:4px 12px;margin-bottom:10px}.recent-summary319 strong{font-size:20px}.recent-summary319 span{font-size:10px;color:#a3b3c9}
+@media(max-width:1100px){.leader-grid319{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:900px){.command-report319{grid-template-columns:1fr}.command-report319>.card{grid-column:1}.trend-pair319{grid-template-columns:1fr}}
 /* Film stays the primary surface. Absolute overlay canvases retain their video coordinates. */
 body.ui313 #tagOverlayWrap.film-workstation316{display:grid!important;grid-template-columns:minmax(0,1fr) 300px;grid-template-rows:auto auto;align-items:start;overflow:visible;background:#0b0e13;border:1px solid #303744;border-radius:12px}
 body.ui313 .film-workstation316 #gameVideo{grid-column:1;grid-row:1;height:auto!important;aspect-ratio:16/9;max-height:66vh!important;min-height:0!important;background:#0b0e13;border-radius:12px 0 0 0!important}

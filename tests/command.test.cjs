@@ -7,6 +7,16 @@ test('multi-section import previews team and periods without writes and recomput
 });
 test('partial period imports preserve blank cells and invalid team ratios are skipped',()=>{const b={team:{goalsFor:{p1:3,p2:2,total:5}}},p=S.preview([['Scoring'],['Goals For','',4],['Team Stats'],['Power Play',2,3]],roster,b,'g');const out=S.apply(p,b,roster,'g');assert.equal(out.team.goalsFor.p1,3);assert.equal(out.team.goalsFor.p2,4);assert.equal(out.team.ppSuccess,undefined);});
 test('weighted season rates use attempts and last five excludes scheduled games',()=>{const games=Array.from({length:6},(_,i)=>({id:String(i),date:'2026-01-0'+(i+1),players:[],officialStats:{imported:true,team:{fo:i?2:10,fow:i?1:9,goalsFor:{total:i},goalsAgainst:{total:1}}}}));const d=C.overview([...games,{id:'future',date:'2027-01-01'}],[]);assert.equal(d.fo,14/20);assert.equal(d.last5.length,5);assert.equal(d.last5[0].id,'1');assert.equal(d.diff,null);});
+test('dashboard leaders keep goalies out and require ten faceoff attempts',()=>{
+ const players=[...Array.from({length:3},(_,i)=>({id:'s'+i,number:i+1,name:'Skater '+i,pos:'F',shifts:[]})),{id:'g',number:99,name:'Goalie',pos:'G',shifts:[]}];
+ const game={id:'leader',date:'2026-01-01',players,officialStats:{imported:true,skaters:{1:{gp:1,pts:8,g:4,a:4,shots:10,blocks:2,fo:12,fow:9,toiMin:20},2:{gp:1,pts:7,g:3,a:4,shots:9,blocks:3,fo:2,fow:2,toiMin:18},3:{gp:1,pts:6,g:2,a:4,shots:8,blocks:4,fo:10,fow:8,toiMin:16}},goalies:{99:{gp:1,saves:30,ga:1,min:45}},team:{goalsFor:{total:4},goalsAgainst:{total:1}}}};
+ const d=C.overview([game],players),sets=C.leaderSets(d.rows);
+ assert.equal(sets.points[0].player.number,1);
+ assert.deepEqual(sets.faceoffs.map(x=>x.player.number),[3,1]);
+ assert.equal(sets.points.some(x=>x.player.pos==='G'),false);
+ assert.equal(C.usage(d.rows)[0].player.number,1);
+ assert.equal(C.playerTrend(d.rows.find(r=>r.p.number===1),'rating')[0].rating>0,true);
+});
 test('overlap counts exact units once and never joins separate clips or unconfirmed intervals',()=>{const g={id:'g',players:['a','b','c'].map((id,i)=>({id,number:i,pos:'F',shifts:[{id,toiSchema:314,ended:true,confirmed:true,startClipId:'one',endClipId:'one',videoOnTime:i*10,videoOffTime:60}]}))};assert.equal(C.overlaps(g)[0].seconds,40);g.players[2].shifts[0].startClipId='two';assert.equal(C.overlaps(g).length,0);g.players[2].shifts[0].startClipId='one';g.players[2].shifts[0].confirmed=false;assert.equal(C.overlaps(g).length,0);});
 test('quality does not equate empty or unresolved TOI to completion',()=>{assert.equal(C.quality({players:roster}).ready,false);const g={players:roster,toi314:{finalizedAt:1,candidates:[{status:'review'}]}};assert.equal(C.quality(g).toi,false);assert.equal(C.quality(g).unknown,1);});
 test('tracking audit records corrections while source and undo snapshots remain intact',()=>{const g={id:'g',players:structuredClone(roster),filmClips:[{id:'clip',duration:100}]};const next=T.apply(g,x=>T.transition(x,{playerId:'a',direction:'ON',videoTime:5,clipId:'clip'}));assert.equal(g.players[0].shifts.length,0);assert.equal(next.toi314.audit.length,1);assert.equal(next.toi314.audit[0].changes[0].after.videoOnTime,5);});
