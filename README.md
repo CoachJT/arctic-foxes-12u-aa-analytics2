@@ -14,6 +14,12 @@ Open `web/index.html` in a browser, or serve the repository with any static file
 
 All displayed team data is clearly **sample placeholder data**. It is not authoritative player or team information, and there is no real authentication or cloud synchronization yet.
 
+### Accounts, roles & permissions prototype
+
+The Admin screen includes three sample staff records: Justin Kostosky (Owner / Head Coach), Austin Koposko (Assistant Coach / Goalie Coach), and Chris Skwortz (Assistant Coach). A clearly labeled **Prototype role** switcher can exercise their capability-based UI views locally.
+
+This switcher is testing-only, not authentication. The frontend contains no passwords, secrets, sessions, or production credentials. UI hiding and section guards are not a security boundary; real backend authorization, user management, and audit logging remain future work.
+
 ### GitHub Pages prototype deployment
 
 The workflow in `.github/workflows/deploy-web-pages.yml` publishes only the contents of `web/` as a static GitHub Pages artifact. It runs for changes to `web/` or the workflow itself, and can also be started manually.

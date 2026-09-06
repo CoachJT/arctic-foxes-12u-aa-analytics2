@@ -12,6 +12,8 @@
 - Define shared TypeScript domain models for teams, players, games, shifts, analytics, scouting, and reports.
 - Choose a cloud backend and relational data model.
 - Define API versioning, sync status, conflict handling, and audit requirements.
+- Define backend authorization around stable capability keys, staff membership, invitations, and role changes.
+- Define an append-only audit event contract covering permission changes, official stat edits, destructive actions, backups, and releases.
 - Add environment-aware web development and deployment.
 
 ## Phase 2 — Windows bridge
@@ -24,6 +26,7 @@
 ## Phase 3 — team collaboration
 
 - Add real authentication, invitations, roles, and permissions.
+- Enforce server-side authorization and persist audit events; treat all client-side guards as UX only.
 - Sync schedule, roster, game results, shifts, scouting, reports, and player profiles.
 - Add coach report sharing and an approval/publish state.
 - Add player/parent access only after the coach-facing model is stable.
