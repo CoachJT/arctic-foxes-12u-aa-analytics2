@@ -18,7 +18,7 @@ if "%GH_TOKEN%"=="" (
   pause
   exit /b 1
 )
-call npm install
+call npm ci
 if errorlevel 1 goto :fail
 call npm run release
 if errorlevel 1 goto :fail

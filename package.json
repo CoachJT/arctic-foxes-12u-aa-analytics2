@@ -1,16 +1,16 @@
 {
   "name": "foxes-hockey-analytics",
-  "version": "4.2.1",
+  "version": "4.2.2",
   "description": "Arctic Foxes 12U AA coach platform with scouting center, printable game-day reports, usage, trends, settings and video library.",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "dist": "npm run dist:portable && npm run dist:installer",
-    "release": "electron-builder --win nsis --publish always",
-    "publish": "electron-builder --win --publish always",
+    "release": "node scripts/guarded-build.cjs --win nsis --publish always",
+    "publish": "node scripts/guarded-build.cjs --win --publish always",
     "test": "node --test tests/*.test.cjs",
-    "dist:portable": "electron-builder --win portable --publish never --config.directories.output=dist/portable",
-    "dist:installer": "electron-builder --win nsis --publish never"
+    "dist:portable": "node scripts/guarded-build.cjs --win portable --publish never --config.directories.output=dist/portable",
+    "dist:installer": "node scripts/guarded-build.cjs --win nsis --publish never"
   },
   "devDependencies": {
     "electron": "^39.0.0",
@@ -18,7 +18,7 @@
   },
   "build": {
     "appId": "com.foxes.hockeyanalytics",
-    "productName": "Arctic Foxes 12U AA Hockey Analytics 4.2",
+    "productName": "Arctic Foxes Hockey Analytics",
     "artifactName": "Arctic-Foxes-12U-AA-Hockey-Analytics-${version}.${ext}",
     "win": {
       "target": [
@@ -87,10 +87,10 @@
     ],
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
+      "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Arctic Foxes 12U AA Hockey Analytics 4.2"
+      "shortcutName": "Arctic Foxes Hockey Analytics"
     },
     "publish": [
       {
@@ -105,5 +105,5 @@
     "electron-updater": "^6.6.2",
     "onnxruntime-node": "1.22.0"
   },
-  "productName": "Arctic Foxes 12U AA Hockey Analytics 4.2"
+  "productName": "Arctic Foxes Hockey Analytics"
 }

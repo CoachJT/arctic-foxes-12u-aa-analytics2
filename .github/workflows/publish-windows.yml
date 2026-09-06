@@ -72,6 +72,12 @@ jobs:
         shell: pwsh
         run: npm test
 
+      - name: Snapshot package manifest
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash package.json -Algorithm SHA256).Hash
+          "manifest_hash=$hash" >> $env:GITHUB_ENV
+
       - name: Ensure release tag exists
         shell: pwsh
         run: |
@@ -91,7 +97,15 @@ jobs:
 
       - name: Build update files
         shell: pwsh
-        run: npx electron-builder --win nsis --publish never
+        run: node scripts/guarded-build.cjs --win nsis --publish never
+
+      - name: Verify package manifest
+        shell: pwsh
+        run: |
+          $after = (Get-FileHash package.json -Algorithm SHA256).Hash
+          if ($after -ne $env:manifest_hash) {
+            throw "package.json changed during the build."
+          }
 
       - name: Ensure GitHub release exists
         shell: pwsh
