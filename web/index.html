@@ -42,9 +42,10 @@
           <button class="mobile-menu" id="openSidebar" aria-label="Open navigation">☰</button>
           <div class="crumbs"><span>Team Hub</span><b>/</b><strong id="viewCrumb">Command Center</strong></div>
           <div class="top-actions">
+            <label class="role-switcher" id="roleSwitcher"><span>Prototype role</span><select id="prototypeRole" aria-label="Prototype testing role"></select></label>
             <span class="season-pill">2025–26 <i></i></span>
             <button class="icon-button" aria-label="Notifications">♢<em>3</em></button>
-            <div class="user-menu"><div class="avatar">MC</div><span>Coach Morgan</span><b>⌄</b></div>
+            <div class="user-menu"><div class="avatar" id="userAvatar">JK</div><span id="userName">Justin Kostosky</span><b>⌄</b></div>
           </div>
         </header>
 
@@ -54,6 +55,7 @@
       </main>
     </div>
     <div class="scrim" id="scrim"></div>
+    <script src="./permissions.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>

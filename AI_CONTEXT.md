@@ -26,6 +26,9 @@ The current prototype deliberately uses semantic HTML, CSS, and vanilla JavaScri
 - Keep raw full-game video on Windows initially.
 - Prefer synced derived data: analytics results, stats, shifts, scouting, reports, schedules, and player information.
 - Real identity, roles, permissions, audit logs, and invitations belong to the backend phase.
+- The prototype role switcher is a local testing fixture only. It is not authentication and must never be treated as authorization.
+- Capability checks are centralized in `web/permissions.js`; future backend authorization should reuse the same stable capability names.
+- Audit-log planning belongs to the backend: record actor, team, action, resource, timestamp, request correlation, and before/after metadata. Do not create a fake production audit trail in the static client.
 
 ## Design language
 

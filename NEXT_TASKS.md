@@ -9,3 +9,5 @@
 7. Add authentication, invitations, and role enforcement after the data contract is proven.
 8. Add write flows for schedules, scouting notes, and coach reports.
 9. Test the responsive experience on iPad and iPhone dimensions.
+10. Define backend identity, staff membership, capability enforcement, and audit-event interfaces.
+11. Replace the prototype role switcher with authenticated server-provided identity and permissions.
