@@ -182,6 +182,71 @@ body.ui313[data-page="film"] .workspace-page-head{padding-top:20px;margin-bottom
 body.ui313 .film-workstation316 .film-side316{max-height:64vh}
 body.ui313 #tagOverlayWrap.film-workstation316{grid-template-rows:min-content min-content}
 
+/* Keep normal film playback contained at its natural ratio; fullscreen has its own layout above. */
+body.ui313 #tagOverlayWrap.film-workstation316:not(:fullscreen):not(.tag-fullscreen){
+  grid-template-columns:minmax(0,1fr) 290px;
+  grid-template-rows:auto auto;
+  align-items:start;
+  background:#080b10;
+}
+body.ui313 .film-workstation316:not(:fullscreen):not(.tag-fullscreen) #gameVideo{
+  width:100%!important;
+  height:auto!important;
+  aspect-ratio:auto!important;
+  max-height:min(62vh,720px)!important;
+  min-height:0!important;
+  object-fit:contain!important;
+  background:#050607;
+}
+body.ui313 .film-workstation316:not(:fullscreen):not(.tag-fullscreen) .film-side316{
+  max-height:min(62vh,720px);
+  padding:14px;
+}
+body.ui313 .film-workstation316:not(:fullscreen):not(.tag-fullscreen) .film-transport316{
+  padding:9px 12px;
+}
+body.ui313 #filmCard .clip-manager{
+  margin-top:12px;
+  padding:10px 12px;
+  border:1px solid #303744;
+  border-radius:10px;
+  background:#11161e;
+}
+body.ui313 #filmCard .clip-toolbar{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+}
+body.ui313 #filmCard .clip-current{
+  flex:1 1 180px;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  color:#b7c2d2;
+  font-size:12px;
+}
+body.ui313 #filmCard .clip-list{
+  display:flex;
+  gap:6px;
+  flex-wrap:wrap;
+  margin-top:8px;
+}
+body.ui313 #filmCard .video-toolbar{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  flex-wrap:wrap;
+  padding:9px 0;
+}
+body.ui313 #filmCard .sync-note{
+  margin-top:6px;
+  padding:8px 10px;
+  border-radius:8px;
+  background:#11161e;
+}
+
 /* Approved Arctic visual direction: shared navy shell and game-first hierarchy. */
 #learningDialog4{width:min(1200px,94vw);max-height:94vh;overflow:auto;background:#111e30;color:#f1f6ff;border:1px solid #48607c;border-radius:14px;padding:20px}#learningDialog4::backdrop{background:#000b}.learning-head4{display:flex;justify-content:space-between;align-items:center;gap:20px}#learningFrame4{display:block;max-width:100%;max-height:58vh;width:auto;height:auto;margin:10px auto;cursor:crosshair;touch-action:none}.learning-box4{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}.learning-box4 input{width:75px}#learningMatches4{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}#playerLearning4 p{font-size:12px;color:#a3b3c9}#learningCount4{margin:10px 0;font-size:12px}#learningExamples4>div{display:flex;gap:8px;align-items:center;justify-content:space-between;font-size:12px;margin:8px 0}
 .op-photo320{display:block;max-width:100%;max-height:480px;object-fit:contain;margin:12px 0;background:#fff}.opponent-sheet320 p{max-width:850px}.opponent-sheet320 details{margin:16px 0}.opponent-sheet320 summary{cursor:pointer}.opponent-sheet320 pre{white-space:pre-wrap;max-height:220px;overflow:auto}.opponent-sheet320 input[data-op-field320]{width:75px}.opponent-sheet320 input[data-op-field320=name]{width:210px}.op-reminder320{padding:18px 22px;background:#222637;border-left:3px solid #ffd269;border-radius:10px;margin:18px 0}.op-reminder320 p{margin:8px 0}.opponent-sheet320 #opHistory320{margin-top:24px}
