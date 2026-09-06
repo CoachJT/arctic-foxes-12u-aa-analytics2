@@ -47,6 +47,9 @@ test('film-only faceoffs and goalie events use existing event property names',()
 test('all renderer scripts parse and release invariants hold',()=>{
  const html=fs.readFileSync('index.html','utf8');for(const m of html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))new vm.Script(m[1]);
  for(const path of ['analytics.js','release-ui.js','interface-model.js','interface.js','toi-engine.js','crossing-detector.js','toi-ui.js','main.js','preload.js'])new vm.Script(fs.readFileSync(path,'utf8'),{filename:path});
- const pkg=require('../package.json');assert.equal(pkg.version,'4.2.1');assert.equal(pkg.build.artifactName,'Arctic-Foxes-12U-AA-Hockey-Analytics-${version}.${ext}');assert.equal(pkg.build.publish[0].repo,'arctic-foxes-12u-aa-analytics2');assert.equal(pkg.build.publish[0].owner,'CoachJT');
+ const pkg=require('../package.json');assert.equal(pkg.version,'4.2.2');assert.equal(pkg.build.artifactName,'Arctic-Foxes-12U-AA-Hockey-Analytics-${version}.${ext}');assert.equal(pkg.build.publish[0].repo,'arctic-foxes-12u-aa-analytics2');assert.equal(pkg.build.publish[0].owner,'CoachJT');
+ assert.equal(pkg.build.appId,'com.foxes.hockeyanalytics');assert.equal(pkg.build.productName,'Arctic Foxes Hockey Analytics');assert.equal(pkg.build.nsis.shortcutName,'Arctic Foxes Hockey Analytics');assert.equal(pkg.build.nsis.allowToChangeInstallationDirectory,false);assert.doesNotMatch(pkg.build.productName,/\d/);assert.doesNotMatch(pkg.build.nsis.shortcutName,/\d/);
+ for(const script of ['test','dist','dist:portable','dist:installer','release','publish'])assert.equal(typeof pkg.scripts[script],'string');
+ assert.ok(Array.isArray(pkg.build.files)&&pkg.build.files.length>0);assert.ok(pkg.build.win.target.includes('nsis'));assert.ok(fs.existsSync('scripts/update-version.cjs'));assert.ok(fs.existsSync('scripts/guarded-build.cjs'));
  assert.match(fs.readFileSync('main.js','utf8'),/app.setPath\('userData', path.join\(app.getPath\('appData'\), 'ArcticFoxesBY14HockeyAnalytics'\)\)/);assert.ok(!html.includes('GitHub Auto-Publish Ready'));assert.ok(!html.includes('FOXES  /  2.0'));
 });

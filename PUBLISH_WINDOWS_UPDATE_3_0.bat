@@ -7,7 +7,7 @@ echo.
 echo Make sure package.json has your real GitHub owner/repo first.
 echo You also need a GitHub token available as GH_TOKEN.
 echo.
-call npm install
+call npm ci
 if errorlevel 1 pause & exit /b 1
 call npm run publish
 pause

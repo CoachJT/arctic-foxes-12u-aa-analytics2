@@ -18,7 +18,7 @@ if errorlevel 1 (
   exit /b 1
 )
 echo Installing desktop app components...
-call npm install
+call npm ci
 if errorlevel 1 (
   echo.
   echo Setup failed. Check your internet connection and try again.

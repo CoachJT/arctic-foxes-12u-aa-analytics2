@@ -2,6 +2,12 @@
 
 This file summarizes major milestones. The detailed release notes remain in the existing `RELEASE_*.md` files and are not replaced by this summary.
 
+## v4.2.2
+
+- Established a stable Arctic Foxes Hockey Analytics Windows product identity for future upgrades.
+- Removed release-version suffixes from the Windows product and shortcut names so future installers update one application.
+- Preserved the existing app ID, updater channel, saved-data location, and data schemas.
+
 ## v4.2.1
 
 - Applied the Arctic Foxes red, black, white, and ice-gray visual theme across the Windows application.

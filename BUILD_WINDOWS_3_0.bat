@@ -19,7 +19,7 @@ if errorlevel 1 (
   exit /b 1
 )
 echo Installing build dependencies...
-call npm install
+call npm ci
 if errorlevel 1 goto :fail
 echo.
 echo Building Windows app...
