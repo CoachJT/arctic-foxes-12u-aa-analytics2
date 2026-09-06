@@ -349,7 +349,7 @@ function createWindow() {
     minWidth: 1000,
     minHeight: 700,
     backgroundColor: '#0b0f14',
-    title: 'Arctic Foxes 12U AA Hockey Analytics 4.1',
+    title: 'Arctic Foxes 12U AA Hockey Analytics 4.2',
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
