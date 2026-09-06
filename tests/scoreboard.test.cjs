@@ -1,0 +1,5 @@
+const {test}=require('node:test'),a=require('node:assert/strict'),{parseClock,Watcher}=require('../scoreboard-clock');
+test('clock readings reject absent, ambiguous and invalid clocks',()=>{a.equal(parseClock('12:34'),754);for(const t of ['','12:99','1:00 2:00'])a.equal(parseClock(t),null);});
+test('only observed running, stopped and resumed clock yields a suggestion',()=>{const w=new Watcher();for(const [t,s] of [[0,'12:00'],[1,'11:59'],[2,'11:59'],[3,'11:59'],[4,'11:59']])a.equal(w.sample(s,t),null);a.deepEqual(w.sample('11:58',5),{start:1,end:5});});
+test('unreadable clock, seeks, clock reset and missing samples cannot bridge a stoppage',()=>{for(const [t,s] of [[3,''],[20,'11:59'],[0,'11:59'],[3,'12:00']]){const w=new Watcher();w.sample('12:00',0);w.sample('11:59',1);w.sample('11:59',2);a.equal(w.sample(s,t),null);a.equal(w.sample('11:58',t+1),null);}});
+test('a frozen view without observed countdown is not a whistle',()=>{const w=new Watcher();for(let i=0;i<10;i++)a.equal(w.sample('12:00',i),null);a.equal(w.sample('11:59',10),null);});

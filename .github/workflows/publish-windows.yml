@@ -18,6 +18,7 @@ on:
       - 'film-follow*'
       - 'film-breaks.js'
       - 'schedule-view*'
+      - 'scoreboard-clock.js'
       - 'player-tracker.js'
       - 'player-follow-model.js'
       - 'player-detector*.js'
