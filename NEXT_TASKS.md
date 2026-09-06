@@ -1,11 +1,11 @@
 # Next Tasks
 
-No new coding task has been approved yet.
-
-Before beginning any implementation, an agent must read:
-
-1. `AI_CONTEXT.md`
-2. `ROADMAP.md`
-3. The latest applicable release notes, currently `RELEASE_4.2.0.md`
-
-An agent must then confirm the requested scope, identify the affected existing workflows and data fields, preserve backward compatibility, and run the relevant tests before concluding. No feature work should begin from this file alone.
+1. Decide the cloud provider and API ownership model.
+2. Create shared TypeScript schemas for team, player, game, and analytics records.
+3. Document the first Windows export payload and sync lifecycle.
+4. Convert the prototype sample data into typed fixtures separate from production data.
+5. Add a Vite + React + TypeScript web workspace without changing the Electron entry point.
+6. Implement backend-backed read-only Command Center data first.
+7. Add authentication, invitations, and role enforcement after the data contract is proven.
+8. Add write flows for schedules, scouting notes, and coach reports.
+9. Test the responsive experience on iPad and iPhone dimensions.

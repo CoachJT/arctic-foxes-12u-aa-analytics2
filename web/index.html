@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#07111e" />
+    <title>Arctic Foxes | Team Hub</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar">
+        <div class="brand">
+          <div class="brand-mark">AF</div>
+          <div>
+            <strong>Arctic Foxes</strong>
+            <span>12U AA · TEAM HUB</span>
+          </div>
+        </div>
+        <button class="mobile-close" id="closeSidebar" aria-label="Close navigation">×</button>
+        <nav class="nav" aria-label="Primary navigation">
+          <p class="nav-label">Workspace</p>
+          <button class="nav-item active" data-view="command" aria-current="page"><span>⌂</span> Command Center</button>
+          <button class="nav-item" data-view="schedule"><span>◷</span> Schedule</button>
+          <button class="nav-item" data-view="stats"><span>↗</span> Team Stats</button>
+          <button class="nav-item" data-view="players"><span>♙</span> Player Profiles</button>
+          <button class="nav-item" data-view="games"><span>▣</span> Game Center</button>
+          <button class="nav-item" data-view="scouting"><span>⌁</span> Scouting</button>
+          <button class="nav-item" data-view="reports"><span>▤</span> Coach Reports</button>
+          <p class="nav-label">Team setup</p>
+          <button class="nav-item" data-view="admin"><span>♙</span> Admin</button>
+          <button class="nav-item" data-view="settings"><span>⚙</span> Settings</button>
+        </nav>
+        <div class="sidebar-foot">
+          <div class="sample-badge"><span class="pulse"></span> Prototype mode</div>
+          <small>Sample workspace · no live sync</small>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <button class="mobile-menu" id="openSidebar" aria-label="Open navigation">☰</button>
+          <div class="crumbs"><span>Team Hub</span><b>/</b><strong id="viewCrumb">Command Center</strong></div>
+          <div class="top-actions">
+            <span class="season-pill">2025–26 <i></i></span>
+            <button class="icon-button" aria-label="Notifications">♢<em>3</em></button>
+            <div class="user-menu"><div class="avatar">MC</div><span>Coach Morgan</span><b>⌄</b></div>
+          </div>
+        </header>
+
+        <div id="app"></div>
+
+        <footer class="footer-note">Arctic Foxes 12U AA · Cloud team hub prototype <span>Sample data only</span></footer>
+      </main>
+    </div>
+    <div class="scrim" id="scrim"></div>
+    <script src="./app.js"></script>
+  </body>
+</html>
