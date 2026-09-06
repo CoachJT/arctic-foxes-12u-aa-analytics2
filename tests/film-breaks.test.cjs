@@ -1,0 +1,6 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),{nextBreakEnd}=require('../film-breaks');
+test('review skips completed breaks without changing their video timestamps',()=>{const spans=[{start:10,end:20},{start:40,end:null}],before=JSON.stringify(spans);assert.equal(nextBreakEnd(spans,12,60),20);assert.equal(nextBreakEnd(spans,22,60),null);assert.equal(nextBreakEnd(spans,45,60),null);assert.equal(JSON.stringify(spans),before);});
+test('recording guards suppress skips and malformed ranges are ignored',()=>{assert.equal(nextBreakEnd([{start:10,end:20}],12,60,true),null);assert.equal(nextBreakEnd([{start:10,end:null},{start:15,end:9},{start:NaN,end:30}],12,60),null);assert.equal(nextBreakEnd([{start:10,end:20}],12,NaN),null);});
+test('overlapping breaks merge and clip end bounds the seek',()=>{assert.equal(nextBreakEnd([{start:20,end:40},{start:10,end:25}],12,30),30);assert.equal(nextBreakEnd([{start:10,end:20}],20,30),null);});
+
+test('trim ranges retain original time and safely handle old clips',()=>{const {reviewRange}=require('../film-breaks');assert.deepEqual(reviewRange({start:10,end:40},60),{start:10,end:40});assert.deepEqual(reviewRange(undefined,60),{start:0,end:60});assert.deepEqual(reviewRange({start:40,end:10},60),{start:0,end:60});assert.equal(reviewRange({},NaN),null);});

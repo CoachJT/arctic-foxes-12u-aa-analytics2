@@ -1,6 +1,6 @@
 {
   "name": "foxes-hockey-analytics",
-  "version": "4.1.7",
+  "version": "4.1.8",
   "description": "Arctic Foxes 12U AA coach platform with scouting center, printable game-day reports, usage, trends, settings and video library.",
   "main": "main.js",
   "scripts": {
@@ -68,10 +68,21 @@
       "scouting-launch.js",
       "player-tracker.js",
       "film-follow-ui.js",
-      "film-follow.css"
+      "film-follow.css",
+      "player-follow-model.js",
+      "player-detector.js",
+      "player-detector-main.js",
+      "!node_modules/onnxruntime-node/bin/napi-v6/linux/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/darwin/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/win32/arm64/**",
+      "film-breaks.js",
+      "schedule-view.js",
+      "schedule-view.css"
     ],
     "asarUnpack": [
-      "scoresheet-ocr.ps1"
+      "scoresheet-ocr.ps1",
+      "node_modules/onnxruntime-node/bin/**",
+      "vendor/player-detector/*.onnx"
     ],
     "nsis": {
       "oneClick": false,
@@ -90,7 +101,8 @@
     ]
   },
   "dependencies": {
-    "electron-updater": "^6.6.2"
+    "electron-updater": "^6.6.2",
+    "onnxruntime-node": "1.22.0"
   },
   "productName": "Arctic Foxes 12U AA Hockey Analytics 4.1"
 }

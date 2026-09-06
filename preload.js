@@ -24,3 +24,5 @@ contextBridge.exposeInMainWorld('foxesStorage', {
     return () => ipcRenderer.removeListener('foxes-update-state', handler);
   }
 });
+
+contextBridge.exposeInMainWorld('foxesPlayerVision',{ready:()=>ipcRenderer.invoke('foxes-vision-ready'),infer:inputs=>ipcRenderer.invoke('foxes-vision-infer',inputs)});

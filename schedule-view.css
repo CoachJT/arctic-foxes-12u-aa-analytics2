@@ -1,0 +1,14 @@
+.ui313 .schedule418.schedule-301-grid{display:flex;flex-direction:column;gap:14px}
+.ui313 .schedule418 .schedule-301-form{position:static;width:100%;box-sizing:border-box}
+.schedule-next418{display:flex;flex-wrap:wrap;align-items:center;gap:12px 24px;padding:16px;margin:12px 0 20px;background:#132c3d;border-left:4px solid #e33249;border-radius:8px}
+.schedule-next418 strong{font-size:20px}.schedule-next418 span{color:#c4d3e3}
+.schedule-nav418,.schedule-nav418>div,.schedule-dayheading418{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.schedule-nav418 button[aria-pressed=true]{background:#c9223c;color:white}.schedule-nav418 strong{min-width:150px;text-align:center;font-size:20px}
+.schedule-calendar418{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin-bottom:20px}
+.schedule-weekday418{padding:8px;text-align:center;color:#aebed0;font-size:12px}
+.ui313 button.schedule-day418{display:flex;flex-direction:column;align-items:stretch;text-align:left;justify-content:flex-start;min-height:105px;min-width:0;padding:9px;border-radius:6px;background:#142131;border:1px solid #344152;color:white;white-space:normal}
+.schedule-day418 b{font-size:14px}.schedule-day418 span{font-size:12px;line-height:1.5;margin-top:5px;padding:3px 5px;background:#253d54;border-radius:4px;overflow-wrap:anywhere}
+.ui313 button.schedule-day418.outside{opacity:.5}.ui313 button.schedule-day418.today b{color:#ff8494}.ui313 button.schedule-day418[aria-pressed=true]{border:2px solid #ef4760;background:#253349}
+.schedule-dayheading418>div{display:flex;gap:8px}.schedule418 .schedule-game-301.past{opacity:1}
+@media(max-width:700px){.ui313 button.schedule-day418{min-height:76px;padding:4px}.schedule-day418 span{font-size:10px;padding:2px}.schedule-nav418 strong{font-size:17px}.schedule-calendar418{gap:2px}}
+.schedule418 .schedule-301-filters[hidden]{display:none!important}.schedule418 .schedule-nav418 button[aria-pressed=true]{background:#c9223c!important;color:#fff!important}.schedule418 button.schedule-day418[aria-pressed=true]{border:2px solid #ef4760!important;background:#253349!important}

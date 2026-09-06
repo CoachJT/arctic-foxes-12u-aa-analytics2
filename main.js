@@ -4,6 +4,7 @@ const { autoUpdater } = require('electron-updater');
 const { pathToFileURL } = require('url');
 const path = require('path');
 const fs = require('fs');
+require('./player-detector-main').install({ipcMain});
 ipcMain.handle('foxes-opponent-photo', (_event, bytes) => require('./opponent-ocr').recognize(bytes));
 
 // Stable application settings folder across every version.
