@@ -16,6 +16,9 @@ let recoveryMode = false;
 let workspaceTransitioning = false;
 let phase1Data = null;
 let phase1DataError = '';
+let phase2AData = null;
+let phase2ADataError = '';
+let teamContext = { memberships: [], selectedTeamId: '', selectedMembership: null };
 const hashParams = new URLSearchParams(location.hash.replace(/^#/, ''));
 const queryParams = new URLSearchParams(location.search);
 const authCallbackPresent = ['access_token', 'refresh_token', 'type', 'code', 'error', 'error_code']
@@ -73,6 +76,21 @@ function command() {
 function schedule() { return shell('Schedule','Live schedule synced from the Arctic Foxes Windows app.',`<section class="card">${cardTitle(`Team schedule · ${phase1Data?.schedule?.length || 0} entries`,'Supabase read-only')}<div class="schedule-list">${(phase1Data?.schedule || []).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).map(game=>`<div class="schedule-item"><div class="schedule-date"><strong>${escapeHtml(new Date(`${game.date}T00:00:00`).toLocaleDateString(undefined,{month:'short',day:'2-digit'}).toUpperCase())}</strong>${escapeHtml(String(game.date).slice(0,4))}</div><div><h3>${escapeHtml(game.opponent)}</h3><p>${escapeHtml(game.home_away)} · ${escapeHtml(game.location || 'Location unavailable')}${game.time ? ` · ${escapeHtml(game.time)}` : ''}</p></div><span class="tag">${escapeHtml(game.game_type)}</span></div>`).join('') || '<div class="empty-view"><h2>No schedule entries</h2><p>No synced schedule entries are available for this team.</p></div>'}</div></section>`); }
 function stats() { const edit = can(PERMISSIONS.STATS_EDIT_OFFICIAL, activeStaff); const record = phase1Record(); const teamStats = phase1Data?.teamStats || []; const totals = teamStats.reduce((sum, row) => ({ shots: sum.shots + phase1Number(row.shots_for), pp: sum.pp + phase1Number(row.power_play_success), ppChances: sum.ppChances + phase1Number(row.power_play_chances), foW: sum.foW + phase1Number(row.faceoff_wins), foL: sum.foL + phase1Number(row.faceoff_losses) }), { shots: 0, pp: 0, ppChances: 0, foW: 0, foL: 0 }); return shell('Team Stats','Read-only statistics from the synced Arctic Foxes game data.',`<div class="grid stat-grid">${[['RECORD',`${record.wins}–${record.losses}–${record.ties}`,`${record.games_played} games`],['SHOTS / GAME',(totals.shots / Math.max(teamStats.length,1)).toFixed(1),'From team game stats'],['FACE-OFFS',`${((totals.foW / Math.max(totals.foW + totals.foL,1)) * 100).toFixed(1)}%`,'From team game stats'],['PLAYER-STAT ROWS',String(phase1Data?.playerStats?.length || 0),'Synced player-stat rows']].map(x=>`<div class="card stat-card"><small>${x[0]}</small><strong>${x[1]}</strong><span>${x[2]}</span></div>`).join('')}</div><section class="card">${cardTitle('Season overview','Supabase read-only')}${edit ? '<span class="permission-lock">Official stat editing remains disabled in this web read-only phase.</span>' : '<span class="permission-lock">Statistics are read-only for this phase.</span>'}<div class="table-wrap"><table class="data-table"><thead><tr><th>Metric</th><th>Total</th><th>Average / rate</th></tr></thead><tbody>${[['Goals for',record.goals_for, (record.goals_for / Math.max(record.games_played,1)).toFixed(2)],['Goals against',record.goals_against,(record.goals_against / Math.max(record.games_played,1)).toFixed(2)],['Shots on goal',totals.shots,(totals.shots / Math.max(teamStats.length,1)).toFixed(1)],['Power-play successes',totals.pp,`${totals.ppChances ? ((totals.pp / totals.ppChances) * 100).toFixed(1) : '0.0'}%`],['Face-off wins',totals.foW,`${((totals.foW / Math.max(totals.foW + totals.foL,1)) * 100).toFixed(1)}%`]].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('')}</tbody></table></div></section>`); }
 function players() { const totals = playerStatTotals(); return shell('Player Profiles','Live roster and basic player stats from Supabase.',`<section class="card">${cardTitle(`Roster · ${phase1Data?.roster?.length || 0} players`,'Supabase read-only')}<div class="table-wrap"><table class="data-table"><thead><tr><th>Player</th><th>Position</th><th>Games</th><th>Goals</th><th>Points</th><th>+ / −</th><th>Status</th></tr></thead><tbody>${(phase1Data?.roster || []).map(player=>{const stat=totals.get(player.source_player_id)||{}; return `<tr><td><div class="player-cell"><span class="player-photo">${escapeHtml(player.jersey_number)}</span><strong>${escapeHtml(player.name)}</strong></div></td><td class="role">${escapeHtml(player.position)}</td><td>${phase1Number(stat.games)}</td><td>${phase1Number(stat.goals)}</td><td>${phase1Number(stat.goals)+phase1Number(stat.assists)}</td><td class="trend-up">${phase1Number(stat.plus_minus)}</td><td><span class="tag">${can(PERMISSIONS.PLAYERS_EVALUATE, activeStaff) ? 'Evaluate' : 'View only'}</span></td></tr>`;}).join('') || '<tr><td colspan="7">No roster data is available.</td></tr>'}</tbody></table></div></section>`); }
+function scouting() {
+  if (phase2ADataError) return shell('Scouting', 'Read-only opponent identities synced from the Windows app.', `<section class="card empty-view"><div class="empty-icon">!</div><h2>Unable to load opponent data</h2><p>${escapeHtml(phase2ADataError)}</p><button class="btn primary" id="retryPhase2AData" type="button">Retry</button></section>`);
+  if (!phase2AData) return shell('Scouting', 'Read-only opponent identities synced from the Windows app.', '<section class="card empty-view"><div class="empty-icon">⌁</div><h2>Loading opponent data</h2><p>Reading verified opponent profiles and players for the selected team.</p></section>');
+  const playersByProfile = new Map();
+  phase2AData.players.forEach(player => {
+    const list = playersByProfile.get(player.opponent_profile_key) || [];
+    list.push(player);
+    playersByProfile.set(player.opponent_profile_key, list);
+  });
+  const cards = phase2AData.profiles.map(profile => {
+    const players = playersByProfile.get(profile.source_profile_key) || [];
+    return `<article class="card opponent-scout-card"><div class="card-title"><h2>${escapeHtml(profile.opponent_name)}</h2><span class="tag">${players.length} player${players.length === 1 ? '' : 's'}</span></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Player</th><th>Number</th><th>Position</th><th>Source</th></tr></thead><tbody>${players.map(player => `<tr><td>${escapeHtml(player.player_name || 'Unknown')}</td><td>${escapeHtml(player.jersey_number || 'Unknown')}</td><td>${escapeHtml(player.position || 'Unknown')}</td><td>${escapeHtml(player.source_kind || 'Local source')}</td></tr>`).join('') || '<tr><td colspan="4">No opponent players are recorded for this profile.</td></tr>'}</tbody></table></div></article>`;
+  }).join('');
+  return shell('Scouting', 'Verified opponent identities only. Private scouting notes and evaluations are not synced in this phase.', `<div class="callout"><strong>${phase2AData.profiles.length} opponent profiles · ${phase2AData.players.length} opponent players</strong><br>Names, jersey numbers, and positions are shown exactly as stored. Missing positions remain Unknown.</div><div class="scouting-grid">${cards || '<section class="card empty-view"><h2>No opponent profiles</h2><p>No verified opponent records are available for this team.</p></section>'}</div>`);
+}
 function admin() {
   const owner = can(PERMISSIONS.ADMIN_USERS, activeStaff);
   return shell('Admin', 'Set up the people and access model for the team.', `${owner
@@ -162,7 +180,46 @@ function bindAdminControls() {
   document.querySelector('#refreshInvites')?.addEventListener('click', loadInviteStatus);
   loadInviteStatus();
 }
-function generic(view) { const titles = { games:['Game Center','One place for game-day details and post-game review.'], scouting:['Scouting','Prepare opponent notes and share the plan with the bench.'], reports:['Coach Reports','Turn team observations into clear, shareable reports.'], settings:['Settings','Configure the team hub experience and future integrations.'] }; const [title, sub] = titles[view]; const goalie = view === 'scouting' && can(PERMISSIONS.GOALIE_ANALYTICS_VIEW, activeStaff); return shell(title, sub, `<section class="card empty-view"><div class="empty-icon">${view === 'settings' ? '⚙' : '✦'}</div><h2>${goalie ? 'Goalie analytics access enabled' : 'Your next workspace layer'}</h2><p>This team workspace reserves the workflow for ${title.toLowerCase()}. ${goalie ? 'Database-provided goalie analytics access is enabled for this membership.' : 'This surface is ready to connect to synced analytics, schedules, scouting notes, reports, and player information.'}</p></section>`); }
+function generic(view) { const titles = { games:['Game Center','One place for game-day details and post-game review.'], reports:['Coach Reports','Turn team observations into clear, shareable reports.'], settings:['Settings','Configure the team hub experience and future integrations.'] }; const [title, sub] = titles[view]; return shell(title, sub, `<section class="card empty-view"><div class="empty-icon">${view === 'settings' ? '⚙' : '✦'}</div><h2>Your next workspace layer</h2><p>This team workspace reserves the workflow for ${title.toLowerCase()}. This surface is ready to connect to synced analytics, schedules, reports, and player information.</p></section>`); }
+
+function renderTeamSwitcher() {
+  const host = document.querySelector('#teamSwitcher');
+  if (!host || !teamContext.memberships.length) return;
+  if (teamContext.memberships.length === 1) {
+    host.innerHTML = `<span class="team-switcher-label">Team</span><strong>${escapeHtml(teamContext.selectedMembership?.teams?.name || 'Selected team')}</strong>`;
+  } else {
+    host.innerHTML = `<label><span class="team-switcher-label">Team</span><select id="teamSelect" aria-label="Selected team">${teamContext.memberships.map(membership => `<option value="${escapeHtml(membership.team_id)}" ${membership.team_id === teamContext.selectedTeamId ? 'selected' : ''}>${escapeHtml(membership.teams?.name || membership.team_id)}</option>`).join('')}</select></label>`;
+    host.querySelector('#teamSelect').addEventListener('change', event => selectTeam(event.target.value));
+  }
+  host.hidden = false;
+}
+
+async function selectTeam(teamId) {
+  const membership = teamContext.memberships.find(item => item.team_id === teamId);
+  if (!membership || teamId === teamContext.selectedTeamId) return;
+  teamContext.selectedTeamId = teamId;
+  teamContext.selectedMembership = membership;
+  authTeam = membership;
+  sessionStorage.setItem('foxes-selected-team-id', teamId);
+  await loadSelectedTeam();
+}
+
+async function loadSelectedTeam() {
+  const membership = teamContext.selectedMembership;
+  if (!membership) return;
+  authTeam = membership;
+  const { data: permissions, error: permissionError } = await supabaseClient.from('role_permissions').select('capability').eq('role_id', membership.role_id);
+  if (permissionError) throw new Error('Team permissions could not be loaded.');
+  authCapabilities = permissions.map(permission => permission.capability);
+  activeStaff = { ...activeStaff, roleId: membership.role_id, role: membership.roles?.label || membership.role_id, capabilities: authCapabilities };
+  phase1Data = null;
+  phase1DataError = '';
+  phase2AData = null;
+  phase2ADataError = '';
+  document.querySelector('#teamStatus').textContent = `${membership.teams?.name || 'Team'} · ${activeStaff.role}`;
+  renderTeamSwitcher();
+  await Promise.all([loadPhase1Data(membership.team_id), loadPhase2AData(membership.team_id)]);
+}
 
 function renderRoleSwitcher() {
   document.querySelector('#userAvatar').textContent = activeStaff.initials;
@@ -179,15 +236,20 @@ function renderRoleSwitcher() {
 }
 function render(view = 'command') {
   if (!can(roleViews[view], activeStaff)) view = 'command';
-  app.innerHTML = phase1DataError
-    ? shell('Team data unavailable', 'The authenticated workspace is available, but the live Phase 1 data could not be read.', `<section class="card empty-view"><div class="empty-icon">!</div><h2>Unable to load synced team data</h2><p>${escapeHtml(phase1DataError)}</p><button class="btn primary" id="retryPhase1Data" type="button">Retry</button></section>`)
-    : !phase1Data
-      ? shell('Loading team data', 'Reading the live Arctic Foxes roster, schedule, games, and stats…', '<section class="card empty-view"><div class="empty-icon">⌁</div><h2>Loading synced team data</h2><p>Please wait while the secure workspace reads your team data.</p></section>')
-      : view === 'command' ? command() : view === 'schedule' ? schedule() : view === 'stats' ? stats() : view === 'players' ? players() : view === 'admin' ? admin() : generic(view);
+  const page = view === 'scouting'
+    ? scouting()
+    : phase1DataError
+      ? shell('Team data unavailable', 'The authenticated workspace is available, but the live Phase 1 data could not be read.', `<section class="card empty-view"><div class="empty-icon">!</div><h2>Unable to load synced team data</h2><p>${escapeHtml(phase1DataError)}</p><button class="btn primary" id="retryPhase1Data" type="button">Retry</button></section>`)
+      : !phase1Data
+        ? shell('Loading team data', 'Reading the live Arctic Foxes roster, schedule, games, and stats…', '<section class="card empty-view"><div class="empty-icon">⌁</div><h2>Loading synced team data</h2><p>Please wait while the secure workspace reads your team data.</p></section>')
+        : view === 'command' ? command() : view === 'schedule' ? schedule() : view === 'stats' ? stats() : view === 'players' ? players() : view === 'admin' ? admin() : generic(view);
+  app.innerHTML = page;
   document.querySelector('#viewCrumb').textContent = viewNames[view]; renderRoleSwitcher();
+  renderTeamSwitcher();
   const seasonPill = document.querySelector('#seasonPill');
   if (seasonPill) seasonPill.firstChild.textContent = phase1Data?.seasonRecord?.season_key || 'Live season';
   document.querySelector('#retryPhase1Data')?.addEventListener('click', () => loadPhase1Data(authTeam.team_id));
+  document.querySelector('#retryPhase2AData')?.addEventListener('click', () => loadPhase2AData(authTeam.team_id));
   if (view === 'admin') bindAdminControls();
   nav.forEach(item => { const allowed = can(roleViews[item.dataset.view], activeStaff); item.hidden = !allowed; item.classList.toggle('active', item.dataset.view === view); item.toggleAttribute('aria-current', item.dataset.view === view); });
   document.querySelector('#sidebar').classList.remove('open'); document.querySelector('#scrim').classList.remove('show'); window.scrollTo(0, 0);
@@ -314,6 +376,28 @@ async function loadPhase1Data(teamId) {
   }
 }
 
+async function loadPhase2AData(teamId) {
+  phase2AData = null;
+  phase2ADataError = '';
+  if (!can(PERMISSIONS.SCOUTING_VIEW, activeStaff)) {
+    phase2AData = { profiles: [], players: [] };
+    render('scouting');
+    return;
+  }
+  try {
+    const [{ data: profiles, error: profileError }, { data: players, error: playerError }] = await Promise.all([
+      supabaseClient.from('phase2_opponent_profiles').select('source_profile_key,opponent_name').eq('team_id', teamId).order('opponent_name'),
+      supabaseClient.from('phase2_opponent_players').select('source_player_key,source_game_id,opponent_profile_key,jersey_number,player_name,position,source_kind').eq('team_id', teamId).order('player_name')
+    ]);
+    if (profileError) throw new Error(`opponent profiles: ${profileError.message}`);
+    if (playerError) throw new Error(`opponent players: ${playerError.message}`);
+    phase2AData = { profiles: profiles || [], players: players || [] };
+  } catch (error) {
+    phase2ADataError = error.message || 'The synced opponent data could not be loaded.';
+  }
+  render('scouting');
+}
+
 async function loadAuthenticatedWorkspace(sessionUser = null) {
   if (activeStaff) return;
   if (workspaceTransitioning) return;
@@ -332,17 +416,18 @@ async function loadAuthenticatedWorkspace(sessionUser = null) {
       showLogin('Your account is authenticated, but no active Arctic Foxes team membership was found.');
       return;
     }
-    authTeam = memberships.find(membership => membership.teams?.slug === 'arctic-foxes-12u-aa') || memberships[0];
-    const { data: permissions, error: permissionError } = await supabaseClient.from('role_permissions').select('capability').eq('role_id', authTeam.role_id);
-    if (permissionError) {
-      showLogin('Your team membership loaded, but permissions could not be loaded.');
-      return;
-    }
     authUser = user;
-    authCapabilities = permissions.map(permission => permission.capability);
-    activeStaff = { id: user.id, name: profile.display_name, initials: profile.display_name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase(), roleId: authTeam.role_id, role: authTeam.roles?.label || authTeam.role_id, capabilities: authCapabilities };
-    document.querySelector('#teamStatus').textContent = `${authTeam.teams?.name || 'Team'} · ${activeStaff.role}`;
-    await loadPhase1Data(authTeam.team_id);
+    teamContext.memberships = memberships;
+    const rememberedTeamId = sessionStorage.getItem('foxes-selected-team-id');
+    const selectedMembership = memberships.find(membership => membership.team_id === rememberedTeamId)
+      || memberships.find(membership => membership.teams?.slug === 'arctic-foxes-12u-aa')
+      || memberships[0];
+    teamContext.selectedTeamId = selectedMembership.team_id;
+    teamContext.selectedMembership = selectedMembership;
+    authTeam = selectedMembership;
+    activeStaff = { id: user.id, name: profile.display_name, initials: profile.display_name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase(), roleId: selectedMembership.role_id, role: selectedMembership.roles?.label || selectedMembership.role_id, capabilities: [] };
+    sessionStorage.setItem('foxes-selected-team-id', selectedMembership.team_id);
+    await loadSelectedTeam();
     appShell.hidden = false;
     appShell.removeAttribute('aria-hidden');
     authScreen.hidden = true;

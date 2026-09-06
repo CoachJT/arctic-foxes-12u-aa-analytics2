@@ -34,7 +34,7 @@ test('partial Auth users are reused through recovery email before application re
 });
 
 test('admin UI is cache-busted to the invite-flow build', () => {
-  assert.match(index, /app\.js\?v=phase1-read-1/);
+  assert.match(index, /app\.js\?v=phase2b-read-1/);
   assert.match(app, /id="inviteForm"/);
   assert.match(app, /id="inviteList"/);
 });

@@ -34,3 +34,26 @@ test('authenticated Phase 1 surfaces no longer contain prototype dashboard value
   assert.doesNotMatch(app, /Mia Chen|Sofia Park|Riverside Ravens|10–3–1|Sample roster view|Prototype view/);
   assert.match(index, /id="seasonPill"/);
 });
+
+test('Phase 2A Scouting reads only the verified opponent tables and scopes both queries by team', () => {
+  assert.match(app, /phase2_opponent_profiles/);
+  assert.match(app, /phase2_opponent_players/);
+  assert.match(app, /select\('source_profile_key,opponent_name'\)\.eq\('team_id', teamId\)/);
+  assert.match(app, /select\('source_player_key,source_game_id,opponent_profile_key,jersey_number,player_name,position,source_kind'\)\.eq\('team_id', teamId\)/);
+  assert.match(app, /position \|\| 'Unknown'/);
+  assert.doesNotMatch(app, /phase2_scouting_reports/);
+  assert.doesNotMatch(app, /phase2_player_evaluations/);
+});
+
+test('authenticated workspace exposes a reusable membership-backed team context', () => {
+  assert.match(app, /let teamContext = \{ memberships: \[\], selectedTeamId: '', selectedMembership: null \}/);
+  assert.match(app, /team_memberships'\)\.select\('team_id,role_id,status,teams\(id,name,slug\),roles\(label\)'\)/);
+  assert.match(app, /sessionStorage\.getItem\('foxes-selected-team-id'\)/);
+  assert.match(app, /function selectTeam\(teamId\)/);
+  assert.match(index, /id="teamSwitcher"/);
+});
+
+test('Phase 2A web integration remains read-only', () => {
+  assert.doesNotMatch(app, /phase2_opponent_profiles[\s\S]{0,300}\.(insert|update|upsert|delete)\(/);
+  assert.doesNotMatch(app, /phase2_opponent_players[\s\S]{0,300}\.(insert|update|upsert|delete)\(/);
+});
