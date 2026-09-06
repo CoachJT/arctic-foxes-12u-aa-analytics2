@@ -14,6 +14,18 @@ Open `web/index.html` in a browser, or serve the repository with any static file
 
 All displayed team data is clearly **sample placeholder data**. It is not authoritative player or team information, and there is no real authentication or cloud synchronization yet.
 
+### GitHub Pages prototype deployment
+
+The workflow in `.github/workflows/deploy-web-pages.yml` publishes only the contents of `web/` as a static GitHub Pages artifact. It runs for changes to `web/` or the workflow itself, and can also be started manually.
+
+To enable it in the repository:
+
+1. In **Settings → Pages**, set **Source** to **GitHub Actions**.
+2. Push this workflow to the repository's `main` branch, or start **Deploy web prototype to GitHub Pages** from the Actions tab.
+3. After the workflow succeeds, open the Pages URL shown in the `github-pages` deployment environment. For a project repository, it will normally be `https://<owner>.github.io/<repository>/`.
+
+The prototype uses relative `./styles.css` and `./app.js` paths, so those assets resolve correctly from the repository Pages subpath. It remains explicitly marked as prototype/sample-data mode; this workflow does not add authentication, cloud synchronization, or backend behavior.
+
 ## Long-term architecture
 
 ```text
