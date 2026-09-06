@@ -50,6 +50,7 @@ const STAFF = Object.freeze([
 ]);
 
 function can(permission, staff) {
+  if (staff?.capabilities) return staff.capabilities.includes(permission);
   return Boolean(staff && ROLE_PERMISSIONS[staff.roleId]?.includes(permission));
 }
 

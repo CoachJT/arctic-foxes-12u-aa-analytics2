@@ -5,10 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#07111e" />
     <title>Arctic Foxes | Team Hub</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=live-auth" />
   </head>
   <body>
-    <div class="app-shell">
+    <div class="auth-screen" id="authScreen" hidden></div>
+    <div class="app-shell" id="appShell" hidden>
       <aside class="sidebar" id="sidebar">
         <div class="brand">
           <div class="brand-mark">AF</div>
@@ -32,8 +33,8 @@
           <button class="nav-item" data-view="settings"><span>⚙</span> Settings</button>
         </nav>
         <div class="sidebar-foot">
-          <div class="sample-badge"><span class="pulse"></span> Prototype mode</div>
-          <small>Sample workspace · no live sync</small>
+          <div class="sample-badge"><span class="pulse"></span> Live team workspace</div>
+          <small id="teamStatus">Supabase session active</small>
         </div>
       </aside>
 
@@ -42,7 +43,6 @@
           <button class="mobile-menu" id="openSidebar" aria-label="Open navigation">☰</button>
           <div class="crumbs"><span>Team Hub</span><b>/</b><strong id="viewCrumb">Command Center</strong></div>
           <div class="top-actions">
-            <label class="role-switcher" id="roleSwitcher"><span>Prototype role</span><select id="prototypeRole" aria-label="Prototype testing role"></select></label>
             <span class="season-pill">2025–26 <i></i></span>
             <button class="icon-button" aria-label="Notifications">♢<em>3</em></button>
             <div class="user-menu"><div class="avatar" id="userAvatar">JK</div><span id="userName">Justin Kostosky</span><b>⌄</b></div>
@@ -51,11 +51,12 @@
 
         <div id="app"></div>
 
-        <footer class="footer-note">Arctic Foxes 12U AA · Cloud team hub prototype <span>Sample data only</span></footer>
+        <footer class="footer-note">Arctic Foxes 12U AA · Secure team hub <span>Supabase-authenticated workspace</span></footer>
       </main>
     </div>
     <div class="scrim" id="scrim"></div>
-    <script src="./permissions.js"></script>
-    <script src="./app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="./permissions.js?v=live-auth"></script>
+    <script src="./app.js?v=auth-fix-2"></script>
   </body>
 </html>
