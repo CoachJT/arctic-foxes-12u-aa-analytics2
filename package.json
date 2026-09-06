@@ -3,6 +3,104 @@
   "version": "4.2.1",
   "description": "Arctic Foxes 12U AA coach platform with scouting center, printable game-day reports, usage, trends, settings and video library.",
   "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "npm run dist:portable && npm run dist:installer",
+    "release": "electron-builder --win nsis --publish always",
+    "publish": "electron-builder --win --publish always",
+    "test": "node --test tests/*.test.cjs",
+    "dist:portable": "electron-builder --win portable --publish never --config.directories.output=dist/portable",
+    "dist:installer": "electron-builder --win nsis --publish never"
+  },
+  "devDependencies": {
+    "electron": "^39.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.foxes.hockeyanalytics",
+    "productName": "Arctic Foxes 12U AA Hockey Analytics 4.2",
+    "artifactName": "Arctic-Foxes-12U-AA-Hockey-Analytics-${version}.${ext}",
+    "win": {
+      "target": [
+        "portable",
+        "nsis"
+      ]
+    },
+    "files": [
+      "ice-time.js",
+      "player-learning.js",
+      "player-learning-ui.js",
+      "opponent-model.js",
+      "opponent-ui.js",
+      "opponent-ocr.js",
+      "scoresheet-ocr.ps1",
+      "index.html",
+      "main.js",
+      "README.txt",
+      "package.json",
+      "preload.js",
+      "SETUP_AUTO_UPDATES.txt",
+      "VERSION_2.9_FEATURES.txt",
+      "analytics.js",
+      "release-ui.js",
+      "interface.css",
+      "interface-model.js",
+      "interface.js",
+      "toi-engine.js",
+      "crossing-detector.js",
+      "toi-ui.js",
+      "toi.css",
+      "stats-import.js",
+      "stats-import-ui.js",
+      "vendor/**",
+      "command-model.js",
+      "command-ui.js",
+      "command.css",
+      "film-workspace.js",
+      "scouting.html",
+      "scouting.css",
+      "scouting-model.js",
+      "scouting-vault.js",
+      "scouting-storage.js",
+      "scouting-main.js",
+      "scouting-preload.js",
+      "scouting-ui.js",
+      "scouting-launch.js",
+      "player-tracker.js",
+      "film-follow-ui.js",
+      "film-follow.css",
+      "player-follow-model.js",
+      "player-detector.js",
+      "player-detector-main.js",
+      "!node_modules/onnxruntime-node/bin/napi-v6/linux/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/darwin/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/win32/arm64/**",
+      "film-breaks.js",
+      "schedule-view.js",
+      "schedule-view.css",
+      "scoreboard-clock.js"
+    ],
+    "asarUnpack": [
+      "scoresheet-ocr.ps1",
+      "node_modules/onnxruntime-node/bin/**",
+      "vendor/player-detector/*.onnx"
+    ],
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Arctic Foxes 12U AA Hockey Analytics 4.2"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "CoachJT",
+        "repo": "arctic-foxes-12u-aa-analytics2",
+        "releaseType": "release"
+      }
+    ]
+  },
   "dependencies": {
     "electron-updater": "^6.6.2",
     "onnxruntime-node": "1.22.0"
