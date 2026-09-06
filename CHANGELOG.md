@@ -2,6 +2,12 @@
 
 This file summarizes major milestones. The detailed release notes remain in the existing `RELEASE_*.md` files and are not replaced by this summary.
 
+## v4.2.1
+
+- Applied the Arctic Foxes red, black, white, and ice-gray visual theme across the Windows application.
+- Updated navigation, Command Center, Schedule, Game Center, Scouting, Film, TOI, Player Development, and Foxes Player Rating surfaces for consistent platform branding.
+- Preserved existing analytics, tracking, saved-data, and updater behavior.
+
 ## v4.2.0
 
 - Improved the Film workspace video sizing, cropping behavior, controls, and clip navigation layout.
