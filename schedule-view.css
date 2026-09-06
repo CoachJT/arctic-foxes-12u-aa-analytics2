@@ -12,3 +12,11 @@
 .schedule-dayheading418>div{display:flex;gap:8px}.schedule418 .schedule-game-301.past{opacity:1}
 @media(max-width:700px){.ui313 button.schedule-day418{min-height:76px;padding:4px}.schedule-day418 span{font-size:10px;padding:2px}.schedule-nav418 strong{font-size:17px}.schedule-calendar418{gap:2px}}
 .schedule418 .schedule-301-filters[hidden]{display:none!important}.schedule418 .schedule-nav418 button[aria-pressed=true]{background:#c9223c!important;color:#fff!important}.schedule418 button.schedule-day418[aria-pressed=true]{border:2px solid #ef4760!important;background:#253349!important}
+/* Arctic Foxes schedule hierarchy. */
+body.ui313 .schedule-next418{background:#241417!important;border-left-color:#D71920!important}
+body.ui313 .schedule-next418 span{color:#B7BBC1!important}
+body.ui313 .schedule-nav418 button[aria-pressed=true]{background:#D71920!important;color:#FFFFFF!important}
+body.ui313 button.schedule-day418{background:#17191C!important;border-color:#3b4047!important;color:#FFFFFF!important}
+body.ui313 button.schedule-day418 span{background:#25292e!important;color:#B7BBC1!important}
+body.ui313 button.schedule-day418.today b{color:#D71920!important}
+body.ui313 button.schedule-day418[aria-pressed=true]{border-color:#D71920!important;background:#35171a!important}
