@@ -18,7 +18,10 @@ let phase1Data = null;
 let phase1DataError = '';
 let phase2AData = null;
 let phase2ADataError = '';
-let teamContext = { memberships: [], selectedTeamId: '', selectedMembership: null };
+const teamContextManager = window.FoxesTeamContext.createTeamContext({ client: supabaseClient });
+const seasonContextManager = window.FoxesSeasonContext.createSeasonContext({ client: supabaseClient });
+const teamContext = teamContextManager.context;
+const seasonContext = seasonContextManager.context;
 const hashParams = new URLSearchParams(location.hash.replace(/^#/, ''));
 const queryParams = new URLSearchParams(location.search);
 const authCallbackPresent = ['access_token', 'refresh_token', 'type', 'code', 'error', 'error_code']
@@ -195,13 +198,32 @@ function renderTeamSwitcher() {
 }
 
 async function selectTeam(teamId) {
-  const membership = teamContext.memberships.find(item => item.team_id === teamId);
-  if (!membership || teamId === teamContext.selectedTeamId) return;
-  teamContext.selectedTeamId = teamId;
-  teamContext.selectedMembership = membership;
-  authTeam = membership;
-  sessionStorage.setItem('foxes-selected-team-id', teamId);
+  if (teamId === teamContext.selectedTeamId) return;
+  teamContextManager.select(teamId);
   await loadSelectedTeam();
+}
+
+function renderSeasonSwitcher() {
+  const host = document.querySelector('#seasonSwitcher');
+  if (!host || !seasonContext.seasons.length) return;
+  if (seasonContext.seasons.length === 1) {
+    host.innerHTML = `<span class="season-switcher-label">Season</span><strong>${escapeHtml(seasonContext.selectedSeason?.name || seasonContext.selectedSeason?.season_key || 'Selected season')}</strong>`;
+  } else {
+    host.innerHTML = `<label><span class="season-switcher-label">Season</span><select id="seasonSelect" aria-label="Selected season">${seasonContext.seasons.map(season => `<option value="${escapeHtml(season.id)}" ${season.id === seasonContext.selectedSeasonId ? 'selected' : ''}>${escapeHtml(season.name || season.season_key)}</option>`).join('')}</select></label>`;
+    host.querySelector('#seasonSelect').addEventListener('change', event => selectSeason(event.target.value));
+  }
+  host.hidden = false;
+}
+
+async function selectSeason(seasonId) {
+  if (seasonId === seasonContext.selectedSeasonId) return;
+  seasonContextManager.select(seasonId);
+  phase1Data = null;
+  phase1DataError = '';
+  phase2AData = null;
+  phase2ADataError = '';
+  render();
+  await Promise.all([loadPhase1Data(authTeam.team_id), loadPhase2AData(authTeam.team_id)]);
 }
 
 async function loadSelectedTeam() {
@@ -216,8 +238,11 @@ async function loadSelectedTeam() {
   phase1DataError = '';
   phase2AData = null;
   phase2ADataError = '';
+  render();
+  await seasonContextManager.load(membership.team_id, membership.teams?.default_season_id);
   document.querySelector('#teamStatus').textContent = `${membership.teams?.name || 'Team'} · ${activeStaff.role}`;
   renderTeamSwitcher();
+  renderSeasonSwitcher();
   await Promise.all([loadPhase1Data(membership.team_id), loadPhase2AData(membership.team_id)]);
 }
 
@@ -246,8 +271,9 @@ function render(view = 'command') {
   app.innerHTML = page;
   document.querySelector('#viewCrumb').textContent = viewNames[view]; renderRoleSwitcher();
   renderTeamSwitcher();
+  renderSeasonSwitcher();
   const seasonPill = document.querySelector('#seasonPill');
-  if (seasonPill) seasonPill.firstChild.textContent = phase1Data?.seasonRecord?.season_key || 'Live season';
+  if (seasonPill) seasonPill.firstChild.textContent = seasonContext.selectedSeason?.name || phase1Data?.seasonRecord?.season_key || 'Live season';
   document.querySelector('#retryPhase1Data')?.addEventListener('click', () => loadPhase1Data(authTeam.team_id));
   document.querySelector('#retryPhase2AData')?.addEventListener('click', () => loadPhase2AData(authTeam.team_id));
   if (view === 'admin') bindAdminControls();
@@ -408,25 +434,24 @@ async function loadAuthenticatedWorkspace(sessionUser = null) {
       showLogin();
       return;
     }
-    const [{ data: profile, error: profileError }, { data: memberships, error: membershipError }] = await Promise.all([
-      supabaseClient.from('profiles').select('id,display_name').eq('id', user.id).single(),
-      supabaseClient.from('team_memberships').select('team_id,role_id,status,teams(id,name,slug),roles(label)').eq('user_id', user.id).eq('status', 'active')
-    ]);
-    if (profileError || membershipError || !profile || !memberships?.length) {
-      showLogin('Your account is authenticated, but no active Arctic Foxes team membership was found.');
+    const { data: profile, error: profileError } = await supabaseClient.from('profiles').select('id,display_name').eq('id', user.id).single();
+    let membershipContext;
+    try {
+      membershipContext = await teamContextManager.load(user.id);
+    } catch (error) {
+      membershipContext = null;
+      console.error('Could not load team memberships:', error);
+    }
+    const memberships = membershipContext?.memberships || [];
+    const membershipError = membershipContext?.error;
+    if (profileError || membershipError || !profile || !memberships.length) {
+      showLogin('Your account is authenticated, but no active team membership was found.');
       return;
     }
     authUser = user;
-    teamContext.memberships = memberships;
-    const rememberedTeamId = sessionStorage.getItem('foxes-selected-team-id');
-    const selectedMembership = memberships.find(membership => membership.team_id === rememberedTeamId)
-      || memberships.find(membership => membership.teams?.slug === 'arctic-foxes-12u-aa')
-      || memberships[0];
-    teamContext.selectedTeamId = selectedMembership.team_id;
-    teamContext.selectedMembership = selectedMembership;
+    const selectedMembership = teamContext.selectedMembership;
     authTeam = selectedMembership;
     activeStaff = { id: user.id, name: profile.display_name, initials: profile.display_name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase(), roleId: selectedMembership.role_id, role: selectedMembership.roles?.label || selectedMembership.role_id, capabilities: [] };
-    sessionStorage.setItem('foxes-selected-team-id', selectedMembership.team_id);
     await loadSelectedTeam();
     appShell.hidden = false;
     appShell.removeAttribute('aria-hidden');
