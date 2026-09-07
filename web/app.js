@@ -927,9 +927,24 @@ if (recoveryCallbackPresent) {
   appShell.hidden = false;
   render();
 } else {
-  showLoading();
-  loadAuthenticatedWorkspace().catch(() => {
-    workspaceTransitioning = false;
-    showLogin('Unable to restore your Supabase session.');
-  });
+  // Login-first bootstrap: unauthenticated visitors always see the sign-in
+  // screen immediately while an existing Supabase session is restored.
+  showLogin();
+
+  supabaseClient.auth.getSession()
+    .then(({ data: { session }, error }) => {
+      if (error) throw error;
+
+      if (session?.user) {
+        showLoading();
+        return loadAuthenticatedWorkspace(session.user);
+      }
+
+      return null;
+    })
+    .catch(error => {
+      console.error('Unable to restore Supabase session:', error);
+      workspaceTransitioning = false;
+      showLogin('Unable to restore your Supabase session.');
+    });
 }
