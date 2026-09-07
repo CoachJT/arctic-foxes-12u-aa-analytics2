@@ -44,8 +44,11 @@
           <button class="mobile-menu" id="openSidebar" aria-label="Open navigation">☰</button>
           <div class="crumbs"><span>Team Hub</span><b>/</b><strong id="viewCrumb">Command Center</strong></div>
           <div class="top-actions">
+            <div id="organizationSwitcher" class="organization-switcher" hidden></div>
             <div id="teamSwitcher" class="team-switcher" hidden></div>
             <div id="seasonSwitcher" class="season-switcher" hidden></div>
+            <span id="workspaceRole" class="workspace-indicator">No workspace</span>
+            <span id="workspacePlan" class="workspace-indicator">No plan</span>
             <span class="season-pill" id="seasonPill">Live season <i></i></span>
             <button class="icon-button" aria-label="Notifications">♢<em>3</em></button>
             <div class="user-menu"><div class="avatar" id="userAvatar">JK</div><span id="userName">Justin Kostosky</span><b>⌄</b></div>
@@ -63,6 +66,9 @@
     <script src="./platform-branding.js?v=pucknexus-1"></script>
     <script src="./team-context.js?v=multi-team-1"></script>
     <script src="./season-context.js?v=multi-team-1"></script>
+    <script src="./organization-context.js?v=stage-e-1"></script>
+    <script src="./workspace-access.js?v=stage-e-1"></script>
+    <script src="./entitlements.js?v=stage-e-1"></script>
     <script src="./app.js?v=multi-team-1"></script>
   </body>
 </html>

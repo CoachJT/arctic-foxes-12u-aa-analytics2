@@ -8,11 +8,15 @@ const supabaseClient = window.supabase.createClient(
   'https://yshbvrumzusmwlprfcnr.supabase.co',
   'sb_publishable_PFK2d1or62DYpk3VxarJwA_Anazyv7D'
 );
+const workspaceAccessManager = window.FoxesWorkspaceAccess.createWorkspaceAccess({ client: supabaseClient });
+const organizationContextManager = window.FoxesOrganizationContext.createOrganizationContext();
+const entitlements = window.FoxesEntitlements.createEntitlements();
 const INVITE_FUNCTION = 'invite-staff';
 let activeStaff = null;
 let authUser = null;
 let authTeam = null;
 let authCapabilities = [];
+let currentWorkspace = null;
 let recoveryMode = false;
 let workspaceTransitioning = false;
 let phase1Data = null;
@@ -36,10 +40,11 @@ const prototypeMode = !authCallbackPresent
 
 const viewNames = { command: 'Command Center', schedule: 'Schedule', stats: 'Team Stats', players: 'Player Profiles', games: 'Game Center', scouting: 'Scouting', reports: 'Coach Reports', development: 'Player Development', admin: 'Admin', settings: 'Settings' };
 const roleViews = { command: PERMISSIONS.DASHBOARD_VIEW, schedule: PERMISSIONS.SCHEDULE_VIEW, stats: PERMISSIONS.STATS_VIEW, players: PERMISSIONS.PLAYERS_VIEW, games: PERMISSIONS.GAMES_VIEW, scouting: PERMISSIONS.SCOUTING_VIEW, reports: PERMISSIONS.REPORTS_VIEW, development: PERMISSIONS.PLAYERS_VIEW, admin: PERMISSIONS.ADMIN_USERS, settings: PERMISSIONS.DASHBOARD_VIEW };
+const viewFeatures = { command: 'dashboard', schedule: 'schedule', stats: 'stats', players: 'players', games: 'games', scouting: 'scouting', reports: 'reports', development: 'players', admin: 'admin', settings: 'dashboard' };
 
 function cardTitle(title, link = '') { return `<div class="card-title"><h2>${title}</h2>${link ? `<a href="#">${link} →</a>` : ''}</div>`; }
-function tenantName() { return seasonContext.branding?.display_name || authTeam?.teams?.name || 'Selected team'; }
-function tenantSeasonName() { return seasonContext.selectedSeason?.name || phase1Data?.seasonRecord?.season_key || 'Live season'; }
+function tenantName() { return currentWorkspace?.branding?.display_name || currentWorkspace?.team_name || seasonContext.branding?.display_name || authTeam?.teams?.name || 'Selected team'; }
+function tenantSeasonName() { return currentWorkspace?.season_name || seasonContext.selectedSeason?.name || phase1Data?.seasonRecord?.season_key || 'Live season'; }
 function shell(title, subtitle, body) { return `<div class="page-head"><div><div class="eyebrow">${PLATFORM.name} · ${escapeHtml(tenantName())} workspace</div><h1>${title}</h1><p>${subtitle}</p></div></div>${body}`; }
 function notice(text) { return `<div class="callout prototype-note">${text}</div>`; }
 function phase1Number(value) { return Number.isFinite(Number(value)) ? Number(value) : 0; }
@@ -245,13 +250,27 @@ function bindAdminControls() {
 }
 function generic(view) { const titles = { games:['Game Center','One place for game-day details and post-game review.'], reports:['Coach Reports','Turn team observations into clear, shareable reports.'], settings:['Settings','Configure the team hub experience and future integrations.'] }; const [title, sub] = titles[view]; return shell(title, sub, `<section class="card empty-view"><div class="empty-icon">${view === 'settings' ? '⚙' : '✦'}</div><h2>Your next workspace layer</h2><p>This team workspace reserves the workflow for ${title.toLowerCase()}. This surface is ready to connect to synced analytics, schedules, reports, and player information.</p></section>`); }
 
+function renderOrganizationSwitcher() {
+  const host = document.querySelector('#organizationSwitcher');
+  const organizations = organizationContextManager.context.organizations;
+  if (!host || !organizations.length) return;
+  if (organizations.length === 1) {
+    host.innerHTML = `<span class="organization-switcher-label">Org</span><strong>${escapeHtml(organizations[0].name)}</strong>`;
+  } else {
+    host.innerHTML = `<label><span class="organization-switcher-label">Org</span><select id="organizationSelect" aria-label="Selected organization">${organizations.map(organization => `<option value="${escapeHtml(organization.id)}" ${organization.id === organizationContextManager.context.selectedOrganizationId ? 'selected' : ''}>${escapeHtml(organization.name)}</option>`).join('')}</select></label>`;
+    host.querySelector('#organizationSelect').addEventListener('change', event => selectOrganization(event.target.value));
+  }
+  host.hidden = false;
+}
+
 function renderTeamSwitcher() {
   const host = document.querySelector('#teamSwitcher');
-  if (!host || !teamContext.memberships.length) return;
-  if (teamContext.memberships.length === 1) {
+  const teams = organizationContextManager.teamsForSelectedOrganization(workspaceAccessManager.context.workspaces);
+  if (!host || !teams.length) return;
+  if (teams.length === 1) {
     host.innerHTML = `<span class="team-switcher-label">Team</span><strong>${escapeHtml(teamContext.selectedMembership?.teams?.name || 'Selected team')}</strong>`;
   } else {
-    host.innerHTML = `<label><span class="team-switcher-label">Team</span><select id="teamSelect" aria-label="Selected team">${teamContext.memberships.map(membership => `<option value="${escapeHtml(membership.team_id)}" ${membership.team_id === teamContext.selectedTeamId ? 'selected' : ''}>${escapeHtml(membership.teams?.name || membership.team_id)}</option>`).join('')}</select></label>`;
+    host.innerHTML = `<label><span class="team-switcher-label">Team</span><select id="teamSelect" aria-label="Selected team">${teams.map(workspace => `<option value="${escapeHtml(workspace.team_id)}" ${workspace.team_id === teamContext.selectedTeamId ? 'selected' : ''}>${escapeHtml(workspace.team_name || workspace.team_id)}</option>`).join('')}</select></label>`;
     host.querySelector('#teamSelect').addEventListener('change', event => selectTeam(event.target.value));
   }
   host.hidden = false;
@@ -270,13 +289,27 @@ function renderTenantBranding() {
   if (tenantNameNode) tenantNameNode.textContent = displayName;
   if (tenantSeasonLabel) tenantSeasonLabel.textContent = seasonName;
   if (tenantFooter) tenantFooter.textContent = displayName;
-  if (teamStatus) teamStatus.textContent = `${displayName} · ${activeStaff?.role || 'Team workspace'}`;
+  if (teamStatus) teamStatus.textContent = `${displayName} · ${activeStaff?.role || 'Team workspace'}${currentWorkspace?.plan_id ? ` · ${currentWorkspace.plan_id}` : ''}`;
+}
+
+async function selectOrganization(organizationId) {
+  if (organizationId === organizationContextManager.context.selectedOrganizationId) return;
+  organizationContextManager.select(organizationId);
+  const next = organizationContextManager.teamsForSelectedOrganization(workspaceAccessManager.context.workspaces)[0];
+  if (!next) {
+    clearTenantState();
+    render();
+    return;
+  }
+  await activateWorkspace(next.organization_id, next.team_id, next.season_id);
 }
 
 async function selectTeam(teamId) {
   if (teamId === teamContext.selectedTeamId) return;
-  teamContextManager.select(teamId);
-  await loadSelectedTeam();
+  const next = organizationContextManager.teamsForSelectedOrganization(workspaceAccessManager.context.workspaces)
+    .find(workspace => workspace.team_id === teamId);
+  if (!next) throw new Error('That team is not authorized in the selected organization.');
+  await activateWorkspace(next.organization_id, next.team_id, next.season_id);
 }
 
 function renderSeasonSwitcher() {
@@ -293,34 +326,100 @@ function renderSeasonSwitcher() {
 
 async function selectSeason(seasonId) {
   if (seasonId === seasonContext.selectedSeasonId) return;
-  seasonContextManager.select(seasonId);
+  if (!currentWorkspace) return;
+  await activateWorkspace(currentWorkspace.organization_id, currentWorkspace.team_id, seasonId);
+}
+
+function clearTenantState() {
   phase1Data = null;
   phase1DataError = '';
   phase2AData = null;
   phase2ADataError = '';
+  authTeam = null;
+  authCapabilities = [];
+  currentWorkspace = null;
+  entitlements.clear();
+  workspaceAccessManager.clearWorkspace();
+  teamContextManager.clearSelection();
+  seasonContextManager.clear();
+  const organizationSwitcher = document.querySelector('#organizationSwitcher');
+  const teamSwitcher = document.querySelector('#teamSwitcher');
+  const seasonSwitcher = document.querySelector('#seasonSwitcher');
+  if (organizationSwitcher) organizationSwitcher.hidden = true;
+  if (teamSwitcher) teamSwitcher.hidden = true;
+  if (seasonSwitcher) seasonSwitcher.hidden = true;
+  if (app) app.innerHTML = '';
+}
+
+async function activateWorkspace(organizationId, teamId, seasonId = null) {
+  if (workspaceTransitioning) return;
+  workspaceTransitioning = true;
+  clearTenantState();
   render();
-  await Promise.all([loadPhase1Data(authTeam.team_id), loadPhase2AData(authTeam.team_id)]);
+  try {
+    const workspace = await workspaceAccessManager.resolveWorkspace(organizationId, teamId, seasonId);
+    currentWorkspace = workspace;
+    workspaceAccessManager.persistPreference(workspace);
+    organizationContextManager.select(workspace.organization_id);
+    teamContextManager.selectWorkspace(workspace);
+    authTeam = teamContext.selectedMembership;
+    authCapabilities = workspace.effective_capabilities.slice();
+    entitlements.setWorkspace(workspace);
+    activeStaff = {
+      ...activeStaff,
+      roleId: workspace.role_id,
+      role: workspace.role_label,
+      capabilities: authCapabilities
+    };
+    const seasonState = await seasonContextManager.load(workspace.team_id, workspace.season_id, workspace);
+    if (workspace.season_id && seasonState.selectedSeasonId !== workspace.season_id) {
+      throw new Error('The selected season is not available for this authorized team.');
+    }
+    render();
+    await Promise.all([loadPhase1Data(workspace.team_id), loadPhase2AData(workspace.team_id)]);
+  } catch (error) {
+    clearTenantState();
+    console.error('Could not resolve the selected workspace:', error);
+    render();
+    throw error;
+  } finally {
+    workspaceTransitioning = false;
+  }
 }
 
 async function loadSelectedTeam() {
   const membership = teamContext.selectedMembership;
-  if (!membership) return;
-  authTeam = membership;
-  const { data: permissions, error: permissionError } = await supabaseClient.from('role_permissions').select('capability').eq('role_id', membership.role_id);
-  if (permissionError) throw new Error('Team permissions could not be loaded.');
-  authCapabilities = permissions.map(permission => permission.capability);
-  activeStaff = { ...activeStaff, roleId: membership.role_id, role: membership.roles?.label || membership.role_id, capabilities: authCapabilities };
-  phase1Data = null;
-  phase1DataError = '';
-  phase2AData = null;
-  phase2ADataError = '';
-  render();
-  await seasonContextManager.load(membership.team_id, membership.teams?.default_season_id);
-  renderTenantBranding();
-  document.querySelector('#teamStatus').textContent = `${tenantName()} · ${activeStaff.role}`;
-  renderTeamSwitcher();
-  renderSeasonSwitcher();
-  await Promise.all([loadPhase1Data(membership.team_id), loadPhase2AData(membership.team_id)]);
+  const workspace = membership?.workspace;
+  if (!workspace) {
+    await seasonContextManager.load(membership.team_id, membership.teams?.default_season_id);
+    return;
+  }
+  await activateWorkspace(workspace.organization_id, workspace.team_id, workspace.season_id);
+}
+
+function renderWorkspaceIndicators() {
+  const roleNode = document.querySelector('#workspaceRole');
+  const planNode = document.querySelector('#workspacePlan');
+  if (roleNode) roleNode.textContent = currentWorkspace?.role_label || 'No workspace';
+  if (planNode) planNode.textContent = currentWorkspace?.plan_id || 'No plan';
+}
+
+function workspaceAuthorizedForView(view) {
+  return Boolean(currentWorkspace?.authorized)
+    && can(roleViews[view], activeStaff)
+    && entitlements.isFeatureEnabled(viewFeatures[view]);
+}
+
+function noWorkspacePage() {
+  return '<section class="card empty-view"><div class="empty-icon">⌁</div><h2>No authorized workspace</h2><p>Your account is authenticated, but no active team membership is available yet. Accept an approved invitation or ask a workspace owner for access.</p></section>';
+}
+
+function workspaceLoadingPage() {
+  return '<section class="card empty-view"><div class="empty-icon">⌁</div><h2>Resolving workspace</h2><p>Verifying organization, team, season, role, capabilities, and entitlements.</p></section>';
+}
+
+function workspaceUnavailablePage() {
+  return '<section class="card empty-view"><div class="empty-icon">!</div><h2>Workspace unavailable</h2><p>The selected workspace is no longer authorized. Previous workspace data has been cleared.</p></section>';
 }
 
 function renderRoleSwitcher() {
@@ -337,7 +436,14 @@ function renderRoleSwitcher() {
   }
 }
 function render(view = 'command') {
-  if (!can(roleViews[view], activeStaff)) view = 'command';
+  if (!currentWorkspace) {
+    app.innerHTML = workspaceTransitioning
+      ? workspaceLoadingPage()
+      : (authUser ? workspaceUnavailablePage() : noWorkspacePage());
+    renderWorkspaceIndicators();
+    return;
+  }
+  if (!workspaceAuthorizedForView(view)) view = 'command';
   const page = view === 'scouting'
     ? scouting()
     : phase1DataError
@@ -347,6 +453,8 @@ function render(view = 'command') {
         : view === 'command' ? command() : view === 'schedule' ? schedule() : view === 'stats' ? stats() : view === 'players' ? players() : view === 'games' ? gameCenter() : view === 'reports' ? reports() : view === 'development' ? development() : view === 'settings' ? settings() : view === 'admin' ? admin() : generic(view);
   app.innerHTML = page;
   document.querySelector('#viewCrumb').textContent = viewNames[view]; renderRoleSwitcher();
+  renderWorkspaceIndicators();
+  renderOrganizationSwitcher();
   renderTeamSwitcher();
   renderSeasonSwitcher();
   renderTenantBranding();
@@ -355,7 +463,7 @@ function render(view = 'command') {
   document.querySelector('#retryPhase1Data')?.addEventListener('click', () => loadPhase1Data(authTeam.team_id));
   document.querySelector('#retryPhase2AData')?.addEventListener('click', () => loadPhase2AData(authTeam.team_id));
   if (view === 'admin') bindAdminControls();
-  nav.forEach(item => { const allowed = can(roleViews[item.dataset.view], activeStaff); item.hidden = !allowed; item.classList.toggle('active', item.dataset.view === view); item.toggleAttribute('aria-current', item.dataset.view === view); });
+  nav.forEach(item => { const allowed = workspaceAuthorizedForView(item.dataset.view); item.hidden = !allowed; item.classList.toggle('active', item.dataset.view === view); item.toggleAttribute('aria-current', item.dataset.view === view); });
   document.querySelector('#sidebar').classList.remove('open'); document.querySelector('#scrim').classList.remove('show'); window.scrollTo(0, 0);
 }
 nav.forEach(item => item.addEventListener('click', () => render(item.dataset.view)));
@@ -503,7 +611,7 @@ async function loadPhase2AData(teamId) {
 }
 
 async function loadAuthenticatedWorkspace(sessionUser = null) {
-  if (activeStaff) return;
+  if (activeStaff && currentWorkspace) return;
   if (workspaceTransitioning) return;
   workspaceTransitioning = true;
   try {
@@ -513,24 +621,41 @@ async function loadAuthenticatedWorkspace(sessionUser = null) {
       return;
     }
     const { data: profile, error: profileError } = await supabaseClient.from('profiles').select('id,display_name').eq('id', user.id).single();
-    let membershipContext;
+    let workspaces = [];
+    let workspaceError = null;
     try {
-      membershipContext = await teamContextManager.load(user.id);
+      workspaces = await workspaceAccessManager.loadAuthorizedWorkspaces();
     } catch (error) {
-      membershipContext = null;
-      console.error('Could not load team memberships:', error);
+      workspaceError = error;
+      console.error('Could not load authorized workspaces:', error);
     }
-    const memberships = membershipContext?.memberships || [];
-    const membershipError = membershipContext?.error;
-    if (profileError || membershipError || !profile || !memberships.length) {
-      showLogin('Your account is authenticated, but no active team membership was found.');
+    if (profileError || workspaceError || !profile) {
+      showLogin(workspaceError?.message || 'Your authenticated profile could not be loaded.');
       return;
     }
     authUser = user;
-    const selectedMembership = teamContext.selectedMembership;
-    authTeam = selectedMembership;
-    activeStaff = { id: user.id, name: profile.display_name, initials: profile.display_name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase(), roleId: selectedMembership.role_id, role: selectedMembership.roles?.label || selectedMembership.role_id, capabilities: [] };
-    await loadSelectedTeam();
+    activeStaff = {
+      id: user.id,
+      name: profile.display_name,
+      initials: profile.display_name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase(),
+      roleId: '',
+      role: 'Authenticated user',
+      capabilities: []
+    };
+    organizationContextManager.load(workspaces);
+    teamContextManager.setAuthorizedWorkspaces(workspaces);
+    if (!workspaces.length) {
+      clearTenantState();
+      render();
+      appShell.hidden = false;
+      appShell.removeAttribute('aria-hidden');
+      authScreen.hidden = true;
+      authScreen.setAttribute('aria-hidden', 'true');
+      return;
+    }
+    const selected = workspaceAccessManager.chooseWorkspace();
+    workspaceTransitioning = false;
+    await activateWorkspace(selected.organization_id, selected.team_id, selected.season_id);
     appShell.hidden = false;
     appShell.removeAttribute('aria-hidden');
     authScreen.hidden = true;
@@ -538,6 +663,7 @@ async function loadAuthenticatedWorkspace(sessionUser = null) {
   } catch (error) {
     authUser = null;
     activeStaff = null;
+    clearTenantState();
     console.error('Could not load the authenticated workspace:', error);
     showLogin('Unable to load your secure team workspace.');
   } finally {
@@ -553,6 +679,9 @@ async function signOut() {
   }
   authUser = null;
   activeStaff = null;
+  organizationContextManager.clear();
+  teamContextManager.clearSelection();
+  clearTenantState();
   showLogin();
 }
 
@@ -569,6 +698,9 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
   if (!session && activeStaff) {
     authUser = null;
     activeStaff = null;
+    organizationContextManager.clear();
+    teamContextManager.clearSelection();
+    clearTenantState();
     showLogin();
   }
 });

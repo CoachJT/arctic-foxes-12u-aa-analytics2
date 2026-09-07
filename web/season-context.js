@@ -2,9 +2,15 @@
   const FALLBACK_BRANDING = {
     display_name: 'Selected Team',
     short_name: 'PN',
+    logo_url: '',
     primary_color: '#d71920',
     secondary_color: '#0d0e10',
-    accent_color: '#f2f3f4'
+    accent_color: '#f2f3f4',
+    background_color: '',
+    surface_color: '',
+    text_color: '',
+    muted_color: '',
+    border_color: ''
   };
 
   function createSeasonContext({ client, storage = global.sessionStorage }) {
@@ -26,6 +32,14 @@
       root.style.setProperty('--brand-primary', resolved.primary_color);
       root.style.setProperty('--brand-secondary', resolved.secondary_color);
       root.style.setProperty('--brand-accent', resolved.accent_color);
+      root.style.setProperty('--org-primary', resolved.primary_color);
+      root.style.setProperty('--org-secondary', resolved.secondary_color);
+      root.style.setProperty('--org-accent', resolved.accent_color);
+      if (resolved.background_color) root.style.setProperty('--org-background', resolved.background_color);
+      if (resolved.surface_color) root.style.setProperty('--org-surface', resolved.surface_color);
+      if (resolved.text_color) root.style.setProperty('--org-text', resolved.text_color);
+      if (resolved.muted_color) root.style.setProperty('--org-muted', resolved.muted_color);
+      if (resolved.border_color) root.style.setProperty('--org-border', resolved.border_color);
       context.branding = resolved;
       return resolved;
     }
@@ -39,16 +53,26 @@
         || null;
     }
 
-    async function load(teamId, defaultSeasonId = '') {
+    async function load(teamId, defaultSeasonId = '', workspace = null) {
       context.loading = true;
       context.error = '';
       context.seasons = [];
       context.selectedSeasonId = '';
       context.selectedSeason = null;
       applyBranding(null);
+      const seasonsRequest = client.from('seasons')
+        .select('id,team_id,name,season_key,status,starts_on,ends_on')
+        .eq('team_id', teamId)
+        .order('starts_on', { ascending: false, nullsFirst: false });
+      const brandingRequest = workspace
+        ? Promise.resolve({ data: workspace.branding, error: null })
+        : client.from('team_branding')
+          .select('team_id,display_name,short_name,logo_url,primary_color,secondary_color,accent_color,settings')
+          .eq('team_id', teamId)
+          .maybeSingle();
       const [{ data: seasons, error: seasonsError }, { data: branding, error: brandingError }] = await Promise.all([
-        client.from('seasons').select('id,team_id,name,season_key,status,starts_on,ends_on').eq('team_id', teamId).order('starts_on', { ascending: false, nullsFirst: false }),
-        client.from('team_branding').select('team_id,display_name,short_name,logo_url,primary_color,secondary_color,accent_color,settings').eq('team_id', teamId).maybeSingle()
+        seasonsRequest,
+        brandingRequest
       ]);
       if (seasonsError || brandingError) {
         context.loading = false;
@@ -78,7 +102,15 @@
       applyBranding(null);
     }
 
-    return { context, load, select, applyFallbackBranding, FALLBACK_BRANDING };
+    function clear() {
+      context.seasons = [];
+      context.selectedSeasonId = '';
+      context.selectedSeason = null;
+      applyBranding(null);
+      storage?.removeItem('pucknexus-selected-season-id');
+    }
+
+    return { context, load, select, clear, applyFallbackBranding, applyBranding, FALLBACK_BRANDING };
   }
 
   global.FoxesSeasonContext = { createSeasonContext, FALLBACK_BRANDING };
