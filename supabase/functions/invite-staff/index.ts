@@ -7,6 +7,8 @@ const corsHeaders = {
 };
 
 const allowedRoles = new Set(['assistant_goalie', 'assistant']);
+const resendCooldownMs = 60_000;
+const resendCooldowns = new Map<string, number>();
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
   headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -174,6 +176,46 @@ async function inviteStaff(context: Awaited<ReturnType<typeof getOwnerContext>>,
   };
 }
 
+async function resendSetupLink(context: Awaited<ReturnType<typeof getOwnerContext>>, payload: Record<string, unknown>) {
+  const userId = requiredText(payload.userId, 'User', 80);
+  const cooldownKey = `${context.caller.id}:${userId}`;
+  const lastSentAt = resendCooldowns.get(cooldownKey) || 0;
+  const remainingMs = resendCooldownMs - (Date.now() - lastSentAt);
+  if (remainingMs > 0) {
+    throw new Error(`A setup link was sent recently. Try again in ${Math.ceil(remainingMs / 1000)} seconds.`);
+  }
+
+  const { data: membership, error: membershipError } = await context.adminClient
+    .from('team_memberships')
+    .select('user_id,role_id,status')
+    .eq('team_id', context.team.id)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (membershipError) throw membershipError;
+  if (!membership) throw new Error('The staff membership could not be found.');
+  if (membership.status !== 'invited') throw new Error('A setup link is only available for invited staff members.');
+  if (!allowedRoles.has(membership.role_id)) throw new Error('Only assistant staff memberships can receive setup links.');
+
+  const { data: userData, error: userError } = await context.adminClient.auth.admin.getUserById(userId);
+  if (userError || !userData.user?.email) throw userError || new Error('The existing Auth user could not be found.');
+
+  const redirectTo = Deno.env.get('INVITE_REDIRECT_URL') || undefined;
+  resendCooldowns.set(cooldownKey, Date.now());
+  const { error: recoveryError } = await context.publicClient.auth.resetPasswordForEmail(userData.user.email, {
+    ...(redirectTo ? { redirectTo } : {})
+  });
+  if (recoveryError) {
+    resendCooldowns.delete(cooldownKey);
+    throw recoveryError;
+  }
+
+  return {
+    message: 'A new account setup link was sent to the existing Auth user.',
+    status: membership.status,
+    role_id: membership.role_id
+  };
+}
+
 Deno.serve(async request => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (request.method !== 'POST') return json({ error: 'POST is required.' }, 405);
@@ -183,6 +225,7 @@ Deno.serve(async request => {
     const payload = await request.json();
     if (payload?.action === 'list') return json({ invites: await listInvites(context) });
     if (payload?.action === 'invite') return json(await inviteStaff(context, payload));
+    if (payload?.action === 'resend_setup') return json(await resendSetupLink(context, payload));
     return json({ error: 'Unknown invite action.' }, 400);
   } catch (error) {
     console.error('Staff invite request failed:', error instanceof Error ? error.message : 'unknown error');

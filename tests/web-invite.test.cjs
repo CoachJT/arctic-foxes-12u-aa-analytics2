@@ -33,6 +33,22 @@ test('partial Auth users are reused through recovery email before application re
   assert.match(functionSource, /if \(recoveryError\) throw recoveryError[\s\S]*?\.from\('profiles'\)[\s\S]*?\.upsert/);
 });
 
+test('invited members can receive a setup link without changing membership data', () => {
+  assert.match(functionSource, /payload\?\.action === 'resend_setup'/);
+  assert.match(functionSource, /eq\('user_id', userId\)/);
+  assert.match(functionSource, /membership\.status !== 'invited'/);
+  assert.match(functionSource, /auth\.admin\.getUserById\(userId\)/);
+  assert.match(functionSource, /resetPasswordForEmail\(userData\.user\.email/);
+  assert.match(functionSource, /INVITE_REDIRECT_URL/);
+  assert.match(functionSource, /resendCooldownMs/);
+  assert.match(functionSource, /role_id: membership\.role_id/);
+  assert.doesNotMatch(functionSource, /resendSetupLink[\s\S]*?\.insert\(/);
+  assert.doesNotMatch(functionSource, /resendSetupLink[\s\S]*?\.upsert\(/);
+  assert.match(app, /data-user-id="\$\{escapeHtml\(invite\.user_id\)\}"/);
+  assert.match(app, /action: 'resend_setup'/);
+  assert.match(app, /Resend setup link/);
+});
+
 test('admin UI is cache-busted to the invite-flow build', () => {
   assert.match(index, /app\.js\?v=multi-team-1/);
   assert.match(app, /id="inviteForm"/);

@@ -138,7 +138,7 @@ function renderInviteList(invites = []) {
     list.innerHTML = '<span class="permission-lock">No pending staff invites.</span>';
     return;
   }
-  list.innerHTML = invites.map(invite => `<div class="invite-row"><div><strong>${escapeHtml(invite.display_name || 'Pending staff member')}</strong><small>${escapeHtml(invite.email || 'Email hidden')}</small></div><span>${escapeHtml(inviteRoleLabel(invite.role_id))}</span><b class="invite-badge ${escapeHtml(invite.status)}">${escapeHtml(invite.status)}</b></div>`).join('');
+  list.innerHTML = invites.map(invite => `<div class="invite-row"><div><strong>${escapeHtml(invite.display_name || 'Pending staff member')}</strong><small>${escapeHtml(invite.email || 'Email hidden')}</small></div><span>${escapeHtml(inviteRoleLabel(invite.role_id))}</span><b class="invite-badge ${escapeHtml(invite.status)}">${escapeHtml(invite.status)}</b>${invite.status === 'invited' ? `<button class="btn resend-setup-button" type="button" data-user-id="${escapeHtml(invite.user_id)}">Resend setup link</button>` : ''}</div>`).join('');
 }
 
 async function loadInviteStatus() {
@@ -180,11 +180,42 @@ async function submitStaffInvite(event) {
   await loadInviteStatus();
 }
 
+async function resendSetupLink(event) {
+  const button = event.currentTarget;
+  const userId = button.dataset.userId;
+  if (!userId || button.disabled) return;
+  button.disabled = true;
+  button.textContent = 'Sending…';
+  inviteStatusMessage('Verifying the invited membership and sending a new setup link…');
+  const { data, error } = await supabaseClient.functions.invoke(INVITE_FUNCTION, {
+    body: { action: 'resend_setup', userId }
+  });
+  if (error) {
+    console.warn('Setup link resend rejected:', error);
+    inviteStatusMessage(error.message || 'The setup link could not be sent.', 'error');
+    button.disabled = false;
+    button.textContent = 'Resend setup link';
+    return;
+  }
+  inviteStatusMessage(data?.message || 'A new setup link was sent.', 'success');
+  button.textContent = 'Sent recently';
+  window.setTimeout(() => {
+    if (button.isConnected) {
+      button.disabled = false;
+      button.textContent = 'Resend setup link';
+    }
+  }, 60_000);
+}
+
 function bindAdminControls() {
   const form = document.querySelector('#inviteForm');
   if (!form) return;
   form.addEventListener('submit', submitStaffInvite);
   document.querySelector('#refreshInvites')?.addEventListener('click', loadInviteStatus);
+  document.querySelector('#inviteList')?.addEventListener('click', event => {
+    const button = event.target.closest('.resend-setup-button');
+    if (button) resendSetupLink({ currentTarget: button });
+  });
   loadInviteStatus();
 }
 function generic(view) { const titles = { games:['Game Center','One place for game-day details and post-game review.'], reports:['Coach Reports','Turn team observations into clear, shareable reports.'], settings:['Settings','Configure the team hub experience and future integrations.'] }; const [title, sub] = titles[view]; return shell(title, sub, `<section class="card empty-view"><div class="empty-icon">${view === 'settings' ? '⚙' : '✦'}</div><h2>Your next workspace layer</h2><p>This team workspace reserves the workflow for ${title.toLowerCase()}. This surface is ready to connect to synced analytics, schedules, reports, and player information.</p></section>`); }
