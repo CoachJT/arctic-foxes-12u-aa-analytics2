@@ -1,4 +1,5 @@
 const { PERMISSIONS, STAFF, can } = window.FoxesPermissions;
+const { PLATFORM, applyDocumentBrand } = window.FoxesPlatformBranding;
 const app = document.querySelector('#app');
 const nav = document.querySelectorAll('.nav-item');
 const authScreen = document.querySelector('#authScreen');
@@ -22,6 +23,7 @@ const teamContextManager = window.FoxesTeamContext.createTeamContext({ client: s
 const seasonContextManager = window.FoxesSeasonContext.createSeasonContext({ client: supabaseClient });
 const teamContext = teamContextManager.context;
 const seasonContext = seasonContextManager.context;
+applyDocumentBrand();
 const hashParams = new URLSearchParams(location.hash.replace(/^#/, ''));
 const queryParams = new URLSearchParams(location.search);
 const authCallbackPresent = ['access_token', 'refresh_token', 'type', 'code', 'error', 'error_code']
@@ -36,7 +38,9 @@ const viewNames = { command: 'Command Center', schedule: 'Schedule', stats: 'Tea
 const roleViews = { command: PERMISSIONS.DASHBOARD_VIEW, schedule: PERMISSIONS.SCHEDULE_VIEW, stats: PERMISSIONS.STATS_VIEW, players: PERMISSIONS.PLAYERS_VIEW, games: PERMISSIONS.GAMES_VIEW, scouting: PERMISSIONS.SCOUTING_VIEW, reports: PERMISSIONS.REPORTS_VIEW, admin: PERMISSIONS.ADMIN_USERS, settings: PERMISSIONS.DASHBOARD_VIEW };
 
 function cardTitle(title, link = '') { return `<div class="card-title"><h2>${title}</h2>${link ? `<a href="#">${link} →</a>` : ''}</div>`; }
-function shell(title, subtitle, body) { return `<div class="page-head"><div><div class="eyebrow">Arctic Foxes · Live team workspace</div><h1>${title}</h1><p>${subtitle}</p></div></div>${body}`; }
+function tenantName() { return seasonContext.branding?.display_name || authTeam?.teams?.name || 'Selected team'; }
+function tenantSeasonName() { return seasonContext.selectedSeason?.name || phase1Data?.seasonRecord?.season_key || 'Live season'; }
+function shell(title, subtitle, body) { return `<div class="page-head"><div><div class="eyebrow">${PLATFORM.name} · ${escapeHtml(tenantName())} workspace</div><h1>${title}</h1><p>${subtitle}</p></div></div>${body}`; }
 function notice(text) { return `<div class="callout prototype-note">${text}</div>`; }
 function phase1Number(value) { return Number.isFinite(Number(value)) ? Number(value) : 0; }
 function phase1Date(value) { return value ? new Date(`${value}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' }) : 'Date unavailable'; }
@@ -76,8 +80,8 @@ function command() {
   const next = (phase1Data?.schedule || []).slice().sort((a, b) => String(a.date).localeCompare(String(b.date)))[0];
   return shell('Good morning, Coach.', 'Here is the live team picture from Supabase.', `<div class="grid hero-grid"><section class="card next-game">${cardTitle('NEXT GAME', 'Schedule')}<div class="game-top"><div class="opponent"><div class="opponent-mark">${escapeHtml(String(next?.opponent || 'AF').slice(0, 2).toUpperCase())}</div><div><p>${next ? `${phase1Date(next.date)} · ${escapeHtml(next.home_away)}` : 'No scheduled games'}</p><h2>${escapeHtml(next?.opponent || 'No upcoming game')}</h2><p>${escapeHtml(next?.location || 'Schedule details unavailable')}${next?.time ? ` · ${escapeHtml(next.time)}` : ''}</p></div></div><span class="home-pill">${escapeHtml(next?.home_away || '—')}</span></div><div class="game-date"><strong>${phase1Data?.schedule?.length || 0} <span>scheduled</span></strong><span>${phase1Data?.games?.length || 0} completed games synced</span></div></section><section class="card record-card">${cardTitle('SEASON RECORD', 'View schedule')}<div class="record"><span class="record-number">${record.wins}<span>–</span>${record.losses}<span>–</span>${record.ties}</span><div class="record-copy"><strong>${record.games_played} games played</strong>${record.goals_for} goals for<br>${record.goals_against} goals against</div></div></section></div><div class="grid stat-grid">${[['GOALS FOR / GAME', (record.goals_for / Math.max(record.games_played, 1)).toFixed(2), 'From synced team games'],['GOALS AGAINST / GAME', (record.goals_against / Math.max(record.games_played, 1)).toFixed(2), 'From synced team games'],['SCHEDULED GAMES', String(phase1Data?.schedule?.length || 0), 'Live Supabase schedule'],['ROSTER', String(phase1Data?.roster?.length || 0), 'Live Supabase roster']].map(x => `<div class="card stat-card"><small>${x[0]}</small><strong>${x[1]}</strong><span>${x[2]}</span></div>`).join('')}</div><div class="grid split"><section class="card">${cardTitle('TOP PLAYERS', 'Player Profiles')}${leaders()}</section><section class="card recent">${cardTitle('RECENT GAMES', 'Game Center')}${recent()}</section></div>`);
 }
-function schedule() { return shell('Schedule','Live schedule synced from the Arctic Foxes Windows app.',`<section class="card">${cardTitle(`Team schedule · ${phase1Data?.schedule?.length || 0} entries`,'Supabase read-only')}<div class="schedule-list">${(phase1Data?.schedule || []).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).map(game=>`<div class="schedule-item"><div class="schedule-date"><strong>${escapeHtml(new Date(`${game.date}T00:00:00`).toLocaleDateString(undefined,{month:'short',day:'2-digit'}).toUpperCase())}</strong>${escapeHtml(String(game.date).slice(0,4))}</div><div><h3>${escapeHtml(game.opponent)}</h3><p>${escapeHtml(game.home_away)} · ${escapeHtml(game.location || 'Location unavailable')}${game.time ? ` · ${escapeHtml(game.time)}` : ''}</p></div><span class="tag">${escapeHtml(game.game_type)}</span></div>`).join('') || '<div class="empty-view"><h2>No schedule entries</h2><p>No synced schedule entries are available for this team.</p></div>'}</div></section>`); }
-function stats() { const edit = can(PERMISSIONS.STATS_EDIT_OFFICIAL, activeStaff); const record = phase1Record(); const teamStats = phase1Data?.teamStats || []; const totals = teamStats.reduce((sum, row) => ({ shots: sum.shots + phase1Number(row.shots_for), pp: sum.pp + phase1Number(row.power_play_success), ppChances: sum.ppChances + phase1Number(row.power_play_chances), foW: sum.foW + phase1Number(row.faceoff_wins), foL: sum.foL + phase1Number(row.faceoff_losses) }), { shots: 0, pp: 0, ppChances: 0, foW: 0, foL: 0 }); return shell('Team Stats','Read-only statistics from the synced Arctic Foxes game data.',`<div class="grid stat-grid">${[['RECORD',`${record.wins}–${record.losses}–${record.ties}`,`${record.games_played} games`],['SHOTS / GAME',(totals.shots / Math.max(teamStats.length,1)).toFixed(1),'From team game stats'],['FACE-OFFS',`${((totals.foW / Math.max(totals.foW + totals.foL,1)) * 100).toFixed(1)}%`,'From team game stats'],['PLAYER-STAT ROWS',String(phase1Data?.playerStats?.length || 0),'Synced player-stat rows']].map(x=>`<div class="card stat-card"><small>${x[0]}</small><strong>${x[1]}</strong><span>${x[2]}</span></div>`).join('')}</div><section class="card">${cardTitle('Season overview','Supabase read-only')}${edit ? '<span class="permission-lock">Official stat editing remains disabled in this web read-only phase.</span>' : '<span class="permission-lock">Statistics are read-only for this phase.</span>'}<div class="table-wrap"><table class="data-table"><thead><tr><th>Metric</th><th>Total</th><th>Average / rate</th></tr></thead><tbody>${[['Goals for',record.goals_for, (record.goals_for / Math.max(record.games_played,1)).toFixed(2)],['Goals against',record.goals_against,(record.goals_against / Math.max(record.games_played,1)).toFixed(2)],['Shots on goal',totals.shots,(totals.shots / Math.max(teamStats.length,1)).toFixed(1)],['Power-play successes',totals.pp,`${totals.ppChances ? ((totals.pp / totals.ppChances) * 100).toFixed(1) : '0.0'}%`],['Face-off wins',totals.foW,`${((totals.foW / Math.max(totals.foW + totals.foL,1)) * 100).toFixed(1)}%`]].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('')}</tbody></table></div></section>`); }
+function schedule() { return shell('Schedule','Live schedule synced from the team Windows app.',`<section class="card">${cardTitle(`Team schedule · ${phase1Data?.schedule?.length || 0} entries`,'Supabase read-only')}<div class="schedule-list">${(phase1Data?.schedule || []).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).map(game=>`<div class="schedule-item"><div class="schedule-date"><strong>${escapeHtml(new Date(`${game.date}T00:00:00`).toLocaleDateString(undefined,{month:'short',day:'2-digit'}).toUpperCase())}</strong>${escapeHtml(String(game.date).slice(0,4))}</div><div><h3>${escapeHtml(game.opponent)}</h3><p>${escapeHtml(game.home_away)} · ${escapeHtml(game.location || 'Location unavailable')}${game.time ? ` · ${escapeHtml(game.time)}` : ''}</p></div><span class="tag">${escapeHtml(game.game_type)}</span></div>`).join('') || '<div class="empty-view"><h2>No schedule entries</h2><p>No synced schedule entries are available for this team.</p></div>'}</div></section>`); }
+function stats() { const edit = can(PERMISSIONS.STATS_EDIT_OFFICIAL, activeStaff); const record = phase1Record(); const teamStats = phase1Data?.teamStats || []; const totals = teamStats.reduce((sum, row) => ({ shots: sum.shots + phase1Number(row.shots_for), pp: sum.pp + phase1Number(row.power_play_success), ppChances: sum.ppChances + phase1Number(row.power_play_chances), foW: sum.foW + phase1Number(row.faceoff_wins), foL: sum.foL + phase1Number(row.faceoff_losses) }), { shots: 0, pp: 0, ppChances: 0, foW: 0, foL: 0 }); return shell('Team Stats','Read-only statistics from the synced team game data.',`<div class="grid stat-grid">${[['RECORD',`${record.wins}–${record.losses}–${record.ties}`,`${record.games_played} games`],['SHOTS / GAME',(totals.shots / Math.max(teamStats.length,1)).toFixed(1),'From team game stats'],['FACE-OFFS',`${((totals.foW / Math.max(totals.foW + totals.foL,1)) * 100).toFixed(1)}%`,'From team game stats'],['PLAYER-STAT ROWS',String(phase1Data?.playerStats?.length || 0),'Synced player-stat rows']].map(x=>`<div class="card stat-card"><small>${x[0]}</small><strong>${x[1]}</strong><span>${x[2]}</span></div>`).join('')}</div><section class="card">${cardTitle('Season overview','Supabase read-only')}${edit ? '<span class="permission-lock">Official stat editing remains disabled in this web read-only phase.</span>' : '<span class="permission-lock">Statistics are read-only for this phase.</span>'}<div class="table-wrap"><table class="data-table"><thead><tr><th>Metric</th><th>Total</th><th>Average / rate</th></tr></thead><tbody>${[['Goals for',record.goals_for, (record.goals_for / Math.max(record.games_played,1)).toFixed(2)],['Goals against',record.goals_against,(record.goals_against / Math.max(record.games_played,1)).toFixed(2)],['Shots on goal',totals.shots,(totals.shots / Math.max(teamStats.length,1)).toFixed(1)],['Power-play successes',totals.pp,`${totals.ppChances ? ((totals.pp / totals.ppChances) * 100).toFixed(1) : '0.0'}%`],['Face-off wins',totals.foW,`${((totals.foW / Math.max(totals.foW + totals.foL,1)) * 100).toFixed(1)}%`]].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('')}</tbody></table></div></section>`); }
 function players() { const totals = playerStatTotals(); return shell('Player Profiles','Live roster and basic player stats from Supabase.',`<section class="card">${cardTitle(`Roster · ${phase1Data?.roster?.length || 0} players`,'Supabase read-only')}<div class="table-wrap"><table class="data-table"><thead><tr><th>Player</th><th>Position</th><th>Games</th><th>Goals</th><th>Points</th><th>+ / −</th><th>Status</th></tr></thead><tbody>${(phase1Data?.roster || []).map(player=>{const stat=totals.get(player.source_player_id)||{}; return `<tr><td><div class="player-cell"><span class="player-photo">${escapeHtml(player.jersey_number)}</span><strong>${escapeHtml(player.name)}</strong></div></td><td class="role">${escapeHtml(player.position)}</td><td>${phase1Number(stat.games)}</td><td>${phase1Number(stat.goals)}</td><td>${phase1Number(stat.goals)+phase1Number(stat.assists)}</td><td class="trend-up">${phase1Number(stat.plus_minus)}</td><td><span class="tag">${can(PERMISSIONS.PLAYERS_EVALUATE, activeStaff) ? 'Evaluate' : 'View only'}</span></td></tr>`;}).join('') || '<tr><td colspan="7">No roster data is available.</td></tr>'}</tbody></table></div></section>`); }
 function scouting() {
   if (phase2ADataError) return shell('Scouting', 'Read-only opponent identities synced from the Windows app.', `<section class="card empty-view"><div class="empty-icon">!</div><h2>Unable to load opponent data</h2><p>${escapeHtml(phase2ADataError)}</p><button class="btn primary" id="retryPhase2AData" type="button">Retry</button></section>`);
@@ -197,6 +201,22 @@ function renderTeamSwitcher() {
   host.hidden = false;
 }
 
+function renderTenantBranding() {
+  const displayName = tenantName();
+  const seasonName = tenantSeasonName();
+  const mark = displayName.split(/\s+/).filter(Boolean).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'PN';
+  const tenantMark = document.querySelector('#tenantMark');
+  const tenantNameNode = document.querySelector('#tenantName');
+  const tenantSeasonLabel = document.querySelector('#tenantSeasonLabel');
+  const tenantFooter = document.querySelector('#tenantFooter');
+  const teamStatus = document.querySelector('#teamStatus');
+  if (tenantMark) tenantMark.textContent = mark;
+  if (tenantNameNode) tenantNameNode.textContent = displayName;
+  if (tenantSeasonLabel) tenantSeasonLabel.textContent = seasonName;
+  if (tenantFooter) tenantFooter.textContent = displayName;
+  if (teamStatus) teamStatus.textContent = `${displayName} · ${activeStaff?.role || 'Team workspace'}`;
+}
+
 async function selectTeam(teamId) {
   if (teamId === teamContext.selectedTeamId) return;
   teamContextManager.select(teamId);
@@ -240,7 +260,8 @@ async function loadSelectedTeam() {
   phase2ADataError = '';
   render();
   await seasonContextManager.load(membership.team_id, membership.teams?.default_season_id);
-  document.querySelector('#teamStatus').textContent = `${membership.teams?.name || 'Team'} · ${activeStaff.role}`;
+  renderTenantBranding();
+  document.querySelector('#teamStatus').textContent = `${tenantName()} · ${activeStaff.role}`;
   renderTeamSwitcher();
   renderSeasonSwitcher();
   await Promise.all([loadPhase1Data(membership.team_id), loadPhase2AData(membership.team_id)]);
@@ -264,16 +285,17 @@ function render(view = 'command') {
   const page = view === 'scouting'
     ? scouting()
     : phase1DataError
-      ? shell('Team data unavailable', 'The authenticated workspace is available, but the live Phase 1 data could not be read.', `<section class="card empty-view"><div class="empty-icon">!</div><h2>Unable to load synced team data</h2><p>${escapeHtml(phase1DataError)}</p><button class="btn primary" id="retryPhase1Data" type="button">Retry</button></section>`)
+      ? shell('Team data unavailable', 'The authenticated workspace is available, but the live team data could not be read.', `<section class="card empty-view"><div class="empty-icon">!</div><h2>Unable to load synced team data</h2><p>${escapeHtml(phase1DataError)}</p><button class="btn primary" id="retryPhase1Data" type="button">Retry</button></section>`)
       : !phase1Data
-        ? shell('Loading team data', 'Reading the live Arctic Foxes roster, schedule, games, and stats…', '<section class="card empty-view"><div class="empty-icon">⌁</div><h2>Loading synced team data</h2><p>Please wait while the secure workspace reads your team data.</p></section>')
+        ? shell('Loading team data', 'Reading the live team roster, schedule, games, and stats…', '<section class="card empty-view"><div class="empty-icon">⌁</div><h2>Loading synced team data</h2><p>Please wait while the secure workspace reads your team data.</p></section>')
         : view === 'command' ? command() : view === 'schedule' ? schedule() : view === 'stats' ? stats() : view === 'players' ? players() : view === 'admin' ? admin() : generic(view);
   app.innerHTML = page;
   document.querySelector('#viewCrumb').textContent = viewNames[view]; renderRoleSwitcher();
   renderTeamSwitcher();
   renderSeasonSwitcher();
+  renderTenantBranding();
   const seasonPill = document.querySelector('#seasonPill');
-  if (seasonPill) seasonPill.firstChild.textContent = seasonContext.selectedSeason?.name || phase1Data?.seasonRecord?.season_key || 'Live season';
+  if (seasonPill) seasonPill.firstChild.textContent = tenantSeasonName();
   document.querySelector('#retryPhase1Data')?.addEventListener('click', () => loadPhase1Data(authTeam.team_id));
   document.querySelector('#retryPhase2AData')?.addEventListener('click', () => loadPhase2AData(authTeam.team_id));
   if (view === 'admin') bindAdminControls();
@@ -287,13 +309,13 @@ document.querySelector('#scrim').addEventListener('click', () => document.queryS
 function showLoading() {
   appShell.hidden = true;
   authScreen.hidden = false;
-  authScreen.innerHTML = '<div class="auth-card"><div class="auth-brand"><div class="brand-mark">AF</div><div><strong>Arctic Foxes</strong><span>12U AA · TEAM HUB</span></div></div><h1>Restoring your session</h1><p class="auth-loading">Connecting to the secure team workspace…</p></div>';
+  authScreen.innerHTML = `<div class="auth-card"><div class="auth-brand"><div class="brand-mark">PN</div><div><strong>${PLATFORM.name}</strong><span>${PLATFORM.tagline}</span></div></div><h1>Restoring your session</h1><p class="auth-loading">Connecting to the secure team workspace…</p></div>`;
 }
 
 function showLogin(error = '') {
   appShell.hidden = true;
   authScreen.hidden = false;
-  authScreen.innerHTML = `<div class="auth-card"><div class="auth-brand"><div class="brand-mark">AF</div><div><strong>Arctic Foxes</strong><span>12U AA · TEAM HUB</span></div></div><h1>Sign in to your team hub</h1><p>Use your Arctic Foxes Supabase account to access the live workspace.</p><form class="auth-form" id="loginForm"><label>Email<input id="loginEmail" type="email" autocomplete="username" required /></label><label>Password<input id="loginPassword" type="password" autocomplete="current-password" required /></label>${error ? `<div class="auth-error" role="alert">${escapeHtml(error)}</div>` : ''}<button class="btn primary" type="submit">Sign in</button></form></div>`;
+  authScreen.innerHTML = `<div class="auth-card"><div class="auth-brand"><div class="brand-mark">PN</div><div><strong>${PLATFORM.name}</strong><span>${PLATFORM.tagline}</span></div></div><h1>Sign in to your team hub</h1><p>Use your ${PLATFORM.name} account to access your authorized team workspace.</p><form class="auth-form" id="loginForm"><label>Email<input id="loginEmail" type="email" autocomplete="username" required /></label><label>Password<input id="loginPassword" type="password" autocomplete="current-password" required /></label>${error ? `<div class="auth-error" role="alert">${escapeHtml(error)}</div>` : ''}<button class="btn primary" type="submit">Sign in</button></form></div>`;
   authScreen.querySelector('#loginForm').addEventListener('submit', async event => {
     event.preventDefault();
     const button = event.currentTarget.querySelector('button');
@@ -318,7 +340,7 @@ function showLogin(error = '') {
 function showPasswordRecovery(error = '') {
   appShell.hidden = true;
   authScreen.hidden = false;
-  authScreen.innerHTML = `<div class="auth-card"><div class="auth-brand"><div class="brand-mark">AF</div><div><strong>Arctic Foxes</strong><span>12U AA · TEAM HUB</span></div></div><h1>Set a new password</h1><p>Choose a new password for your Arctic Foxes account.</p><form class="auth-form" id="recoveryForm"><label>New password<input id="recoveryPassword" type="password" autocomplete="new-password" minlength="8" required /></label><label>Confirm new password<input id="recoveryPasswordConfirm" type="password" autocomplete="new-password" minlength="8" required /></label>${error ? `<div class="auth-error" role="alert">${escapeHtml(error)}</div>` : ''}<button class="btn primary" type="submit">Update password</button></form></div>`;
+  authScreen.innerHTML = `<div class="auth-card"><div class="auth-brand"><div class="brand-mark">PN</div><div><strong>${PLATFORM.name}</strong><span>${PLATFORM.tagline}</span></div></div><h1>Set a new password</h1><p>Choose a new password for your ${PLATFORM.name} account.</p><form class="auth-form" id="recoveryForm"><label>New password<input id="recoveryPassword" type="password" autocomplete="new-password" minlength="8" required /></label><label>Confirm new password<input id="recoveryPasswordConfirm" type="password" autocomplete="new-password" minlength="8" required /></label>${error ? `<div class="auth-error" role="alert">${escapeHtml(error)}</div>` : ''}<button class="btn primary" type="submit">Update password</button></form></div>`;
   authScreen.querySelector('#recoveryForm').addEventListener('submit', async event => {
     event.preventDefault();
     const form = event.currentTarget;

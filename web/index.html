@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#07111e" />
-    <title>Arctic Foxes | Team Hub</title>
+    <title>PuckNexus | The Connected Hockey Platform</title>
     <link rel="stylesheet" href="./styles.css?v=live-auth" />
   </head>
   <body>
@@ -12,10 +12,10 @@
     <div class="app-shell" id="appShell" hidden>
       <aside class="sidebar" id="sidebar">
         <div class="brand">
-          <div class="brand-mark">AF</div>
+          <div class="brand-mark" id="tenantMark">PN</div>
           <div>
-            <strong>Arctic Foxes</strong>
-            <span>12U AA · TEAM HUB</span>
+            <strong id="tenantName">PuckNexus</strong>
+            <span id="tenantSeasonLabel">The Connected Hockey Platform</span>
           </div>
         </div>
         <button class="mobile-close" id="closeSidebar" aria-label="Close navigation">×</button>
@@ -53,12 +53,13 @@
 
         <div id="app"></div>
 
-        <footer class="footer-note">Arctic Foxes 12U AA · Secure team hub <span>Supabase-authenticated workspace</span></footer>
+        <footer class="footer-note"><span id="tenantFooter">PuckNexus</span> · Secure team workspace <span>Supabase-authenticated workspace</span></footer>
       </main>
     </div>
     <div class="scrim" id="scrim"></div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./permissions.js?v=live-auth"></script>
+    <script src="./platform-branding.js?v=pucknexus-1"></script>
     <script src="./team-context.js?v=multi-team-1"></script>
     <script src="./season-context.js?v=multi-team-1"></script>
     <script src="./app.js?v=multi-team-1"></script>

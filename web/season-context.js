@@ -1,7 +1,7 @@
 (function attachSeasonContext(global) {
   const FALLBACK_BRANDING = {
-    display_name: 'Arctic Foxes 12U AA',
-    short_name: 'AF 12U AA',
+    display_name: 'Selected Team',
+    short_name: 'PN',
     primary_color: '#d71920',
     secondary_color: '#0d0e10',
     accent_color: '#f2f3f4'

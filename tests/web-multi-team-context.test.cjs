@@ -8,6 +8,7 @@ const seasonSource = fs.readFileSync('web/season-context.js', 'utf8');
 const appSource = fs.readFileSync('web/app.js', 'utf8');
 const indexSource = fs.readFileSync('web/index.html', 'utf8');
 const migrationSource = fs.readFileSync('supabase/migrations/006_multi_team_foundation.sql', 'utf8');
+const platformSource = fs.readFileSync('web/platform-branding.js', 'utf8');
 
 function storage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -98,6 +99,17 @@ test('web shell includes extracted context modules and switcher hosts', () => {
   assert.match(indexSource, /id="seasonSwitcher"/);
   assert.match(indexSource, /team-context\.js\?v=multi-team-1/);
   assert.match(indexSource, /season-context\.js\?v=multi-team-1/);
+});
+
+test('platform branding is separate from tenant branding and works at a root path', () => {
+  assert.match(platformSource, /name: 'PuckNexus'/);
+  assert.match(platformSource, /tagline: 'The Connected Hockey Platform'/);
+  assert.match(indexSource, /<title>PuckNexus \| The Connected Hockey Platform<\/title>/);
+  assert.match(indexSource, /platform-branding\.js\?v=pucknexus-1/);
+  assert.match(indexSource, /src="\.\/app\.js/);
+  assert.match(indexSource, /href="\.\/styles\.css/);
+  assert.doesNotMatch(indexSource, /\/arctic-foxes-12u-aa-analytics2\//);
+  assert.doesNotMatch(appSource, /coachjt\.github\.io/);
 });
 
 test('branding is structured and does not permit arbitrary CSS injection', () => {
