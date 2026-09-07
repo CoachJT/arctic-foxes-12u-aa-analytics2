@@ -79,7 +79,10 @@
       "film-breaks.js",
       "schedule-view.js",
       "schedule-view.css",
-      "scoreboard-clock.js"
+      "scoreboard-clock.js",
+      "cloud-primary-transition.js",
+      "windows-cloud-readonly.js",
+      "windows-cloud-primary-writes.js"
     ],
     "asarUnpack": [
       "scoresheet-ocr.ps1",

@@ -5632,7 +5632,34 @@ function setupWorkspaceLayout(){
       <div class="settings-row"><label>Auto-save Location</label><div><span id="settingSavePath">Loading…</span> <button id="settingChooseFolder">Choose Folder</button></div></div>
       <div class="settings-row"><label>Tag Assist</label><select id="settingTagAssist"><option value="off">Off</option><option value="suggest">Suggest Only</option></select></div>
       <div class="row"><button class="primary" id="saveV21Settings">Save Settings</button><button id="settingsCheckUpdates">Check for Updates</button></div>
-    </div></div>
+    </div>
+    <div class="v21-card" id="cloudReadonlyCard">
+      <h2>PuckNexus cloud bootstrap · read only</h2>
+      <p class="sub">Connect with your normal account to review cloud counts before changing this Windows app. Cloud writes are disabled by default and require an explicit controlled test.</p>
+      <div class="settings-row"><label for="cloudAuthEmail">Email</label><input id="cloudAuthEmail" type="email" autocomplete="username" placeholder="coach@example.com"></div>
+      <div class="settings-row"><label for="cloudAuthPassword">Password</label><input id="cloudAuthPassword" type="password" autocomplete="current-password" placeholder="Enter locally; never displayed"></div>
+      <div class="row">
+        <button class="primary" id="cloudAuthSignIn" type="button">Connect / Sign in</button>
+        <button id="cloudAuthSignOut" type="button" disabled>Sign out</button>
+      </div>
+      <div id="cloudAuthStatus" class="sub" role="status">Not connected. Local startup and saves remain unchanged.</div>
+      <div class="settings-row"><label for="cloudTeamSelect">Team</label><select id="cloudTeamSelect" disabled><option>Sign in to load teams</option></select></div>
+      <div class="settings-row"><label for="cloudSeasonSelect">Season</label><select id="cloudSeasonSelect" disabled><option>Sign in to load seasons</option></select></div>
+      <div class="row"><button id="cloudLoadButton" type="button" disabled>Load from PuckNexus (Read Only)</button></div>
+      <pre id="cloudDiagnosticReport" class="sub" style="white-space:pre-wrap"></pre>
+      <label id="cloudConfirmLabel" style="display:none"><input id="cloudConfirm" type="checkbox"> I reviewed the diagnostic and explicitly approve materializing these read-only cloud datasets into the active local state.</label>
+      <div class="row"><button class="good" id="cloudApplyButton" type="button" disabled>Confirm and materialize locally</button></div>
+      <hr>
+      <p class="sub">Enable only for a controlled write test. Automatic write-through remains disabled.</p>
+      <label><input id="cloudWriteEnable" type="checkbox"> Enable controlled cloud writes for approved team datasets</label>
+      <div class="row"><button id="cloudQueueRosterButton" type="button" disabled>Sync roster to PuckNexus</button><button id="cloudQueueScheduleButton" type="button" disabled>Sync schedule to PuckNexus</button></div>
+      <div class="row"><button id="cloudQueueGameButton" type="button" disabled>Sync current game/stats to PuckNexus</button><button id="cloudQueueOpponentButton" type="button" disabled>Sync opponent data to PuckNexus</button></div>
+      <label><input id="cloudWriteConfirm" type="checkbox" disabled> I confirm sending the pending dataset syncs shown below.</label>
+      <div class="row"><button id="cloudFlushButton" type="button" disabled>Send confirmed dataset syncs</button></div>
+      <div id="cloudWriteCounts" class="sub" role="status">Pending 0 · completed 0 · conflicts 0 · failed 0</div>
+      <div id="cloudWriteStatus" class="sub" role="status">Cloud writes disabled.</div>
+    </div>
+    </div>
     <div id="scoutPrintSheet"></div>`;
 
   workspaces.quickstats.innerHTML=`<div id="quickStatsMount"></div>`;
@@ -6477,5 +6504,194 @@ setInterval(ensureUpdateTest305, 3000);
 <link rel="stylesheet" href="schedule-view.css">
 <script src="schedule-view.js"></script>
 <script src="supabase-sync.js"></script>
+<script src="cloud-primary-transition.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="windows-cloud-readonly.js"></script>
+<script src="windows-cloud-primary-writes.js"></script>
+<script>
+// Authenticated cloud bootstrap is always manual. It never runs during local startup.
+(function initWindowsCloudReadonly() {
+  const api = window.FoxesWindowsCloudReadonly;
+  if (!api || !window.supabase) return;
+  let controller;
+  let writes;
+  try { controller = api.createWindowsCloudReadonly({ supabase: window.supabase, storage: window.localStorage }); }
+  catch (error) { console.error('Read-only cloud bootstrap unavailable:', error); return; }
+  const $cloud = id => document.getElementById(id);
+  const status = message => { const node = $cloud('cloudAuthStatus'); if (node) node.textContent = message; };
+  const teamSelect = $cloud('cloudTeamSelect');
+  const seasonSelect = $cloud('cloudSeasonSelect');
+  const loadButton = $cloud('cloudLoadButton');
+  const applyButton = $cloud('cloudApplyButton');
+  const confirm = $cloud('cloudConfirm');
+  const report = $cloud('cloudDiagnosticReport');
+  const confirmLabel = $cloud('cloudConfirmLabel');
+  const writeEnable = $cloud('cloudWriteEnable');
+  const queueRosterButton = $cloud('cloudQueueRosterButton');
+  const queueScheduleButton = $cloud('cloudQueueScheduleButton');
+  const queueGameButton = $cloud('cloudQueueGameButton');
+  const queueOpponentButton = $cloud('cloudQueueOpponentButton');
+  const writeConfirm = $cloud('cloudWriteConfirm');
+  const flushButton = $cloud('cloudFlushButton');
+  const writeStatus = $cloud('cloudWriteStatus');
+  const writeCounts = $cloud('cloudWriteCounts');
+  const renderContext = () => {
+    const ctx = controller.context;
+    teamSelect.innerHTML = ctx.memberships.map(item => `<option value="${escapeHtml(item.team_id)}">${escapeHtml(item.teams?.name || item.team_id)}</option>`).join('');
+    teamSelect.value = ctx.selectedMembership?.team_id || '';
+    seasonSelect.innerHTML = ctx.seasons.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name || item.season_key)}</option>`).join('');
+    seasonSelect.value = ctx.selectedSeason?.id || '';
+    teamSelect.disabled = !ctx.session || ctx.memberships.length < 2;
+    seasonSelect.disabled = !ctx.session || ctx.seasons.length < 2;
+    loadButton.disabled = !ctx.session || !ctx.selectedMembership || !ctx.selectedSeason;
+    if (ctx.session && ctx.selectedMembership && !writes) {
+      try {
+        writes = window.FoxesWindowsCloudWrites.createWindowsCloudWrites({
+          client: controller.client,
+          storage: window.localStorage,
+          teamId: ctx.selectedMembership.team_id
+        });
+      } catch (error) {
+        writeStatus.textContent = `Cloud write boundary unavailable: ${String(error?.message || error)}`;
+      }
+    }
+    writeEnable.checked = !!writes?.enabled();
+    queueRosterButton.disabled = !writes?.enabled() || !ctx.session;
+    queueScheduleButton.disabled = !writes?.enabled() || !ctx.session;
+    queueGameButton.disabled = !writes?.enabled() || !ctx.session;
+    queueOpponentButton.disabled = !writes?.enabled() || !ctx.session;
+    writeConfirm.disabled = !writes?.enabled() || !ctx.session;
+    flushButton.disabled = !writes?.enabled() || !ctx.session || !writeConfirm.checked;
+    $cloud('cloudAuthSignOut').disabled = !ctx.session;
+    status(ctx.session ? `Connected as ${ctx.user?.email || 'authenticated user'} · ${ctx.selectedMembership?.teams?.name || 'team'} · ${ctx.selectedSeason?.name || 'season'} · ${ctx.capabilities.length} capabilities` : 'Not connected. Local startup and saves remain unchanged.');
+  };
+  const clearPending = () => {
+    report.textContent = '';
+    confirm.checked = false;
+    confirmLabel.style.display = 'none';
+    applyButton.disabled = true;
+  };
+  $cloud('cloudAuthSignIn')?.addEventListener('click', async () => {
+    const email = $cloud('cloudAuthEmail').value.trim();
+    const password = $cloud('cloudAuthPassword').value;
+    if (!email && !password) {
+      try {
+        const session = (await controller.client.auth.getSession()).data?.session;
+        if (!session) { status('Enter your email and password locally to connect.'); return; }
+        await controller.loadContext(session);
+        clearPending();
+        renderContext();
+        return;
+      } catch (error) { status(`Saved session could not be restored: ${String(error?.message || error)}`); return; }
+    }
+    if (!email || !password) { status('Enter your email and password locally to connect.'); return; }
+    status('Signing in securely…');
+    try {
+      await controller.signIn(email, password);
+      $cloud('cloudAuthPassword').value = '';
+      clearPending();
+      renderContext();
+    } catch (error) { status(`Sign-in failed: ${String(error?.message || error)}`); }
+  });
+  $cloud('cloudAuthSignOut')?.addEventListener('click', async () => {
+    try { await controller.signOut(); writes = null; clearPending(); renderContext(); }
+    catch (error) { status(`Sign-out failed: ${String(error?.message || error)}`); }
+  });
+  teamSelect?.addEventListener('change', async event => {
+    try { await controller.selectTeam(event.target.value); clearPending(); renderContext(); }
+    catch (error) { status(`Team selection failed: ${String(error?.message || error)}`); }
+  });
+  seasonSelect?.addEventListener('change', async event => {
+    try { await controller.selectSeason(event.target.value); clearPending(); renderContext(); }
+    catch (error) { status(`Season selection failed: ${String(error?.message || error)}`); }
+  });
+  loadButton?.addEventListener('click', async () => {
+    clearPending();
+    status('Reading scoped cloud datasets…');
+    try {
+      const pending = await controller.prepareBootstrap({
+        state: structuredClone(state),
+        schedule: window.FoxesSync?.readSchedule?.(window.localStorage) || []
+      });
+      report.textContent = JSON.stringify(pending.diagnostic, null, 2);
+      confirmLabel.style.display = '';
+      status('Diagnostic complete. Review counts and mismatches before confirming.');
+    } catch (error) { status(`Read-only bootstrap failed: ${String(error?.message || error)}`); }
+  });
+  confirm?.addEventListener('change', () => { applyButton.disabled = !confirm.checked || !controller.context.pending; });
+  applyButton?.addEventListener('click', () => {
+    try {
+      const pending = controller.confirmBootstrap(confirm.checked);
+      Object.assign(state, pending.result.state);
+      window.localStorage.setItem('foxes-301-season-schedule', JSON.stringify(pending.result.schedule || []));
+      save();
+      render();
+      clearPending();
+      status(`Materialized locally after confirmation · ${pending.seasonKey}. Cloud remains read only.`);
+    } catch (error) { status(`Confirmation required: ${String(error?.message || error)}`); }
+  });
+  writeEnable?.addEventListener('change', () => {
+    if (!writes) { writeEnable.checked = false; return; }
+    writes.setEnabled(writeEnable.checked);
+    writeStatus.textContent = writeEnable.checked
+      ? 'Controlled cloud writes enabled for this local session.'
+      : 'Cloud writes disabled.';
+    renderContext();
+  });
+  const renderWriteCounts = summary => {
+    const items = writes?.queue.list() || [];
+    const pending = items.filter(item => item.status === 'pending').length;
+    const conflicts = items.filter(item => item.status === 'conflict').length;
+    const failed = items.filter(item => item.status === 'failed').length;
+    const completed = Number(summary?.completed || 0);
+    writeCounts.textContent = `Pending ${pending} · completed ${completed} · conflicts ${conflicts} · failed ${failed}`;
+  };
+  const queueDatasets = (datasets, label, stateOverride = state) => {
+    try {
+      const result = writes.enqueueDatasets({
+        state: structuredClone(stateOverride),
+        schedule: window.FoxesSync?.readSchedule?.(window.localStorage) || []
+      }, datasets);
+      writeStatus.textContent = `Prepared ${result.queued} ${label} row${result.queued === 1 ? '' : 's'}. Nothing sent yet.`;
+      renderWriteCounts();
+    } catch (error) { writeStatus.textContent = `Queue failed: ${String(error?.message || error)}`; }
+  };
+  queueRosterButton?.addEventListener('click', () => {
+    queueDatasets(['roster'], 'roster');
+  });
+  queueScheduleButton?.addEventListener('click', () => queueDatasets(['schedule'], 'schedule'));
+  queueGameButton?.addEventListener('click', () => {
+    const gameId = state.currentGameId || window.currentGameId || state.savedGames?.[0]?.id;
+    const currentGame = state.savedGames?.find(game => String(game.id) === String(gameId));
+    queueDatasets(['games', 'playerStats', 'teamStats'], 'current game/stats', {
+      ...structuredClone(state), savedGames: currentGame ? [structuredClone(currentGame)] : []
+    });
+  });
+  queueOpponentButton?.addEventListener('click', () => queueDatasets(['opponentProfiles', 'opponentPlayers'], 'opponent'));
+  writeConfirm?.addEventListener('change', () => {
+    flushButton.disabled = !writes?.enabled() || !controller.context.session || !writeConfirm.checked;
+  });
+  flushButton?.addEventListener('click', async () => {
+    try {
+      writeStatus.textContent = 'Sending the explicit queued write…';
+      const result = await writes.flush();
+      writeStatus.textContent = `Queue result: ${result.completed} completed, ${result.conflicts} conflicts, ${result.retried} retried, ${result.failed} failed.`;
+      writeConfirm.checked = false;
+      renderWriteCounts(result);
+      renderContext();
+    } catch (error) { writeStatus.textContent = `Cloud write failed: ${String(error?.message || error)}`; }
+  });
+  controller.client.auth.onAuthStateChange?.((_event, session) => {
+    if (!session && controller.context.session) {
+      controller.context.session = null;
+      controller.context.user = null;
+      controller.context.pending = null;
+      clearPending();
+      renderContext();
+    }
+  });
+  renderContext();
+})();
+</script>
 </body>
 </html>
