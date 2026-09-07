@@ -35,11 +35,11 @@
       root.style.setProperty('--org-primary', resolved.primary_color);
       root.style.setProperty('--org-secondary', resolved.secondary_color);
       root.style.setProperty('--org-accent', resolved.accent_color);
-      if (resolved.background_color) root.style.setProperty('--org-background', resolved.background_color);
-      if (resolved.surface_color) root.style.setProperty('--org-surface', resolved.surface_color);
-      if (resolved.text_color) root.style.setProperty('--org-text', resolved.text_color);
-      if (resolved.muted_color) root.style.setProperty('--org-muted', resolved.muted_color);
-      if (resolved.border_color) root.style.setProperty('--org-border', resolved.border_color);
+      root.style.setProperty('--org-background', resolved.background_color || resolved.secondary_color);
+      root.style.setProperty('--org-surface', resolved.surface_color || resolved.secondary_color);
+      root.style.setProperty('--org-text', resolved.text_color || '#ffffff');
+      root.style.setProperty('--org-muted', resolved.muted_color || '#b7bbc1');
+      root.style.setProperty('--org-border', resolved.border_color || '#2b2d31');
       context.branding = resolved;
       return resolved;
     }

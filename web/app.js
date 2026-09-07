@@ -15,6 +15,17 @@ const rosterManager = window.FoxesRosterManagement.createRosterManagement({
   client: supabaseClient,
   getWorkspace: () => currentWorkspace
 });
+const mediaStorage = window.FoxesMediaStorage.createMediaStorage({
+  client: supabaseClient,
+  getWorkspace: () => currentWorkspace
+});
+const supportReporting = window.FoxesSupportReporting.createSupportReporting({
+  client: supabaseClient,
+  getWorkspace: () => currentWorkspace,
+  getUser: () => authUser
+});
+window.addEventListener('error', event => window.FoxesSupportReporting.recordError(event.error || event.message, { route: location.pathname }));
+window.addEventListener('unhandledrejection', event => window.FoxesSupportReporting.recordError(event.reason, { route: location.pathname }));
 const INVITE_FUNCTION = 'invite-staff';
 let activeStaff = null;
 let authUser = null;
@@ -45,9 +56,9 @@ const prototypeMode = !authCallbackPresent
   && location.hostname === 'localhost'
   && queryParams.get('prototype') === '1';
 
-const viewNames = { command: 'Command Center', schedule: 'Schedule', stats: 'Team Stats', players: 'Player Profiles', games: 'Game Center', scouting: 'Scouting', reports: 'Coach Reports', development: 'Player Development', admin: 'Admin', settings: 'Settings' };
-const roleViews = { command: PERMISSIONS.DASHBOARD_VIEW, schedule: PERMISSIONS.SCHEDULE_VIEW, stats: PERMISSIONS.STATS_VIEW, players: PERMISSIONS.PLAYERS_VIEW, games: PERMISSIONS.GAMES_VIEW, scouting: PERMISSIONS.SCOUTING_VIEW, reports: PERMISSIONS.REPORTS_VIEW, development: PERMISSIONS.PLAYERS_VIEW, admin: PERMISSIONS.ADMIN_USERS, settings: PERMISSIONS.DASHBOARD_VIEW };
-const viewFeatures = { command: 'dashboard', schedule: 'schedule', stats: 'stats', players: 'players', games: 'games', scouting: 'scouting', reports: 'reports', development: 'players', admin: 'admin', settings: 'dashboard' };
+const viewNames = { command: 'Command Center', schedule: 'Schedule', stats: 'Team Stats', players: 'Player Profiles', games: 'Game Center', scouting: 'Scouting', reports: 'Coach Reports', development: 'Player Development', admin: 'Admin', settings: 'Settings', support: 'Support' };
+const roleViews = { command: PERMISSIONS.DASHBOARD_VIEW, schedule: PERMISSIONS.SCHEDULE_VIEW, stats: PERMISSIONS.STATS_VIEW, players: PERMISSIONS.PLAYERS_VIEW, games: PERMISSIONS.GAMES_VIEW, scouting: PERMISSIONS.SCOUTING_VIEW, reports: PERMISSIONS.REPORTS_VIEW, development: PERMISSIONS.PLAYERS_VIEW, admin: PERMISSIONS.ADMIN_USERS, settings: PERMISSIONS.DASHBOARD_VIEW, support: PERMISSIONS.DASHBOARD_VIEW };
+const viewFeatures = { command: 'dashboard', schedule: 'schedule', stats: 'stats', players: 'players', games: 'games', scouting: 'scouting', reports: 'reports', development: 'players', admin: 'admin', settings: 'dashboard', support: 'dashboard' };
 
 function cardTitle(title, link = '') { return `<div class="card-title"><h2>${title}</h2>${link ? `<a href="#">${link} →</a>` : ''}</div>`; }
 function tenantName() { return currentWorkspace?.branding?.display_name || currentWorkspace?.team_name || seasonContext.branding?.display_name || authTeam?.teams?.name || 'Selected team'; }
@@ -181,9 +192,38 @@ function development() {
   return shell('Player Development', 'A read-only workspace shell for future development records.', '<section class="card workspace-shell"><div class="workspace-icon">↗</div><h2>Development records are not synced yet</h2><p>Private evaluations and development notes remain protected in the Windows app. This web surface will stay empty until an approved, team-scoped cloud model exists.</p><span class="tag">No cloud data available</span></section>');
 }
 function settings() {
-  return shell('Settings', 'Review the selected workspace context and access model.', `<div class="settings-grid"><section class="card settings-card"><div class="card-title"><h2>Workspace context</h2><span class="tag">Read only</span></div><dl class="settings-list"><div><dt>Platform</dt><dd>${escapeHtml(PLATFORM.name)}</dd></div><div><dt>Team</dt><dd>${escapeHtml(tenantName())}</dd></div><div><dt>Season</dt><dd>${escapeHtml(tenantSeasonName())}</dd></div><div><dt>Role</dt><dd>${escapeHtml(activeStaff?.role || 'Authenticated team member')}</dd></div></dl></section><section class="card settings-card"><div class="card-title"><h2>Data policy</h2><span class="tag">Supabase reads</span></div><p class="settings-copy">This browser workspace reads authorized team data through Supabase RLS. Local video, TOI, tracking, vault, backups, and device settings remain in the Windows app.</p><span class="permission-lock">${authCapabilities.length} database-provided capabilities loaded</span></section></div>`);
+  return shell('Settings', 'Review the selected workspace context and access model.', `<div class="settings-grid"><section class="card settings-card"><div class="card-title"><h2>Workspace context</h2><span class="tag">Read only</span></div><dl class="settings-list"><div><dt>Platform</dt><dd>${escapeHtml(PLATFORM.name)}</dd></div><div><dt>Team</dt><dd>${escapeHtml(tenantName())}</dd></div><div><dt>Season</dt><dd>${escapeHtml(tenantSeasonName())}</dd></div><div><dt>Role</dt><dd>${escapeHtml(activeStaff?.role || 'Authenticated team member')}</dd></div></dl></section><section class="card settings-card"><div class="card-title"><h2>Storage</h2><span class="tag">Private media</span></div><p class="settings-copy">Game film, reports, branding, player media, and support attachments use private workspace-scoped storage. Usage and quota values will appear when configured for this plan.</p><span class="permission-lock">No commercial quota is assumed in the browser.</span></section><section class="card settings-card"><div class="card-title"><h2>Data policy</h2><span class="tag">Supabase reads</span></div><p class="settings-copy">This browser workspace reads authorized team data through Supabase RLS. Local video, TOI, tracking, vault, backups, and device settings remain in the Windows app.</p><span class="permission-lock">${authCapabilities.length} database-provided capabilities loaded</span></section></div>`);
 }
 function generic(view) { const titles = { games:['Game Center','One place for game-day details and post-game review.'], reports:['Coach Reports','Turn team observations into clear, shareable reports.'], development:['Player Development','Review future cloud-backed development records.'], settings:['Settings','Configure the team hub experience and future integrations.'] }; const [title, sub] = titles[view]; return shell(title, sub, `<section class="card empty-view"><div class="empty-icon">${view === 'settings' ? '⚙' : '✦'}</div><h2>Workspace unavailable</h2><p>This surface does not have approved cloud-backed data for the selected team and season.</p></section>`); }
+function support() {
+  return shell('Support', 'Report a bug, request a feature, or ask a question.', `<section class="card support-card"><div class="support-hero"><div><span class="eyebrow">PuckNexus support</span><h2>Need a hand?</h2><p>Your report is saved securely to the current account and workspace.</p></div><button class="btn primary" id="openSupportForm" type="button">Report Issue</button></div><div class="support-grid"><div><strong>Bug</strong><span>Something is not working.</span></div><div><strong>Feature request</strong><span>Suggest a better workflow.</span></div><div><strong>Question</strong><span>Ask about the workspace.</span></div></div></section><div id="supportDialog" class="modal-shell" hidden><div class="modal-card"><div class="card-title"><h2>Report an issue</h2><button class="btn" type="button" id="closeSupportForm">Close</button></div><form id="supportForm" class="player-form"><label>Type<select id="supportType"><option value="bug">Bug</option><option value="feature_request">Feature request</option><option value="question">Question</option></select></label><label>Subject<input id="supportSubject" maxlength="200" required></label><label class="player-form-wide">Description<textarea id="supportDescription" maxlength="10000" required></textarea></label><label class="support-checkbox player-form-wide"><input id="supportDiagnostics" type="checkbox"> Include sanitized diagnostic information</label><div class="player-form-actions"><button class="btn primary" type="submit">Send Report</button></div><div id="supportStatus" class="invite-status" role="status"></div></form></div></div>`);
+}
+
+function bindSupportControls() {
+  document.querySelector('#openSupportForm')?.addEventListener('click', () => { document.querySelector('#supportDialog').hidden = false; });
+  document.querySelector('#closeSupportForm')?.addEventListener('click', () => { document.querySelector('#supportDialog').hidden = true; });
+  document.querySelector('#supportForm')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const status = document.querySelector('#supportStatus');
+    try {
+      const report = await supportReporting.submit({
+        reportType: form.querySelector('#supportType').value,
+        subject: form.querySelector('#supportSubject').value,
+        description: form.querySelector('#supportDescription').value,
+        includeDiagnostics: form.querySelector('#supportDiagnostics').checked
+      });
+      status.textContent = `Report sent · Reference #${String(report.id).slice(0, 8)}`;
+      status.className = 'invite-status success';
+      form.reset();
+    } catch (error) {
+      supportReporting && window.FoxesSupportReporting.recordError?.(error, { operation: 'support_reports.insert' });
+      status.textContent = error.message || 'Report could not be saved. Please retry.';
+      status.className = 'invite-status error';
+    }
+  });
+}
+
 function admin() {
   const owner = can(PERMISSIONS.ADMIN_USERS, activeStaff);
   return shell('Admin', 'Set up the people and access model for the team.', `${owner
@@ -617,7 +657,7 @@ function render(view = 'command') {
       ? shell('Team data unavailable', 'The authenticated workspace is available, but the live team data could not be read.', `<section class="card empty-view"><div class="empty-icon">!</div><h2>Unable to load synced team data</h2><p>${escapeHtml(phase1DataError)}</p><button class="btn primary" id="retryPhase1Data" type="button">Retry</button></section>`)
       : !phase1Data
         ? shell('Loading team data', 'Reading the live team roster, schedule, games, and stats…', '<section class="card empty-view"><div class="empty-icon">⌁</div><h2>Loading synced team data</h2><p>Please wait while the secure workspace reads your team data.</p></section>')
-        : view === 'command' ? command() : view === 'schedule' ? schedule() : view === 'stats' ? stats() : view === 'players' ? players() : view === 'games' ? gameCenter() : view === 'reports' ? reports() : view === 'development' ? development() : view === 'settings' ? settings() : view === 'admin' ? admin() : generic(view);
+        : view === 'command' ? command() : view === 'schedule' ? schedule() : view === 'stats' ? stats() : view === 'players' ? players() : view === 'games' ? gameCenter() : view === 'reports' ? reports() : view === 'development' ? development() : view === 'settings' ? settings() : view === 'support' ? support() : view === 'admin' ? admin() : generic(view);
   app.innerHTML = page;
   document.querySelector('#viewCrumb').textContent = viewNames[view]; renderRoleSwitcher();
   renderWorkspaceIndicators();
@@ -631,6 +671,7 @@ function render(view = 'command') {
   document.querySelector('#retryPhase2AData')?.addEventListener('click', () => loadPhase2AData(authTeam.team_id));
   if (view === 'admin') bindAdminControls();
   if (view === 'players') bindRosterControls();
+  if (view === 'support') bindSupportControls();
   nav.forEach(item => { const allowed = workspaceAuthorizedForView(item.dataset.view); item.hidden = !allowed; item.classList.toggle('active', item.dataset.view === view); item.toggleAttribute('aria-current', item.dataset.view === view); });
   document.querySelector('#sidebar').classList.remove('open'); document.querySelector('#scrim').classList.remove('show'); window.scrollTo(0, 0);
 }
