@@ -11,6 +11,10 @@ const supabaseClient = window.supabase.createClient(
 const workspaceAccessManager = window.FoxesWorkspaceAccess.createWorkspaceAccess({ client: supabaseClient });
 const organizationContextManager = window.FoxesOrganizationContext.createOrganizationContext();
 const entitlements = window.FoxesEntitlements.createEntitlements();
+const rosterManager = window.FoxesRosterManagement.createRosterManagement({
+  client: supabaseClient,
+  getWorkspace: () => currentWorkspace
+});
 const INVITE_FUNCTION = 'invite-staff';
 let activeStaff = null;
 let authUser = null;
@@ -19,6 +23,9 @@ let authCapabilities = [];
 let currentWorkspace = null;
 let recoveryMode = false;
 let workspaceTransitioning = false;
+let rosterFilter = 'active';
+let rosterSearch = '';
+let rosterImportPreview = null;
 let phase1Data = null;
 let phase1DataError = '';
 let phase2AData = null;
@@ -87,7 +94,57 @@ function command() {
 }
 function schedule() { return shell('Schedule','Live schedule synced from the team Windows app.',`<section class="card">${cardTitle(`Team schedule · ${phase1Data?.schedule?.length || 0} entries`,'Supabase read-only')}<div class="schedule-list">${(phase1Data?.schedule || []).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).map(game=>`<div class="schedule-item"><div class="schedule-date"><strong>${escapeHtml(new Date(`${game.date}T00:00:00`).toLocaleDateString(undefined,{month:'short',day:'2-digit'}).toUpperCase())}</strong>${escapeHtml(String(game.date).slice(0,4))}</div><div><h3>${escapeHtml(game.opponent)}</h3><p>${escapeHtml(game.home_away)} · ${escapeHtml(game.location || 'Location unavailable')}${game.time ? ` · ${escapeHtml(game.time)}` : ''}</p></div><span class="tag">${escapeHtml(game.game_type)}</span></div>`).join('') || '<div class="empty-view"><h2>No schedule entries</h2><p>No synced schedule entries are available for this team.</p></div>'}</div></section>`); }
 function stats() { const edit = can(PERMISSIONS.STATS_EDIT_OFFICIAL, activeStaff); const record = phase1Record(); const teamStats = phase1Data?.teamStats || []; const totals = teamStats.reduce((sum, row) => ({ shots: sum.shots + phase1Number(row.shots_for), pp: sum.pp + phase1Number(row.power_play_success), ppChances: sum.ppChances + phase1Number(row.power_play_chances), foW: sum.foW + phase1Number(row.faceoff_wins), foL: sum.foL + phase1Number(row.faceoff_losses) }), { shots: 0, pp: 0, ppChances: 0, foW: 0, foL: 0 }); return shell('Team Stats','Read-only statistics from the synced team game data.',`<div class="grid stat-grid">${[['RECORD',`${record.wins}–${record.losses}–${record.ties}`,`${record.games_played} games`],['SHOTS / GAME',(totals.shots / Math.max(teamStats.length,1)).toFixed(1),'From team game stats'],['FACE-OFFS',`${((totals.foW / Math.max(totals.foW + totals.foL,1)) * 100).toFixed(1)}%`,'From team game stats'],['PLAYER-STAT ROWS',String(phase1Data?.playerStats?.length || 0),'Synced player-stat rows']].map(x=>`<div class="card stat-card"><small>${x[0]}</small><strong>${x[1]}</strong><span>${x[2]}</span></div>`).join('')}</div><section class="card">${cardTitle('Season overview','Supabase read-only')}${edit ? '<span class="permission-lock">Official stat editing remains disabled in this web read-only phase.</span>' : '<span class="permission-lock">Statistics are read-only for this phase.</span>'}<div class="table-wrap"><table class="data-table"><thead><tr><th>Metric</th><th>Total</th><th>Average / rate</th></tr></thead><tbody>${[['Goals for',record.goals_for, (record.goals_for / Math.max(record.games_played,1)).toFixed(2)],['Goals against',record.goals_against,(record.goals_against / Math.max(record.games_played,1)).toFixed(2)],['Shots on goal',totals.shots,(totals.shots / Math.max(teamStats.length,1)).toFixed(1)],['Power-play successes',totals.pp,`${totals.ppChances ? ((totals.pp / totals.ppChances) * 100).toFixed(1) : '0.0'}%`],['Face-off wins',totals.foW,`${((totals.foW / Math.max(totals.foW + totals.foL,1)) * 100).toFixed(1)}%`]].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('')}</tbody></table></div></section>`); }
-function players() { const totals = playerStatTotals(); return shell('Player Profiles','Live roster and basic player stats from Supabase.',`<section class="card">${cardTitle(`Roster · ${phase1Data?.roster?.length || 0} players`,'Supabase read-only')}<div class="table-wrap"><table class="data-table"><thead><tr><th>Player</th><th>Position</th><th>Games</th><th>Goals</th><th>Points</th><th>+ / −</th><th>Status</th></tr></thead><tbody>${(phase1Data?.roster || []).map(player=>{const stat=totals.get(player.source_player_id)||{}; return `<tr><td><div class="player-cell"><span class="player-photo">${escapeHtml(player.jersey_number)}</span><strong>${escapeHtml(player.name)}</strong></div></td><td class="role">${escapeHtml(player.position)}</td><td>${phase1Number(stat.games)}</td><td>${phase1Number(stat.goals)}</td><td>${phase1Number(stat.goals)+phase1Number(stat.assists)}</td><td class="trend-up">${phase1Number(stat.plus_minus)}</td><td><span class="tag">${can(PERMISSIONS.PLAYERS_EVALUATE, activeStaff) ? 'Evaluate' : 'View only'}</span></td></tr>`;}).join('') || '<tr><td colspan="7">No roster data is available.</td></tr>'}</tbody></table></div></section>`); }
+function rosterCanManage() {
+  return Boolean(currentWorkspace?.authorized)
+    && can(PERMISSIONS.PLAYERS_EVALUATE, activeStaff)
+    && entitlements.isFeatureEnabled('players');
+}
+
+function playerForm(player = {}) {
+  return `<form id="playerForm" class="player-form">
+    <input type="hidden" id="playerId" value="${escapeHtml(player.id || '')}">
+    <label>Jersey number<input id="playerJersey" required maxlength="3" inputmode="numeric" value="${escapeHtml(player.jersey_number || '')}"></label>
+    <label>First name<input id="playerFirstName" required maxlength="80" value="${escapeHtml(player.first_name || '')}"></label>
+    <label>Last name<input id="playerLastName" required maxlength="80" value="${escapeHtml(player.last_name || '')}"></label>
+    <label>Position<select id="playerPosition" required><option value="F" ${player.position === 'F' ? 'selected' : ''}>F</option><option value="D" ${player.position === 'D' ? 'selected' : ''}>D</option><option value="G" ${player.position === 'G' ? 'selected' : ''}>G</option></select></label>
+    <label>Player type<select id="playerType" required><option value="skater" ${player.player_type !== 'goalie' ? 'selected' : ''}>Skater</option><option value="goalie" ${player.player_type === 'goalie' ? 'selected' : ''}>Goalie</option></select></label>
+    <label>Shoots<select id="playerShoots"><option value="unknown" ${!['L', 'R'].includes(player.shoots) ? 'selected' : ''}>Unknown</option><option value="L" ${player.shoots === 'L' ? 'selected' : ''}>L</option><option value="R" ${player.shoots === 'R' ? 'selected' : ''}>R</option></select></label>
+    <label>Status<select id="playerStatus"><option value="active" ${player.status !== 'inactive' ? 'selected' : ''}>Active</option><option value="inactive" ${player.status === 'inactive' ? 'selected' : ''}>Inactive</option></select></label>
+    <label class="player-form-wide">Notes<textarea id="playerNotes" maxlength="2000">${escapeHtml(player.notes || '')}</textarea></label>
+    <div class="player-form-actions"><button class="btn" type="button" id="cancelPlayerForm">Cancel</button><button class="btn primary" type="submit">${player.id ? 'Save changes' : 'Add player'}</button></div>
+    <div id="playerFormStatus" class="invite-status" role="status"></div>
+  </form>`;
+}
+
+function players() {
+  const totals = playerStatTotals();
+  const manage = rosterCanManage();
+  const allPlayers = phase1Data?.roster || [];
+  const filtered = allPlayers.filter(player => {
+    const statusMatches = rosterFilter === 'all' || (player.status || 'active') === rosterFilter;
+    const query = rosterSearch.toLowerCase();
+    return statusMatches && (!query || `${player.name} ${player.jersey_number} ${player.position}`.toLowerCase().includes(query));
+  });
+  const rows = filtered.map(player => {
+    const stat = totals.get(player.source_player_id) || {};
+    const hasHistory = phase1Number(stat.games) > 0 || phase1Number(stat.goals) > 0 || phase1Number(stat.assists) > 0 || phase1Number(stat.minutes) > 0;
+    return `<tr class="${player.status === 'inactive' ? 'roster-inactive' : ''}">
+      <td><div class="player-cell"><span class="player-photo">${escapeHtml(player.jersey_number)}</span><strong>${escapeHtml(player.name)}</strong></div></td>
+      <td class="role">${escapeHtml(player.position)}</td><td>${escapeHtml(player.shoots || '—')}</td>
+      <td>${hasHistory ? phase1Number(stat.games) : '—'}</td><td>${hasHistory ? phase1Number(stat.goals) : '—'}</td>
+      <td>${hasHistory ? phase1Number(stat.goals) + phase1Number(stat.assists) : '—'}</td>
+      <td><span class="tag">${player.status === 'inactive' ? 'Inactive' : 'Active'}</span>${manage ? `<div class="roster-row-actions"><button class="btn roster-edit" type="button" data-player-id="${escapeHtml(player.id)}">Edit</button><button class="btn roster-toggle" type="button" data-player-id="${escapeHtml(player.id)}" data-status="${player.status === 'inactive' ? 'active' : 'inactive'}">${player.status === 'inactive' ? 'Reactivate' : 'Deactivate'}</button></div>` : ''}</td>
+    </tr>`;
+  }).join('');
+  const empty = !allPlayers.length
+    ? `<div class="empty-view roster-empty"><div class="empty-icon">♙</div><h2>No players yet</h2><p>Add players one at a time or import your roster to start tracking games and analytics.</p>${manage ? '<div class="roster-empty-actions"><button class="btn primary" id="addPlayerButton" type="button">+ Add Player</button><button class="btn" id="importRosterButton" type="button">Import Roster</button><button class="btn" id="downloadRosterTemplate" type="button">Download Template</button></div>' : ''}</div>`
+    : `<div class="table-wrap"><table class="data-table roster-table"><thead><tr><th>Player</th><th>Pos</th><th>Shoots</th><th>Games</th><th>Goals</th><th>Points</th><th>Status</th></tr></thead><tbody>${rows || '<tr><td colspan="7">No players match the selected filter.</td></tr>'}</tbody></table></div>`;
+  return shell('Roster', 'Manage the selected team roster without changing historical data.', `<section class="card roster-card">
+    <div class="roster-toolbar"><div><div class="eyebrow">${allPlayers.length} player${allPlayers.length === 1 ? '' : 's'}</div><h2>Team roster</h2></div><div class="roster-actions">${manage ? '<button class="btn primary" id="addPlayerButton" type="button">+ Add Player</button><button class="btn" id="importRosterButton" type="button">Import Roster</button><button class="btn" id="downloadRosterTemplate" type="button">Download Template</button>' : ''}</div></div>
+    <div class="roster-filters"><input id="rosterSearch" type="search" placeholder="Search players" value="${escapeHtml(rosterSearch)}"><select id="rosterFilter" aria-label="Roster status filter"><option value="active" ${rosterFilter === 'active' ? 'selected' : ''}>Active</option><option value="all" ${rosterFilter === 'all' ? 'selected' : ''}>All</option><option value="inactive" ${rosterFilter === 'inactive' ? 'selected' : ''}>Inactive</option></select></div>
+    ${empty}
+  </section><div id="playerDialog" class="modal-shell" hidden><div class="modal-card"><div class="card-title"><h2 id="playerDialogTitle">Add Player</h2><button class="btn" type="button" id="closePlayerDialog">Close</button></div>${playerForm()}</div></div><div id="importDialog" class="modal-shell" hidden><div class="modal-card"><div class="card-title"><h2>Import Roster</h2><button class="btn" type="button" id="closeImportDialog">Close</button></div><p class="settings-copy">Upload a CSV using the roster template. Invalid rows are rejected and likely duplicates require confirmation.</p><input id="rosterFile" type="file" accept=".csv,text/csv"><div id="importPreview" class="import-preview"></div><div class="player-form-actions"><button class="btn primary" id="confirmRosterImport" type="button" disabled>Confirm import</button></div></div></div>`);
+}
 function gameCenter() {
   const teamStats = new Map((phase1Data?.teamStats || []).map(row => [row.source_game_id, row]));
   const playerStats = new Map();
@@ -340,6 +397,7 @@ function clearTenantState() {
   currentWorkspace = null;
   entitlements.clear();
   workspaceAccessManager.clearWorkspace();
+  rosterManager.clearWorkspace();
   teamContextManager.clearSelection();
   seasonContextManager.clear();
   const organizationSwitcher = document.querySelector('#organizationSwitcher');
@@ -360,6 +418,7 @@ async function activateWorkspace(organizationId, teamId, seasonId = null) {
     const workspace = await workspaceAccessManager.resolveWorkspace(organizationId, teamId, seasonId);
     currentWorkspace = workspace;
     workspaceAccessManager.persistPreference(workspace);
+    rosterManager.setWorkspace(workspace);
     organizationContextManager.select(workspace.organization_id);
     teamContextManager.selectWorkspace(workspace);
     authTeam = teamContext.selectedMembership;
@@ -422,6 +481,114 @@ function workspaceUnavailablePage() {
   return '<section class="card empty-view"><div class="empty-icon">!</div><h2>Workspace unavailable</h2><p>The selected workspace is no longer authorized. Previous workspace data has been cleared.</p></section>';
 }
 
+function rosterFormValues() {
+  return {
+    jersey_number: document.querySelector('#playerJersey')?.value,
+    first_name: document.querySelector('#playerFirstName')?.value,
+    last_name: document.querySelector('#playerLastName')?.value,
+    position: document.querySelector('#playerPosition')?.value,
+    player_type: document.querySelector('#playerType')?.value,
+    shoots: document.querySelector('#playerShoots')?.value,
+    status: document.querySelector('#playerStatus')?.value,
+    notes: document.querySelector('#playerNotes')?.value
+  };
+}
+
+async function refreshRoster() {
+  if (!currentWorkspace) return;
+  await loadPhase1Data(currentWorkspace.team_id);
+  render('players');
+}
+
+function showPlayerDialog(player = null) {
+  const dialog = document.querySelector('#playerDialog');
+  if (!dialog) return;
+  dialog.querySelector('#playerDialogTitle').textContent = player ? 'Edit Player' : 'Add Player';
+  dialog.querySelector('.modal-card form').outerHTML = playerForm(player || {});
+  dialog.hidden = false;
+  dialog.querySelector('#cancelPlayerForm').addEventListener('click', () => { dialog.hidden = true; });
+  dialog.querySelector('#playerForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    const status = dialog.querySelector('#playerFormStatus');
+    status.textContent = 'Saving…';
+    try {
+      const playerId = dialog.querySelector('#playerId').value;
+      if (playerId) await rosterManager.updatePlayer(playerId, rosterFormValues());
+      else await rosterManager.createPlayer(rosterFormValues());
+      dialog.hidden = true;
+      await refreshRoster();
+    } catch (error) {
+      status.textContent = error.message || 'Player could not be saved.';
+    }
+  });
+}
+
+function downloadRosterTemplate() {
+  const blob = new Blob([rosterManager.downloadTemplate()], { type: 'text/csv;charset=utf-8' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'pucknexus-roster-template.csv';
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+function bindRosterControls() {
+  if (!rosterCanManage()) return;
+  document.querySelector('#addPlayerButton')?.addEventListener('click', () => showPlayerDialog());
+  document.querySelector('#importRosterButton')?.addEventListener('click', () => {
+    const dialog = document.querySelector('#importDialog');
+    if (dialog) dialog.hidden = false;
+  });
+  document.querySelector('#downloadRosterTemplate')?.addEventListener('click', downloadRosterTemplate);
+  document.querySelector('#closePlayerDialog')?.addEventListener('click', () => { document.querySelector('#playerDialog').hidden = true; });
+  document.querySelector('#closeImportDialog')?.addEventListener('click', () => { document.querySelector('#importDialog').hidden = true; });
+  document.querySelector('#rosterFilter')?.addEventListener('change', event => { rosterFilter = event.target.value; render('players'); });
+  document.querySelector('#rosterSearch')?.addEventListener('input', event => { rosterSearch = event.target.value; render('players'); });
+  document.querySelectorAll('.roster-edit').forEach(button => button.addEventListener('click', () => {
+    const player = phase1Data?.roster?.find(row => row.id === button.dataset.playerId);
+    if (player) showPlayerDialog(player);
+  }));
+  document.querySelectorAll('.roster-toggle').forEach(button => button.addEventListener('click', async () => {
+    button.disabled = true;
+    try {
+      if (button.dataset.status === 'inactive') await rosterManager.deactivatePlayer(button.dataset.playerId);
+      else await rosterManager.reactivatePlayer(button.dataset.playerId);
+      await refreshRoster();
+    } catch (error) {
+      button.disabled = false;
+      window.alert(error.message || 'Player status could not be changed.');
+    }
+  }));
+  document.querySelector('#rosterFile')?.addEventListener('change', async event => {
+    const file = event.target.files?.[0];
+    const preview = document.querySelector('#importPreview');
+    const confirm = document.querySelector('#confirmRosterImport');
+    if (!file || !preview || !confirm) return;
+    const rows = rosterManager.parseCsv(await file.text());
+    const result = rosterManager.validateImport(rows, phase1Data?.roster || []);
+    rosterImportPreview = { rows, result };
+    preview.innerHTML = `<strong>${rows.length} row${rows.length === 1 ? '' : 's'} detected</strong><br>${result.errors.length ? `<span class="auth-error">${result.errors.length} invalid row${result.errors.length === 1 ? '' : 's'} rejected.</span><br>` : ''}${result.duplicates.length ? `<span class="permission-lock">${result.duplicates.length} possible duplicate${result.duplicates.length === 1 ? '' : 's'} found. Confirm to import them anyway.</span>` : ''}${result.valid.length ? `<span>${result.valid.length} row${result.valid.length === 1 ? '' : 's'} ready to import.</span>` : ''}`;
+    confirm.disabled = !result.valid.length && !result.duplicates.length;
+  });
+  document.querySelector('#confirmRosterImport')?.addEventListener('click', async () => {
+    if (!rosterImportPreview) return;
+    const { rows, result } = rosterImportPreview;
+    const allowDuplicates = result.duplicates.length ? window.confirm('Possible duplicates were found. Import them anyway?') : false;
+    if (result.duplicates.length && !allowDuplicates) return;
+    const confirm = document.querySelector('#confirmRosterImport');
+    confirm.disabled = true;
+    try {
+      await rosterManager.importPlayers(rows, { allowDuplicates, existing: phase1Data?.roster || [] });
+      document.querySelector('#importDialog').hidden = true;
+      rosterImportPreview = null;
+      await refreshRoster();
+    } catch (error) {
+      document.querySelector('#importPreview').innerHTML = `<span class="auth-error">${escapeHtml(error.message || 'Roster import failed.')}</span>`;
+      confirm.disabled = false;
+    }
+  });
+}
+
 function renderRoleSwitcher() {
   document.querySelector('#userAvatar').textContent = activeStaff.initials;
   document.querySelector('#userName').textContent = activeStaff.name;
@@ -463,6 +630,7 @@ function render(view = 'command') {
   document.querySelector('#retryPhase1Data')?.addEventListener('click', () => loadPhase1Data(authTeam.team_id));
   document.querySelector('#retryPhase2AData')?.addEventListener('click', () => loadPhase2AData(authTeam.team_id));
   if (view === 'admin') bindAdminControls();
+  if (view === 'players') bindRosterControls();
   nav.forEach(item => { const allowed = workspaceAuthorizedForView(item.dataset.view); item.hidden = !allowed; item.classList.toggle('active', item.dataset.view === view); item.toggleAttribute('aria-current', item.dataset.view === view); });
   document.querySelector('#sidebar').classList.remove('open'); document.querySelector('#scrim').classList.remove('show'); window.scrollTo(0, 0);
 }
@@ -559,7 +727,7 @@ async function loadPhase1Data(teamId) {
       return [key, transform(data)];
     }));
   };
-  read('roster', 'team_roster_players', 'source_player_id,jersey_number,name,position', PERMISSIONS.PLAYERS_VIEW);
+  read('roster', 'team_roster_players', 'id,team_id,season_id,source_player_id,jersey_number,name,first_name,last_name,position,player_type,shoots,notes,status', PERMISSIONS.PLAYERS_VIEW);
   read('schedule', 'team_schedule_games', 'source_schedule_id,date,time,opponent,home_away,game_type,location,notes,linked_game_source_id', PERMISSIONS.SCHEDULE_VIEW);
   read('games', 'team_games', 'source_game_id,date,opponent,period_length_min', PERMISSIONS.GAMES_VIEW);
   read('playerStats', 'team_game_player_stats', 'source_game_id,source_player_id,player_type,gp,goals,assists,shots,penalty_minutes,plus_minus,blocks,faceoff_wins,faceoff_losses,faceoff_attempts,power_play_goals,power_play_assists,power_play_points,short_handed_goals,short_handed_assists,short_handed_points,game_winning_goals,game_tying_goals,takeaways,giveaways,chances,toi_minutes,minutes,saves,goals_against,wins,losses,ties,shutouts', PERMISSIONS.STATS_VIEW);

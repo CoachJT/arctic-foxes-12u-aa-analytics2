@@ -8,6 +8,7 @@ const organizationSource = fs.readFileSync('web/organization-context.js', 'utf8'
 const entitlementsSource = fs.readFileSync('web/entitlements.js', 'utf8');
 const appSource = fs.readFileSync('web/app.js', 'utf8');
 const indexSource = fs.readFileSync('web/index.html', 'utf8');
+const { daveRoebuckWorkspaces } = require('./fixtures/workspace-fixtures.cjs');
 
 function storage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -94,6 +95,14 @@ test('entitlements reflect resolved backend features and clear between workspace
   assert.equal(manager.isFeatureEnabled('film'), false);
   manager.clear();
   assert.equal(manager.getFeatureSet().size, 0);
+});
+
+test('Dave fixture supports separate Arctic Foxes and Avonworth Head Coach workspaces', () => {
+  assert.equal(daveRoebuckWorkspaces.length, 2);
+  assert.deepEqual(daveRoebuckWorkspaces.map(workspace => workspace.organization_name), ['Arctic Foxes', 'Avonworth Hockey']);
+  assert.deepEqual(daveRoebuckWorkspaces.map(workspace => workspace.role_label), ['Head Coach', 'Head Coach']);
+  assert.notEqual(daveRoebuckWorkspaces[0].team_id, daveRoebuckWorkspaces[1].team_id);
+  assert.equal(Object.hasOwn(daveRoebuckWorkspaces[0], 'user_id'), false);
 });
 
 test('Stage E wires server-resolved workspace state and tenant clearing into the app shell', () => {
