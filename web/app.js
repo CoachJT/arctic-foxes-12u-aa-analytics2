@@ -45,6 +45,9 @@ let statsSortKey = 'pts';
 let statsSortDir = 'desc';
 const teamContextManager = window.FoxesTeamContext.createTeamContext({ client: supabaseClient });
 const seasonContextManager = window.FoxesSeasonContext.createSeasonContext({ client: supabaseClient });
+document.addEventListener('error', event => {
+  if (event.target instanceof HTMLImageElement) event.target.hidden = true;
+}, true);
 const teamContext = teamContextManager.context;
 const seasonContext = seasonContextManager.context;
 applyDocumentBrand();
@@ -66,6 +69,7 @@ function cardTitle(title, link = '') { return `<div class="card-title"><h2>${tit
 function tenantName() { return currentWorkspace?.branding?.display_name || currentWorkspace?.team_name || seasonContext.branding?.display_name || authTeam?.teams?.name || 'Selected team'; }
 function tenantSeasonName() { return currentWorkspace?.season_name || seasonContext.selectedSeason?.name || phase1Data?.seasonRecord?.season_key || 'Live season'; }
 function shell(title, subtitle, body) { return `<div class="page-head"><div><div class="eyebrow">${PLATFORM.name} · ${escapeHtml(tenantName())} workspace</div><h1>${title}</h1><p>${subtitle}</p></div></div>${body}`; }
+
 function notice(text) { return `<div class="callout prototype-note">${text}</div>`; }
 function phase1Number(value) { return Number.isFinite(Number(value)) ? Number(value) : 0; }
 function phase1Date(value) { return value ? new Date(`${value}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' }) : 'Date unavailable'; }
@@ -168,7 +172,12 @@ function command() {
   const orgName = tenantName();
   const teamNameStr = authTeam?.team_name || authTeam?.name || currentWorkspace?.team_name || 'Selected Team';
   const seasonStr = tenantSeasonName();
-  const logoUrl = currentWorkspace?.branding?.logo_url || currentWorkspace?.branding?.logo || '';
+  const fallbackLogoUrl = currentWorkspace?.branding?.logo_url || currentWorkspace?.branding?.logo || '';
+  const brandingSource = { ...(currentWorkspace?.branding || {}), ...(seasonContext.branding || {}), settings: seasonContext.branding?.settings || {} };
+  const brandingAssets = globalThis.FoxesBrandingAssets?.normalize?.(brandingSource) || {
+    logoUrl: fallbackLogoUrl, heroImageUrl: null, welcomeImageUrl: null, secondaryImageUrl: null, wordmarkUrl: null, watermarkUrl: null, tagline: null, motto: null, featureImages: {}
+  };
+  const visualBackgroundStyle = url => url ? ` style="--organization-image:url('${escapeHtml(url)}')"` : '';
   const orgMark = orgName.split(/\s+/).filter(Boolean).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'PN';
   const welcomeName = activeStaff?.name || activeStaff?.role || 'Coach';
   const opponentMark = String(nextGame?.opponent || 'OP').split(/\s+/).filter(Boolean).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'OP';
@@ -193,7 +202,7 @@ function command() {
   const nextGameCard = nextGame ? `
       <div class="game-top">
         <div class="opponent">
-          <span class="opponent-mark">${escapeHtml(opponentMark)}</span>
+          ${brandingAssets.logoUrl ? `<img class="team-game-crest" src="${escapeHtml(brandingAssets.logoUrl)}" alt="${escapeHtml(orgName)} crest">` : `<span class="opponent-mark">${escapeHtml(orgMark)}</span>`}
           <div>
             <span class="eyebrow">Next Game</span>
             <h2>vs ${escapeHtml(nextGame.opponent || 'Opponent')}</h2>
@@ -217,18 +226,23 @@ function command() {
   return shell(
     'Dashboard',
     'Command Center for team performance, scheduling, and analytics.',
-    `<section class="hero card command-hero">
-      <div class="hero-brand">
-        ${logoUrl
-          ? `<img class="hero-logo" src="${escapeHtml(logoUrl)}" alt="${escapeHtml(orgName)} logo">`
-          : `<span class="hero-mark" aria-hidden="true">${escapeHtml(orgMark)}</span>`}
-        <div class="hero-copy">
-          <span class="eyebrow">${escapeHtml(orgName)}</span>
-          <h1 class="hero-title">${escapeHtml(teamNameStr)}</h1>
-          <p class="hero-meta">${escapeHtml(seasonStr)}</p>
-        </div>
+    `<section class="org-identity-banner"${visualBackgroundStyle(brandingAssets.heroImageUrl)}>
+      ${brandingAssets.watermarkUrl || brandingAssets.logoUrl ? `<img class="identity-watermark" src="${escapeHtml(brandingAssets.watermarkUrl || brandingAssets.logoUrl)}" alt="" aria-hidden="true">` : ''}
+      <div class="identity-brand">
+        ${brandingAssets.wordmarkUrl ? `<img class="identity-wordmark" src="${escapeHtml(brandingAssets.wordmarkUrl)}" alt="${escapeHtml(orgName)}">` : brandingAssets.logoUrl ? `<img class="identity-logo" src="${escapeHtml(brandingAssets.logoUrl)}" alt="${escapeHtml(orgName)} logo">` : `<span class="identity-mark" aria-hidden="true">${escapeHtml(orgMark)}</span>`}
+        <div><span class="eyebrow">PuckNexus organization workspace</span><strong>${escapeHtml(orgName)}</strong><small>${escapeHtml(teamNameStr)} · ${escapeHtml(seasonStr)}</small></div>
       </div>
-      <p class="hero-welcome">Welcome back, ${escapeHtml(welcomeName)}. This is your authorized ${escapeHtml(orgName)} command center.</p>
+      <div class="identity-message"><span>${escapeHtml(brandingAssets.tagline || 'TEAM OPERATIONS')}</span><strong>${escapeHtml(brandingAssets.motto || 'DEVELOP COMPETE BELONG').replace(/\s+/g, '<br>')}</strong></div>
+    </section>
+    <div class="command-layout"><main class="command-main"><section class="hero card command-hero"${visualBackgroundStyle(brandingAssets.welcomeImageUrl || brandingAssets.secondaryImageUrl)}>
+      ${brandingAssets.watermarkUrl || brandingAssets.logoUrl ? `<img class="hero-watermark" src="${escapeHtml(brandingAssets.watermarkUrl || brandingAssets.logoUrl)}" alt="" aria-hidden="true">` : ''}
+      <div class="welcome-content">
+        <span class="eyebrow">Welcome back,</span>
+        <h1 class="welcome-title">${escapeHtml(welcomeName)}.</h1>
+        <p class="welcome-meta">${escapeHtml(activeStaff?.role || 'Team member')} <b>·</b> ${escapeHtml(teamNameStr)} <b>·</b> ${escapeHtml(seasonStr)}</p>
+        ${(brandingAssets.tagline || brandingAssets.motto) ? `<p class="welcome-message">${escapeHtml(brandingAssets.tagline || brandingAssets.motto)}</p>` : ''}
+        <div class="welcome-actions"><button class="btn primary" type="button" onclick="render('film')">View Latest Game Film</button><button class="btn secondary" type="button" onclick="render('team')">Team Dashboard</button></div>
+      </div>
     </section>
 
     <section class="metrics-grid">
@@ -320,15 +334,16 @@ function command() {
 
       <section class="card">
         <h3>Quick Access</h3>
-        <div class="quick-access">
-          <button class="btn secondary" type="button" onclick="render('team')">Team Overview</button>
-          <button class="btn secondary" type="button" onclick="render('players')">Roster</button>
-          <button class="btn secondary" type="button" onclick="render('stats')">Player Stats</button>
-          <button class="btn secondary" type="button" onclick="render('scouting')">Scouting</button>
-          <button class="btn secondary" type="button" onclick="render('reports')">Reports</button>
+        <div class="quick-access feature-access">
+          ${[['film', 'Film Room', 'Watch. Learn. Improve.', 'icon-film'], ['scouting', 'Scouting', 'Know your opponent.', 'icon-scouting'], ['reports', 'Reports', 'Insights that matter.', 'icon-reports'], ['development', 'Player Development', 'Track progress.', 'icon-development'], ['coaching', 'Coaching Tools', 'Practice plans. Resources.', 'icon-tools']].map(([view, label, description, icon]) => `<button class="btn secondary feature-tile"${visualBackgroundStyle(brandingAssets.featureImages[view === 'coaching' ? 'coaching_tools' : view])} type="button" onclick="render('${view}')"><svg class="nav-icon"><use href="#${icon}"></use></svg><span><strong>${label}</strong><small>${description}</small></span><b>›</b></button>`).join('')}
         </div>
       </section>
-    </div>`
+    </div></main>
+    <aside class="org-rail">
+      <section class="rail-panel rail-glance"><h3>${escapeHtml(orgName)} at a glance</h3><dl><div><dt>Team</dt><dd>${escapeHtml(teamNameStr)}</dd></div><div><dt>Season</dt><dd>${escapeHtml(seasonStr)}</dd></div><div><dt>Roster</dt><dd>${playersCount} Active Players</dd></div><div><dt>Goalies</dt><dd>${goaliesCount}</dd></div></dl></section>
+      <section class="rail-panel rail-message">${brandingAssets.secondaryImageUrl ? `<img src="${escapeHtml(brandingAssets.secondaryImageUrl)}" alt="" aria-hidden="true">` : brandingAssets.logoUrl ? `<img src="${escapeHtml(brandingAssets.logoUrl)}" alt="" aria-hidden="true">` : `<span>${escapeHtml(orgMark)}</span>`}<strong>${escapeHtml(brandingAssets.motto || 'BUILDING A STRONGER TEAM, TOGETHER.')}</strong></section>
+      <section class="rail-panel rail-next"><h3>Upcoming team events</h3>${nextGame ? `<p><strong>${escapeHtml(phase1Date(nextGame.date))}</strong><span>vs ${escapeHtml(nextGame.opponent || 'Opponent')}</span><small>${escapeHtml(nextGame.time || 'Time to be announced')}</small></p>` : '<p class="empty-text">No upcoming team events are scheduled.</p>'}<button class="btn secondary" type="button" onclick="render('schedule')">View Full Schedule →</button></section>
+    </aside></div>`
   );
 }
 
@@ -522,7 +537,7 @@ function goalieRows() {
     || String(left.name || '').localeCompare(String(right.name || ''), undefined, { sensitivity: 'base' }));
 }
 function stats() {
-  const record = phase1Record(); const teamStats = phase1Data?.teamStats || []; const skaters = statsRows(); const goalies = goalieRows(); const activePlayers = activeRosterPlayers(phase1Data?.roster || []); const gp = statsNumber(record.games_played); const gf = statsNumber(record.goals_for); const ga = statsNumber(record.goals_against); const branding = seasonContext.branding || {}; const teamName = tenantName(); const mark = String(branding.short_name || branding.display_name || teamName || 'PN').replace(/\s+/g, '').slice(0, 2).toUpperCase();
+  const record = phase1Record(); const teamStats = phase1Data?.teamStats || []; const skaters = statsRows(); const goalies = goalieRows(); const activePlayers = activeRosterPlayers(phase1Data?.roster || []); const gp = statsNumber(record.games_played); const gf = statsNumber(record.goals_for); const ga = statsNumber(record.goals_against); const branding = seasonContext.branding || {}; const teamName = tenantName(); const mark = String(branding.short_name || branding.display_name || teamName || 'PN').replace(/\s+/g, '').slice(0, 2).toUpperCase(); const logoUrl = currentWorkspace?.branding?.logo_url || currentWorkspace?.branding?.logo || ''; const brandingAssets = globalThis.FoxesBrandingAssets?.normalize?.({ ...(currentWorkspace?.branding || {}), ...branding, settings: branding.settings || {} }) || { logoUrl, heroImageUrl: null, wordmarkUrl: null, watermarkUrl: null };
   const formatLeaderValue = (row, key, suffix) => `${statsFormat(key.endsWith('Pct') ? row[key] : row[key], key.endsWith('Pct') ? 1 : 0)}${suffix}`;
   const renderSkaterHead = row => `<div class="leader-head"><span class="leader-jersey">#${escapeHtml(row.jersey_number || '#')}</span><div><strong>${escapeHtml(row.name || 'Player')}</strong><small>${escapeHtml(row.position || 'F')} · ${row.gp} GP</small></div></div>`;
   const leader = (label, key, suffix, secondary) => {
@@ -565,7 +580,7 @@ function stats() {
     .sort((left, right) => String(left.game.date || '').localeCompare(String(right.game.date || '')) || left.index - right.index);
   const trend = trendRows.map(({ game, stats }) => `<div class="trend-bar"><span style="height:${Math.max(12, statsNumber(stats.goals_for) * 18)}%"></span><small>${escapeHtml(String(game.date || '').slice(5) || 'Game')}</small></div>`).join('');
   const trendAgainst = trendRows.map(({ game, stats }) => `<div class="trend-bar"><span class="trend-against" style="height:${Math.max(12, statsNumber(stats.goals_against) * 18)}%"></span><small>${escapeHtml(String(game.date || '').slice(5) || 'Game')}</small></div>`).join('');
-  return shell('TEAM ANALYTICS', 'Season Performance Dashboard', `<div class="stats-dashboard"><section class="stats-hero card"><div class="stats-hero-top"><div class="brand-cluster"><div class="org-mark">${escapeHtml(mark || 'PN')}</div><div><div class="eyebrow">${escapeHtml(branding.display_name || teamName)}</div><strong>${escapeHtml(teamName)}</strong></div></div><div class="stats-record-wrap"><span>Season record</span><strong>${record.wins}–${record.losses}–${record.ties}</strong></div></div><div class="stats-hero-meta"><div><div class="subtle-label">Team</div><strong>${escapeHtml(teamName)}</strong></div><div><div class="subtle-label">Season</div><strong>${escapeHtml(tenantSeasonName())}</strong></div><div><div class="subtle-label">Games</div><strong>${gp}</strong></div></div></section><section class="stats-metrics-grid">${[['Games Played', gp], ['Record', `${record.wins}–${record.losses}–${record.ties}`], ['Goals For', gf], ['Goals Against', ga], ['Goal Differential', gf - ga], ['Goals Per Game', statsFormat(gp ? gf / gp : null)], ['Goals Against Per Game', statsFormat(gp ? ga / gp : null)], ['Active Players', activePlayers.length]].map(([label, value]) => `<article class="card stats-metric"><div class="stat-legend">${label}</div><strong>${value}</strong><span>Synced season data</span></article>`).join('')}</section><section class="stats-section-header"><h2>Season Leaders</h2></section><section class="leader-card-grid">${leaderCards.join('')}</section><section class="stats-section-header"><h2>Top 5 Leaderboards</h2></section><section class="top5-grid">${topFive}</section><section class="stats-section-header"><h2>Skater Stat Table</h2></section><section class="card skater-table-shell"><div class="table-wrap"><table class="data-table compact-table"><thead><tr>${columns.map(([label, key]) => `<th><button class="table-sort" type="button" data-sort-key="${key}">${label}${statsSortKey === key ? (statsSortDir === 'asc' ? ' ↑' : ' ↓') : ''}</button></th>`).join('')}</tr></thead><tbody>${skaterTable}</tbody></table></div></section><section class="stats-section-header"><h2>Goalie Analytics</h2></section><section class="card goalie-shell"><div class="table-wrap"><table class="data-table compact-table"><thead><tr><th>#</th><th>Player</th><th>GP</th><th>W</th><th>L</th><th>T</th><th>SA</th><th>Saves</th><th>GA</th><th>Save %</th><th>GAA</th></tr></thead><tbody>${goalieTable}</tbody></table></div></section><section class="stats-section-header"><h2>Team Trends</h2></section><section class="card trend-shell"><div class="trend-pair"><div class="trend-chart">${trend || '<div class="trend-empty">No completed team trend data</div>'}</div><div class="trend-chart">${trendAgainst || '<div class="trend-empty">No completed team trend data</div>'}</div></div><div class="trend-label">Goals For / Goals Against by completed game</div></section></div>`);
+  return shell('TEAM ANALYTICS', 'Season Performance Dashboard', `<div class="stats-dashboard"><section class="stats-brand-banner"${brandingAssets.heroImageUrl ? ` style="--organization-image:url('${escapeHtml(brandingAssets.heroImageUrl)}')"` : ''}><div class="brand-cluster"><div class="org-mark">${brandingAssets.logoUrl ? `<img src="${escapeHtml(brandingAssets.logoUrl)}" alt="${escapeHtml(branding.display_name || teamName)} crest" class="stats-logo-img">` : escapeHtml(mark || 'PN')}</div><div><span class="eyebrow">Organization analytics</span>${brandingAssets.wordmarkUrl ? `<img class="stats-wordmark" src="${escapeHtml(brandingAssets.wordmarkUrl)}" alt="${escapeHtml(branding.display_name || teamName)}">` : `<strong>${escapeHtml(branding.display_name || teamName)}</strong>`}<small>${escapeHtml(teamName)} · ${escapeHtml(tenantSeasonName())}</small></div></div><div class="stats-brand-copy">TEAM<br>ANALYTICS</div></section><section class="stats-hero card">${brandingAssets.watermarkUrl || brandingAssets.logoUrl ? `<img class="stats-watermark" src="${escapeHtml(brandingAssets.watermarkUrl || brandingAssets.logoUrl)}" alt="" aria-hidden="true">` : ''}<div class="stats-hero-top"><div class="brand-cluster"><div><div class="eyebrow">Season performance</div><strong>${escapeHtml(teamName)}</strong></div></div><div class="stats-record-wrap"><span>Season record</span><strong>${record.wins}–${record.losses}–${record.ties}</strong></div></div><div class="stats-hero-meta"><div><div class="subtle-label">Team</div><strong>${escapeHtml(teamName)}</strong></div><div><div class="subtle-label">Season</div><strong>${escapeHtml(tenantSeasonName())}</strong></div><div><div class="subtle-label">Games</div><strong>${gp}</strong></div></div></section><section class="stats-metrics-grid">${[['Games Played', gp], ['Record', `${record.wins}–${record.losses}–${record.ties}`], ['Goals For', gf], ['Goals Against', ga], ['Goal Differential', gf - ga], ['Goals Per Game', statsFormat(gp ? gf / gp : null)], ['Goals Against Per Game', statsFormat(gp ? ga / gp : null)], ['Active Players', activePlayers.length]].map(([label, value]) => `<article class="card stats-metric"><div class="stat-legend">${label}</div><strong>${value}</strong><span>Synced season data</span></article>`).join('')}</section><section class="stats-section-header"><h2>Season Leaders</h2></section><section class="leader-card-grid">${leaderCards.join('')}</section><section class="stats-section-header"><h2>Top 5 Leaderboards</h2></section><section class="top5-grid">${topFive}</section><section class="stats-section-header"><h2>Skater Stat Table</h2></section><section class="card skater-table-shell"><div class="table-wrap"><table class="data-table compact-table"><thead><tr>${columns.map(([label, key]) => `<th><button class="table-sort" type="button" data-sort-key="${key}">${label}${statsSortKey === key ? (statsSortDir === 'asc' ? ' ↑' : ' ↓') : ''}</button></th>`).join('')}</tr></thead><tbody>${skaterTable}</tbody></table></div></section><section class="stats-section-header"><h2>Goalie Analytics</h2></section><section class="card goalie-shell"><div class="table-wrap"><table class="data-table compact-table"><thead><tr><th>#</th><th>Player</th><th>GP</th><th>W</th><th>L</th><th>T</th><th>SA</th><th>Saves</th><th>GA</th><th>Save %</th><th>GAA</th></tr></thead><tbody>${goalieTable}</tbody></table></div></section><section class="stats-section-header"><h2>Team Trends</h2></section><section class="card trend-shell"><div class="trend-pair"><div class="trend-chart">${trend || '<div class="trend-empty">No completed team trend data</div>'}</div><div class="trend-chart">${trendAgainst || '<div class="trend-empty">No completed team trend data</div>'}</div></div><div class="trend-label">Goals For / Goals Against by completed game</div></section></div>`);
 }
 function rosterCanManage() {
   return Boolean(currentWorkspace?.authorized)
