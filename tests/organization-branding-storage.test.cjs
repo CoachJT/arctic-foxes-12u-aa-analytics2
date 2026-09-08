@@ -77,8 +77,30 @@ test('organization branding uploads and deletes use only the resolved workspace 
   assert.deepEqual(JSON.parse(JSON.stringify(calls[0])), ['prepare_organization_branding_asset', {
     target_organization_id: ORG, target_team_id: TEAM, requested_asset_key: 'hero', requested_mime_type: 'image/jpeg', requested_size_bytes: 100
   }]);
-  assert.equal(calls[1][0], 'finalize_organization_branding_asset');
+  assert.deepEqual(JSON.parse(JSON.stringify(calls[1])), ['finalize_organization_branding_asset', {
+    target_asset_id: ASSET
+  }]);
+  assert.ok(!('public_url' in calls[1][1]), 'finalize must not send a client-computed public URL');
   assert.deepEqual(JSON.parse(JSON.stringify(calls[2])), ['delete_organization_branding_asset', {
     target_organization_id: ORG, target_team_id: TEAM, target_asset_id: ASSET
   }]);
+});
+
+test('organization branding settings merge tolerates a malformed existing feature_images value', () => {
+  for (const malformed of [['not', 'an', 'object'], 'a string', 42, null]) {
+    const merged = storage.mergeBrandingSettings(
+      { font: 'default', feature_images: malformed },
+      { film: 'https://cdn.example/film.jpg' }
+    );
+    assert.deepEqual(JSON.parse(JSON.stringify(merged.feature_images)), { film: 'https://cdn.example/film.jpg' });
+    assert.equal(merged.font, 'default');
+  }
+});
+
+test('organization branding settings merge drops a feature image when the value is unsafe', () => {
+  const merged = storage.mergeBrandingSettings(
+    { feature_images: { film: 'https://cdn.example/old-film.jpg' } },
+    { film: 'javascript:alert(1)' }
+  );
+  assert.equal(merged.feature_images.film, undefined);
 });

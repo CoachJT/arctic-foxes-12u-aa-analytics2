@@ -112,7 +112,9 @@
       if (upload.error) throw new Error(upload.error.message || 'Branding upload failed.');
       const publicUrl = stablePublicUrl(client, asset.object_path);
       if (!publicUrl) throw new Error('A stable public branding URL could not be generated.');
-      const finalized = await client.rpc('finalize_organization_branding_asset', { target_asset_id: asset.asset_id, public_url: publicUrl });
+      // The server derives and persists its own public URL from the
+      // server-generated path; it never accepts one from the client.
+      const finalized = await client.rpc('finalize_organization_branding_asset', { target_asset_id: asset.asset_id });
       if (finalized.error) throw new Error(finalized.error.message || 'Branding upload could not be finalized.');
       return { ...asset, publicUrl };
     }
