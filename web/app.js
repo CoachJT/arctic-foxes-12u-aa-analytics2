@@ -479,7 +479,7 @@ function platformAdmin() {
         <label>Beta plan<select id="onboardingPlanId" required>${planOptions}</select></label>
         <label>Brand display name<input id="onboardingBrandDisplayName" maxlength="120" required placeholder="Team display name" /></label>
         <label>Brand short name<input id="onboardingBrandShortName" maxlength="32" required placeholder="Team initials" /></label>
-        <label>Stable logo URL<input id="onboardingBrandLogoUrl" type="url" maxlength="2048" required placeholder="https://example.org/logo.png" /></label>
+        <label>Stable logo URL (optional)<input id="onboardingBrandLogoUrl" type="url" maxlength="2048" placeholder="https://example.org/logo.png" /></label>
         <label>Primary color<input id="onboardingBrandPrimaryColor" maxlength="7" required pattern="#[0-9A-Fa-f]{6}" value="#173B58" /></label>
         <label>Secondary color<input id="onboardingBrandSecondaryColor" maxlength="7" required pattern="#[0-9A-Fa-f]{6}" value="#FFFFFF" /></label>
         <label>Accent color<input id="onboardingBrandAccentColor" maxlength="7" required pattern="#[0-9A-Fa-f]{6}" value="#61D4F5" /></label>
@@ -1180,6 +1180,10 @@ function betaOnboardingValue(form, id) {
   return form.querySelector(`#${id}`).value.trim();
 }
 
+function betaOnboardingOptionalValue(form, id) {
+  return betaOnboardingValue(form, id) || null;
+}
+
 function betaOnboardingToken() {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
@@ -1228,7 +1232,7 @@ async function submitBetaOnboarding(event) {
       target_plan_id: betaOnboardingValue(form, 'onboardingPlanId'),
       target_branding_display_name: betaOnboardingValue(form, 'onboardingBrandDisplayName'),
       target_branding_short_name: betaOnboardingValue(form, 'onboardingBrandShortName'),
-      target_branding_logo_url: betaOnboardingValue(form, 'onboardingBrandLogoUrl'),
+      target_branding_logo_url: betaOnboardingOptionalValue(form, 'onboardingBrandLogoUrl'),
       target_branding_primary_color: betaOnboardingValue(form, 'onboardingBrandPrimaryColor'),
       target_branding_secondary_color: betaOnboardingValue(form, 'onboardingBrandSecondaryColor'),
       target_branding_accent_color: betaOnboardingValue(form, 'onboardingBrandAccentColor'),
