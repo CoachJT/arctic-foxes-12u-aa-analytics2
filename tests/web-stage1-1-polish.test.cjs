@@ -84,6 +84,7 @@ function renderShellHarness(phase1Data, now = '2026-09-08T12:00:00') {
     ${extractFunction(app, 'playerStatTotals')}
     ${extractFunction(app, 'rosterDisplayName')}
     ${extractFunction(app, 'isGoalie')}
+    ${extractFunction(app, 'activeRosterPlayers')}
     ${extractFunction(app, 'leaders')}
     ${extractFunction(app, 'recent')}
     ${extractFunction(app, 'escapeHtml')}
@@ -147,7 +148,7 @@ test('unprovisioned workspace plans surface an honest notice instead of a broken
   assert.match(app, /currentWorkspace\?\.authorized && !currentWorkspace\?\.plan_id/);
 });
 
-test('dashboard roster count matches the canonical roster source used by the Players view', () => {
+test('dashboard roster count uses active roster status while Players view keeps full roster visibility', () => {
   const roster = [
     { id: 'p1', source_player_id: 's1', jersey_number: '9', name: 'Ava Skater', position: 'F', player_type: 'skater', status: 'active' },
     { id: 'p2', source_player_id: 's2', jersey_number: '31', name: 'Gabe Goalie', position: 'G', player_type: 'goalie', status: 'active' },
@@ -162,11 +163,29 @@ test('dashboard roster count matches the canonical roster source used by the Pla
     seasonRecord: { games_played: 3, wins: 2, losses: 1, ties: 0, goals_for: 9, goals_against: 7 }
   });
 
-  assert.match(rendered.renderedCommand, /Roster Size<\/span>\s*<strong class="metric-value">3<\/strong>/);
+  assert.match(rendered.renderedCommand, /Roster Size<\/span>\s*<strong class="metric-value">2<\/strong>/);
   assert.match(rendered.renderedCommand, /1 Goalie<\/span>/);
   assert.match(rendered.renderedPlayers, /3 players<\/div>/);
   assert.match(rendered.renderedPlayers, /Ava Skater/);
   assert.match(rendered.renderedPlayers, /Gabe Goalie/);
+});
+
+test('dashboard roster count preserves legacy rows that do not include status', () => {
+  const rendered = renderShellHarness({
+    roster: [
+      { id: 'p1', source_player_id: 's1', jersey_number: '9', name: 'Ava Skater', position: 'F', player_type: 'skater', status: 'active' },
+      { id: 'p2', source_player_id: 's2', jersey_number: '31', name: 'Gabe Goalie', position: 'G', player_type: 'goalie' },
+      { id: 'p3', source_player_id: 's3', jersey_number: '4', name: 'Drew Defender', position: 'D', player_type: 'skater', status: 'inactive' }
+    ],
+    schedule: [],
+    games: [],
+    playerStats: [],
+    teamStats: [],
+    seasonRecord: { games_played: 3, wins: 2, losses: 1, ties: 0, goals_for: 9, goals_against: 7 }
+  });
+
+  assert.match(rendered.renderedCommand, /Roster Size<\/span>\s*<strong class="metric-value">2<\/strong>/);
+  assert.match(rendered.renderedCommand, /1 Goalie<\/span>/);
 });
 
 test('dashboard and roster views derive from phase1Data roster reads scoped by team', () => {

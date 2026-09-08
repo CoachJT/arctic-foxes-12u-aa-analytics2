@@ -120,6 +120,13 @@ function rosterDisplayName(player) {
 function isGoalie(player) {
   return player?.position === 'G' || player?.player_type === 'goalie' || player?.is_goalie === true || (player?.pos || '').includes('G');
 }
+function activeRosterPlayers(roster = []) {
+  return roster.filter(player => {
+    const status = typeof player?.status === 'string' ? player.status.trim().toLowerCase() : '';
+    if (!status) return true;
+    return status === 'active';
+  });
+}
 function leaders() {
   const stats = playerStatTotals();
   return (phase1Data?.roster || []).map(player => ({ player, totals: stats.get(player.source_player_id) || {} }))
@@ -148,7 +155,7 @@ function command() {
   const nextGame = phase1NextScheduledGame();
   const latestCompleted = phase1LatestCompletedGame();
   const totalGames = record.games_played;
-  const roster = phase1Data?.roster || [];
+  const roster = activeRosterPlayers(phase1Data?.roster || []);
   const playersCount = roster.length;
   const goaliesCount = roster.filter(isGoalie).length;
   
