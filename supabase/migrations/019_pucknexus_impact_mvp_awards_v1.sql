@@ -468,7 +468,6 @@ begin
     (target_mvp->>'calculated_at')::timestamptz, 'automatic',
     coalesce((target_mvp->>'is_tie')::boolean, false), 'pnx-impact-v1', '1'
   where target_mvp is not null
-  )
   on conflict (team_id, season_id, source_game_id) do update set
     source_player_id = excluded.source_player_id,
     predicted_source_player_id = excluded.predicted_source_player_id,
