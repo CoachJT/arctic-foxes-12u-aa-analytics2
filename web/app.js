@@ -19,6 +19,10 @@ const statsEntryManager = window.FoxesStatsEntry.createStatsEntry({
   client: supabaseClient,
   getWorkspace: () => currentWorkspace
 });
+const scheduleManager = window.FoxesScheduleManagement.createScheduleManagement({
+  client: supabaseClient,
+  getWorkspace: () => currentWorkspace
+});
 const mediaStorage = window.FoxesMediaStorage.createMediaStorage({
   client: supabaseClient,
   getWorkspace: () => currentWorkspace
@@ -61,6 +65,10 @@ let statsEntryDraft = null;
 let statsEntrySaving = false;
 let statsEntryError = '';
 let statsEntrySavedMessage = '';
+let scheduleFormOpen = false;
+let scheduleFormSaving = false;
+let scheduleFormError = '';
+let scheduleFormSavedMessage = '';
 const teamContextManager = window.FoxesTeamContext.createTeamContext({ client: supabaseClient });
 const seasonContextManager = window.FoxesSeasonContext.createSeasonContext({ client: supabaseClient });
 document.addEventListener('error', event => {
@@ -507,7 +515,33 @@ function platformAdmin() {
   );
 }
 
-function schedule() { return shell('Schedule','Live schedule synced from the team Windows app.',`<section class="card">${cardTitle(`Team schedule · ${phase1Data?.schedule?.length || 0} entries`,'Supabase read-only')}<div class="schedule-list">${(phase1Data?.schedule || []).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).map(game=>`<div class="schedule-item"><div class="schedule-date"><strong>${escapeHtml(new Date(`${game.date}T00:00:00`).toLocaleDateString(undefined,{month:'short',day:'2-digit'}).toUpperCase())}</strong>${escapeHtml(String(game.date).slice(0,4))}</div><div><h3>${escapeHtml(game.opponent)}</h3><p>${escapeHtml(game.home_away)} · ${escapeHtml(game.location || 'Location unavailable')}${game.time ? ` · ${escapeHtml(game.time)}` : ''}</p></div><span class="tag">${escapeHtml(game.game_type)}</span></div>`).join('') || '<div class="empty-view"><h2>No schedule entries</h2><p>No synced schedule entries are available for this team.</p></div>'}</div></section>`); }
+function canManageSchedule() {
+  return Boolean(currentWorkspace?.authorized)
+    && can(PERMISSIONS.SCHEDULE_EDIT, activeStaff)
+    && entitlements.isFeatureEnabled('schedule');
+}
+function scheduleAddForm() {
+  return `<form id="scheduleAddForm" class="player-form">
+    <label>Date<input id="scheduleGameDate" type="date" required></label>
+    <label>Time<input id="scheduleGameTime" type="time"></label>
+    <label class="player-form-wide">Opponent<input id="scheduleGameOpponent" required maxlength="120" placeholder="Opponent name"></label>
+    <label>Home / Away<select id="scheduleGameHomeAway"><option value="Home">Home</option><option value="Away">Away</option><option value="Neutral">Neutral</option></select></label>
+    <label>Game type<select id="scheduleGameType"><option value="League">League</option><option value="Independent">Independent</option><option value="Tournament">Tournament</option><option value="Scrimmage">Scrimmage</option><option value="Other">Other</option></select></label>
+    <label class="player-form-wide">Rink / Location<input id="scheduleGameLocation" maxlength="200" placeholder="Rink or arena"></label>
+    <label class="player-form-wide">Notes<textarea id="scheduleGameNotes" maxlength="2000"></textarea></label>
+    <div class="player-form-actions"><button class="btn" type="button" id="cancelScheduleForm">Cancel</button><button class="btn primary" type="submit" ${scheduleFormSaving ? 'disabled' : ''}>${scheduleFormSaving ? 'Saving…' : '＋ Add Game to Schedule'}</button></div>
+    <div id="scheduleFormStatus" class="invite-status" role="status">${escapeHtml(scheduleFormError || '')}</div>
+  </form>`;
+}
+function schedule() {
+  const manage = canManageSchedule();
+  const addControl = manage
+    ? (scheduleFormOpen
+      ? `<section class="card">${scheduleAddForm()}</section>`
+      : `<div class="player-form-actions"><button class="btn primary" type="button" id="openScheduleForm">＋ Add Game to Schedule</button></div>${scheduleFormSavedMessage ? `<div class="invite-status" role="status">${escapeHtml(scheduleFormSavedMessage)}</div>` : ''}`)
+    : '';
+  return shell('Schedule', 'Live schedule synced from the team Windows app.', `${addControl}<section class="card">${cardTitle(`Team schedule · ${phase1Data?.schedule?.length || 0} entries`, manage ? 'Supabase read/write' : 'Supabase read-only')}<div class="schedule-list">${(phase1Data?.schedule || []).slice().sort((a, b) => String(a.date).localeCompare(String(b.date))).map(game => `<div class="schedule-item"><div class="schedule-date"><strong>${escapeHtml(new Date(`${game.date}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: '2-digit' }).toUpperCase())}</strong>${escapeHtml(String(game.date).slice(0, 4))}</div><div><h3>${escapeHtml(game.opponent)}</h3><p>${escapeHtml(game.home_away)} · ${escapeHtml(game.location || 'Location unavailable')}${game.time ? ` · ${escapeHtml(game.time)}` : ''}</p></div><span class="tag">${escapeHtml(game.game_type)}</span></div>`).join('') || '<div class="empty-view"><h2>No schedule entries</h2><p>No synced schedule entries are available for this team.</p></div>'}</div></section>`);
+}
 function statsNumber(value) { const number = Number(value); return Number.isFinite(number) ? number : 0; }
 function statsValue(value) { const number = Number(value); return Number.isFinite(number) ? number : null; }
 function statsAccumulate(total, value) { const number = statsValue(value); return number === null ? total : (total === null ? number : total + number); }
@@ -848,6 +882,17 @@ function statsEntrySection(game) {
     ${statsEntryStep !== 'review' ? `<div class="player-form-actions"><button class="btn" type="button" id="cancelStatsEntry">Cancel</button><button class="btn primary" type="button" id="nextStatsStep">Next</button></div>` : ''}`;
 }
 
+function scheduleGameKey(value) { return String(value || '').trim().toLowerCase(); }
+// A scheduled entry represents the same logical game as a completed game when either:
+// (1) the schedule row's linked_game_source_id points at the completed game's source_game_id
+//     (the authoritative id-based link set by the Windows app), or
+// (2) as a fallback for schedule rows synced before that link was set, the date and opponent
+//     match exactly. This mirrors the same id-first/date-opponent-fallback pattern the Windows
+//     app already uses in findSavedGameForSchedule301 so both surfaces agree on one game lifecycle.
+function scheduleMatchesCompletedGame(item, game) {
+  if (item.linked_game_source_id) return game.source_game_id === item.linked_game_source_id;
+  return String(item.date) === String(game.date) && scheduleGameKey(item.opponent) === scheduleGameKey(game.opponent);
+}
 function gameCenter() {
   const teamStats = new Map((phase1Data?.teamStats || []).map(row => [row.source_game_id, row]));
   const playerStats = new Map();
@@ -859,7 +904,7 @@ function gameCenter() {
     closeStatsEntry();
   }
   const canEnter = canEnterGameStats();
-  const scheduled = (phase1Data?.schedule || []).filter(item => !games.some(game => game.source_game_id === item.linked_game_source_id));
+  const scheduled = (phase1Data?.schedule || []).filter(item => !games.some(game => scheduleMatchesCompletedGame(item, game)));
   const scheduledCards = scheduled.slice().sort(phase1ScheduleSort).map(item => `<article class="card game-card"><div class="game-card-head"><div><span class="eyebrow">${escapeHtml(phase1Date(item.date))}</span><h2>${escapeHtml(item.opponent || 'Opponent unavailable')}</h2><p>${escapeHtml(item.home_away || '')} · ${escapeHtml(item.location || 'Location unavailable')}</p></div><span class="tag">Scheduled</span></div></article>`).join('');
   const cards = games.map(game => {
     const stats = teamStats.get(game.source_game_id);
@@ -1581,6 +1626,47 @@ function bindGameCenterControls() {
   });
 }
 
+function bindScheduleControls() {
+  document.querySelector('#openScheduleForm')?.addEventListener('click', () => {
+    scheduleFormOpen = true;
+    scheduleFormError = '';
+    scheduleFormSavedMessage = '';
+    render('schedule');
+  });
+  document.querySelector('#cancelScheduleForm')?.addEventListener('click', () => {
+    scheduleFormOpen = false;
+    scheduleFormError = '';
+    render('schedule');
+  });
+  document.querySelector('#scheduleAddForm')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (scheduleFormSaving) return;
+    scheduleFormSaving = true;
+    scheduleFormError = '';
+    render('schedule');
+    try {
+      await scheduleManager.createGame({
+        date: document.querySelector('#scheduleGameDate')?.value,
+        time: document.querySelector('#scheduleGameTime')?.value,
+        opponent: document.querySelector('#scheduleGameOpponent')?.value,
+        home_away: document.querySelector('#scheduleGameHomeAway')?.value,
+        game_type: document.querySelector('#scheduleGameType')?.value,
+        location: document.querySelector('#scheduleGameLocation')?.value,
+        notes: document.querySelector('#scheduleGameNotes')?.value
+      });
+      await loadPhase1Data(currentWorkspace.team_id);
+      scheduleFormOpen = false;
+      scheduleFormSaving = false;
+      scheduleFormSavedMessage = 'Game added to the schedule.';
+      render('schedule');
+    } catch (error) {
+      scheduleFormSaving = false;
+      scheduleFormError = error.message || 'The game could not be added to the schedule.';
+      render('schedule');
+    }
+  });
+}
+
 function bindRosterControls() {
   if (!rosterCanManage()) return;
   document.querySelector('#addPlayerButton')?.addEventListener('click', () => showPlayerDialog());
@@ -1703,6 +1789,7 @@ function render(view = 'command') {
   if (view === 'platform-admin') bindBetaOnboardingControls();
   if (view === 'players') bindRosterControls();
   if (view === 'games') bindGameCenterControls();
+  if (view === 'schedule') bindScheduleControls();
   if (view === 'support') bindSupportControls();
   syncNavigation(view);
   document.querySelector('#sidebar').classList.remove('open'); document.querySelector('#scrim').classList.remove('show'); window.scrollTo(0, 0);
