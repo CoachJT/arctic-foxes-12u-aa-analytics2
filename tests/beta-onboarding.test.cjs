@@ -11,6 +11,10 @@ const migration = fs.readFileSync(
   path.join(root, 'supabase', 'migrations', '015_beta_onboarding.sql'),
   'utf8'
 );
+const optionalLogoMigration = fs.readFileSync(
+  path.join(root, 'supabase', 'migrations', '017_optional_beta_onboarding_logo.sql'),
+  'utf8'
+);
 const app = fs.readFileSync(path.join(root, 'web', 'app.js'), 'utf8');
 const entitlementMigration = fs.readFileSync(
   path.join(root, 'supabase', 'migrations', '008_entitlement_and_pending_invites.sql'),
@@ -26,7 +30,9 @@ const reissueFunction = fs.readFileSync(
 );
 
 function extractFunction(source, name) {
-  const start = source.indexOf(`async function ${name}(`);
+  const start = [`async function ${name}(`, `function ${name}(`]
+    .map(signature => source.indexOf(signature))
+    .find(index => index !== -1);
   assert.notEqual(start, -1, `Expected ${name} to exist`);
   const bodyStart = source.indexOf('{', start);
   let depth = 0;
@@ -249,6 +255,35 @@ test('brand input is constrained to a stable HTTPS URL and three colors', () => 
   assert.match(app, /Primary color/);
   assert.match(app, /Secondary color/);
   assert.match(app, /Accent color/);
+});
+
+test('optional onboarding logo accepts blank browser input and maps it to null', () => {
+  const source = `
+    ${extractFunction(app, 'betaOnboardingValue')}
+    ${extractFunction(app, 'betaOnboardingOptionalValue')}
+    this.blank = betaOnboardingOptionalValue({ querySelector: () => ({ value: '   ' }) }, 'onboardingBrandLogoUrl');
+    this.logo = betaOnboardingOptionalValue({ querySelector: () => ({ value: ' https://cdn.example/logo.png ' }) }, 'onboardingBrandLogoUrl');
+  `;
+  const context = {};
+  vm.runInNewContext(source, context);
+
+  assert.equal(context.blank, null);
+  assert.equal(context.logo, 'https://cdn.example/logo.png');
+  assert.match(app, /Stable logo URL \(optional\)<input id="onboardingBrandLogoUrl" type="url" maxlength="2048" placeholder="https:\/\/example\.org\/logo\.png"/);
+  assert.doesNotMatch(app, /id="onboardingBrandLogoUrl"[^>]*\srequired(?:\s|=|>)/);
+  assert.match(app, /target_branding_logo_url: betaOnboardingOptionalValue\(form, 'onboardingBrandLogoUrl'\)/);
+});
+
+test('additive optional-logo RPC accepts no-logo onboarding and rejects unsafe nonempty URLs', () => {
+  assert.match(optionalLogoMigration, /create or replace function public\.beta_onboard_workspace/);
+  assert.match(optionalLogoMigration, /normalized_branding_logo_url text := nullif\(trim\(target_branding_logo_url\), ''\);/);
+  assert.match(optionalLogoMigration, /normalized_branding_logo_url is not null\s+and \(\s*normalized_branding_logo_url !~ '\^https:\/\//);
+  assert.match(optionalLogoMigration, /length\(normalized_branding_logo_url\) > 2048/);
+  assert.doesNotMatch(optionalLogoMigration, /normalized_branding_logo_url is null/);
+  assert.match(optionalLogoMigration, /trim\(target_branding_short_name\), normalized_branding_logo_url,/);
+  assert.match(optionalLogoMigration, /target_branding_primary_color !~ '\^#\[0-9A-Fa-f\]\{6\}\$'/);
+  assert.match(optionalLogoMigration, /if not public\.is_platform_admin\(\) then/);
+  assert.doesNotMatch(optionalLogoMigration, /organization_branding_object_url/);
 });
 
 test('Founding recognition is explicitly a controlled-Beta label and never a platform permission', () => {

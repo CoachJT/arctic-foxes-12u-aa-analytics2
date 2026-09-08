@@ -55,6 +55,19 @@ test('Stage 1.3 renders an accessible, consistent SVG navigation system', () => 
   assert.match(styles, /\.nav-item\.active \.nav-icon\{color:var\(--brand-accent/);
 });
 
+test('sidebar navigation remains reachable at desktop viewport heights', () => {
+  for (const [width, height] of [[1366, 768], [1440, 900], [1920, 1080]]) {
+    assert.ok(width > 700 && height >= 768);
+  }
+  assert.match(styles, /\.sidebar\{overflow:hidden\}/);
+  assert.match(styles, /\.brand\{flex:0 0 auto\}/);
+  assert.match(styles, /\.nav\{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain\}/);
+  assert.match(styles, /\.sidebar-foot\{margin-top:0;flex:0 0 auto\}/);
+  assert.ok(index.indexOf('class="brand"') < index.indexOf('class="nav"'));
+  assert.ok(index.indexOf('class="nav"') < index.indexOf('class="sidebar-foot"'));
+  assert.ok(index.indexOf('data-view="settings"') < index.indexOf('data-view="platform-admin"'));
+});
+
 test('Stage 1.3 shell identity is workspace-driven and uses a safe fallback', () => {
   assert.match(app, /currentWorkspace\?\.branding\?\.display_name/);
   assert.match(app, /currentWorkspace\?\.branding\?\.logo_url/);
