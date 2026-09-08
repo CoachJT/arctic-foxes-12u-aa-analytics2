@@ -1,0 +1,49 @@
+name: Deploy Supabase Edge Functions
+
+# The first-coach onboarding outage was caused by Edge Functions that were
+# committed but never deployed, so deployment is automated here instead of
+# depending on someone remembering to run the CLI by hand.
+
+on:
+  workflow_dispatch:
+    inputs:
+      function:
+        description: 'Single function slug to deploy, or "all"'
+        required: false
+        default: 'all'
+
+concurrency:
+  group: supabase-functions
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: supabase
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy Edge Functions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          TARGET_FUNCTION: ${{ inputs.function }}
+        run: |
+          set -euo pipefail
+          if [ "${TARGET_FUNCTION:-all}" = "all" ] || [ -z "${TARGET_FUNCTION:-}" ]; then
+            supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
+          else
+            supabase functions deploy "$TARGET_FUNCTION" --project-ref "$SUPABASE_PROJECT_REF"
+          fi
+
+      - name: Verify deployed functions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          set -euo pipefail
+          supabase functions list --project-ref "$SUPABASE_PROJECT_REF"

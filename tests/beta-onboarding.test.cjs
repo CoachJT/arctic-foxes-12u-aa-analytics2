@@ -145,8 +145,8 @@ test('first-coach invitation remains tenant-scoped and uses only known team role
   assert.match(migration, /target_token_hash !~ '\^\[0-9a-f\]\{64\}\$'/);
   assert.match(migration, /'delivery_state', 'pending_controlled_delivery'/);
   assert.match(app, /First coach role/);
-  assert.match(app, /No email is sent from this screen/);
-  assert.match(app, /One-time acceptance link/);
+  assert.match(app, /The first coach is emailed a secure invitation link automatically\./);
+  assert.match(app, /Team created — invitation email could not be sent\./);
   assert.match(app, /accept-workspace-invite/);
   assert.match(app, /body: \{ token: workspaceInviteToken \}/);
 });

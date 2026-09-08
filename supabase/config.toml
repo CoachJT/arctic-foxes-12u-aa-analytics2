@@ -1,0 +1,34 @@
+# Supabase CLI configuration.
+#
+# Edge Function JWT expectations are declared here so a deploy can never
+# silently change an endpoint's authentication posture. The functions that must
+# be reachable before an invited coach has a session are the only ones with
+# verify_jwt disabled, and both are guarded by possession of an unguessable
+# single-use invite token.
+
+project_id = "arctic-foxes-12u-aa-analytics2"
+
+[functions.invite-staff]
+verify_jwt = true
+
+[functions.create-workspace-invite]
+verify_jwt = true
+
+[functions.accept-workspace-invite]
+verify_jwt = true
+
+[functions.revoke-workspace-invite]
+verify_jwt = true
+
+[functions.reissue-beta-onboarding-invite]
+verify_jwt = true
+
+[functions.send-beta-onboarding-invite]
+verify_jwt = true
+
+# Pre-authentication invite screens. The invited coach has no session yet.
+[functions.workspace-invite-context]
+verify_jwt = false
+
+[functions.claim-workspace-invite]
+verify_jwt = false

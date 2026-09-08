@@ -33,6 +33,9 @@ window.addEventListener('unhandledrejection', event => window.FoxesSupportReport
 const INVITE_FUNCTION = 'invite-staff';
 const WORKSPACE_INVITE_ACCEPT_FUNCTION = 'accept-workspace-invite';
 const BETA_ONBOARDING_REISSUE_FUNCTION = 'reissue-beta-onboarding-invite';
+const BETA_ONBOARDING_SEND_FUNCTION = 'send-beta-onboarding-invite';
+const WORKSPACE_INVITE_CONTEXT_FUNCTION = 'workspace-invite-context';
+const WORKSPACE_INVITE_CLAIM_FUNCTION = 'claim-workspace-invite';
 let activeStaff = null;
 let authUser = null;
 let authTeam = null;
@@ -459,14 +462,16 @@ function platformAdmin() {
     .map(plan => `<option value="${plan}">${plan}${plan === 'FOUNDING' ? ' · Founding recognition' : ''}</option>`)
     .join('');
   const summary = betaOnboardingSummary
-    ? `<section class="callout onboarding-summary" aria-live="polite"><strong>Workspace ready</strong><br>${escapeHtml(betaOnboardingSummary.organizationName)} · ${escapeHtml(betaOnboardingSummary.teamName)} · ${escapeHtml(betaOnboardingSummary.seasonName)}<br>Plan: ${escapeHtml(betaOnboardingSummary.planId)} · ${escapeHtml(betaOnboardingSummary.recognitionLabel)}<br>First coach invitation: <strong>${escapeHtml(betaOnboardingSummary.inviteStatus)}</strong> for ${escapeHtml(betaOnboardingSummary.coachEmail)}.${betaOnboardingSummary.inviteStatus === 'pending' ? `<br><a href="${escapeHtml(betaOnboardingSummary.inviteUrl)}">One-time acceptance link</a> — copy it to the first coach only through an approved channel. Expires in 72 hours; no email was sent.<div class="actions onboarding-actions"><button class="btn" id="reissueBetaOnboardingInvite" type="button">Reissue link</button><button class="btn" id="revokeBetaOnboardingInvite" type="button">Revoke invitation</button></div>` : ''}</section>`
+    ? `<section class="callout onboarding-summary" aria-live="polite"><strong>Workspace ready</strong><br>${escapeHtml(betaOnboardingSummary.organizationName)} · ${escapeHtml(betaOnboardingSummary.teamName)} · ${escapeHtml(betaOnboardingSummary.seasonName)}<br>Plan: ${escapeHtml(betaOnboardingSummary.planId)} · ${escapeHtml(betaOnboardingSummary.recognitionLabel)}<br>First coach invitation: <strong>${escapeHtml(betaOnboardingSummary.inviteStatus)}</strong> for ${escapeHtml(betaOnboardingSummary.coachEmail)}.${betaOnboardingSummary.inviteStatus === 'pending' ? `<br>${betaOnboardingSummary.emailDelivered
+      ? `Invitation emailed to ${escapeHtml(betaOnboardingSummary.coachEmail)}. The secure link expires in 72 hours.`
+      : `Team created — invitation email could not be sent.${betaOnboardingSummary.emailError ? ` ${escapeHtml(betaOnboardingSummary.emailError)}` : ''} The workspace and pending invitation were kept, so you can resend it.`}<div class="actions onboarding-actions"><button class="btn" id="resendBetaOnboardingInvite" type="button">Resend invite</button><button class="btn" id="revokeBetaOnboardingInvite" type="button">Revoke invitation</button></div>` : ''}</section>`
     : '';
   return shell(
     'Platform Admin',
     'Controlled Beta workspace provisioning is separate from team coaching and management.',
     `<section class="card onboarding-card">
       <div class="card-title"><div><span class="eyebrow">Controlled Beta</span><h2>Create a new workspace</h2></div><span class="tag">Platform Admin only</span></div>
-      <p class="settings-copy">Creates an organization, team, active season, entitlement, basic branding, and a pending first-coach invitation in one secure operation. No email is sent from this screen.</p>
+      <p class="settings-copy">Creates an organization, team, active season, entitlement, basic branding, and a pending first-coach invitation in one secure operation. The first coach is emailed a secure invitation link automatically.</p>
       ${summary}<form id="betaOnboardingForm" class="player-form onboarding-form">
         <label>Organization name<input id="onboardingOrganizationName" maxlength="120" required placeholder="Organization name" /></label>
         <label>Organization slug<input id="onboardingOrganizationSlug" maxlength="120" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="organization-name" /></label>
@@ -1255,8 +1260,14 @@ async function submitBetaOnboarding(event) {
       inviteId: result.invite_id,
       inviteStatus: result.invite_status,
       coachEmail: betaOnboardingValue(form, 'onboardingCoachEmail'),
-      inviteUrl: betaOnboardingInviteUrl(inviteToken)
+      emailDelivered: false,
+      emailError: ''
     };
+    // The workspace already exists at this point. Delivery is reported into the
+    // summary rather than thrown, so a mail failure can never imply that the
+    // organization, team, or invitation was rolled back.
+    const delivery = await deliverBetaOnboardingInvite(result.invite_id);
+    betaOnboardingSummary = { ...betaOnboardingSummary, ...delivery };
     render('platform-admin');
   } catch (error) {
     status.className = 'invite-status error';
@@ -1269,35 +1280,48 @@ async function submitBetaOnboarding(event) {
 function bindBetaOnboardingControls() {
   const form = document.querySelector('#betaOnboardingForm');
   if (form) form.addEventListener('submit', submitBetaOnboarding);
-  document.querySelector('#reissueBetaOnboardingInvite')?.addEventListener('click', reissueBetaOnboardingInvite);
+  document.querySelector('#resendBetaOnboardingInvite')?.addEventListener('click', resendBetaOnboardingInvite);
   document.querySelector('#revokeBetaOnboardingInvite')?.addEventListener('click', revokeBetaOnboardingInvite);
 }
 
-async function reissueBetaOnboardingInvite(event) {
+// Sends (or resends) the pending first-coach invitation. The Edge Function
+// claims delivery in the database first, so a retried onboarding submission or
+// a double-clicked resend cannot produce a second email, and the raw acceptance
+// token is generated and rotated server-side where the browser never sees it.
+async function deliverBetaOnboardingInvite(inviteId, resend = false) {
+  try {
+    const { data, error } = await supabaseClient.functions.invoke(BETA_ONBOARDING_SEND_FUNCTION, {
+      body: { inviteId, resend }
+    });
+    if (error) throw error;
+    if (data?.delivered) return { emailDelivered: true, emailError: '' };
+    if (data?.skipped) {
+      const alreadySent = data.reason === 'already_sent' || data.reason === 'delivery_in_progress';
+      return {
+        emailDelivered: alreadySent,
+        emailError: alreadySent ? '' : 'The invitation was not sent.'
+      };
+    }
+    return { emailDelivered: false, emailError: data?.error || 'The invitation email could not be sent.' };
+  } catch (error) {
+    return { emailDelivered: false, emailError: error.message || 'The invitation email could not be sent.' };
+  }
+}
+
+async function resendBetaOnboardingInvite(event) {
   if (!betaOnboardingSummary?.inviteId || event.currentTarget.disabled) return;
   const button = event.currentTarget;
   button.disabled = true;
-  button.textContent = 'Reissuing…';
-  try {
-    const { data, error } = await supabaseClient.functions.invoke(BETA_ONBOARDING_REISSUE_FUNCTION, {
-      body: { inviteId: betaOnboardingSummary.inviteId }
-    });
-    if (error) throw error;
-    if (!data?.invite_id || !data?.token) {
-      throw new Error('The reissued invitation did not return an acceptance token.');
-    }
-    betaOnboardingSummary = {
-      ...betaOnboardingSummary,
-      inviteId: data.invite_id,
-      inviteStatus: data.status,
-      inviteUrl: data.invite_url || betaOnboardingInviteUrl(data.token)
-    };
-    render('platform-admin');
-  } catch (error) {
-    betaOnboardingStatusMessage(error.message || 'The Beta onboarding invitation could not be reissued.', 'error');
-    button.disabled = false;
-    button.textContent = 'Reissue link';
-  }
+  button.textContent = 'Resending…';
+  const delivery = await deliverBetaOnboardingInvite(betaOnboardingSummary.inviteId, true);
+  betaOnboardingSummary = { ...betaOnboardingSummary, ...delivery };
+  render('platform-admin');
+  betaOnboardingStatusMessage(
+    delivery.emailDelivered
+      ? `Invitation resent to ${betaOnboardingSummary.coachEmail}.`
+      : delivery.emailError,
+    delivery.emailDelivered ? '' : 'error'
+  );
 }
 
 async function revokeBetaOnboardingInvite(event) {
@@ -1313,8 +1337,7 @@ async function revokeBetaOnboardingInvite(event) {
     if (error) throw error;
     betaOnboardingSummary = {
       ...betaOnboardingSummary,
-      inviteStatus: 'revoked',
-      inviteUrl: ''
+      inviteStatus: 'revoked'
     };
     render('platform-admin');
   } catch (error) {
@@ -1708,6 +1731,101 @@ function showLogin(error = '') {
   });
 }
 
+const INVITE_REJECTION_MESSAGES = {
+  invalid: 'This invitation link is not valid. Ask your organization to send a new invitation.',
+  expired: 'This invitation has expired. Ask your organization to resend it.',
+  revoked: 'This invitation is no longer active. Ask your organization to send a new one.',
+  already_accepted: 'This invitation has already been used. Sign in with your PuckNexus account.'
+};
+
+// Landing screen for an invited coach who has no session yet. Without this the
+// bootstrap fell through to the password sign-in form, which asked brand-new
+// coaches for a password they had never created.
+async function showInviteLanding(token) {
+  showLoading();
+  let context = null;
+  try {
+    const { data, error } = await supabaseClient.functions.invoke(WORKSPACE_INVITE_CONTEXT_FUNCTION, {
+      body: { token }
+    });
+    if (error) throw error;
+    context = data;
+  } catch (_error) {
+    // The raw token is never included in any surfaced message or log.
+    showLogin('Your invitation could not be verified. Ask your organization to resend it.');
+    return;
+  }
+
+  if (!context?.valid) {
+    showLogin(INVITE_REJECTION_MESSAGES[context?.reason] || INVITE_REJECTION_MESSAGES.invalid);
+    return;
+  }
+
+  renderInviteLanding(token, context);
+}
+
+function renderInviteLanding(token, context, error = '') {
+  const workspace = context.team_name
+    ? `${context.organization_name} · ${context.team_name}`
+    : context.organization_name;
+  const heading = context.account_exists ? 'Sign in to accept invitation' : 'Create your PuckNexus account';
+  const passwordFields = context.account_exists
+    ? `<label>Password<input id="invitePassword" type="password" autocomplete="current-password" required /></label>`
+    : `<label>Create a password<input id="invitePassword" type="password" autocomplete="new-password" minlength="12" required /></label><label>Confirm password<input id="invitePasswordConfirm" type="password" autocomplete="new-password" minlength="12" required /></label>`;
+
+  appShell.hidden = true;
+  authScreen.hidden = false;
+  authScreen.innerHTML = `<div class="auth-card"><div class="auth-brand"><div class="brand-mark">PN</div><div><strong>${PLATFORM.name}</strong><span>${PLATFORM.tagline}</span></div></div><h1>${heading}</h1><p>You have been invited to <strong>${escapeHtml(workspace)}</strong>.</p><form class="auth-form" id="inviteForm"><label>Email<input id="inviteEmail" type="email" autocomplete="username" value="${escapeHtml(context.email)}" readonly required /></label>${passwordFields}${error ? `<div class="auth-error" role="alert">${escapeHtml(error)}</div>` : ''}<button class="btn primary" type="submit">${context.account_exists ? 'Sign in and join' : 'Create account and join'}</button></form></div>`;
+
+  authScreen.querySelector('#inviteForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const password = form.querySelector('#invitePassword').value;
+    const confirmation = form.querySelector('#invitePasswordConfirm');
+    if (confirmation && password !== confirmation.value) {
+      renderInviteLanding(token, context, 'The passwords do not match.');
+      return;
+    }
+    const button = form.querySelector('button');
+    button.disabled = true;
+    button.textContent = context.account_exists ? 'Signing in…' : 'Creating your account…';
+    try {
+      if (!context.account_exists) {
+        const { data, error: claimError } = await supabaseClient.functions.invoke(
+          WORKSPACE_INVITE_CLAIM_FUNCTION,
+          { body: { token, password } }
+        );
+        if (claimError) throw new Error('Your account could not be created.');
+        if (!data?.created) {
+          if (data?.reason === 'account_exists') {
+            renderInviteLanding(token, { ...context, account_exists: true }, 'You already have an account. Sign in to accept the invitation.');
+            return;
+          }
+          // The invitation is left pending, so nothing is consumed by a failure.
+          showLogin(INVITE_REJECTION_MESSAGES[data?.reason] || 'Your account could not be created.');
+          return;
+        }
+      }
+
+      const { data: signIn, error: signInError } = await supabaseClient.auth.signInWithPassword({
+        email: context.email,
+        password
+      });
+      if (signInError) {
+        renderInviteLanding(token, context, formatAuthError(signInError));
+        return;
+      }
+
+      // Acceptance runs inside loadAuthenticatedWorkspace, so membership is
+      // created in the same step that resolves the workspace.
+      await loadAuthenticatedWorkspace(signIn.session?.user || null);
+    } catch (caught) {
+      workspaceTransitioning = false;
+      renderInviteLanding(token, context, caught.message || 'Your invitation could not be completed.');
+    }
+  });
+}
+
 function showPasswordRecovery(error = '') {
   appShell.hidden = true;
   authScreen.hidden = false;
@@ -1897,7 +2015,12 @@ async function loadAuthenticatedWorkspace(sessionUser = null) {
     platformAdminAuthorized = false;
     clearTenantState();
     console.error('Could not load the authenticated workspace:', error);
-    showLogin('Unable to load your secure team workspace.');
+    // The underlying reason is surfaced rather than masked, so a failing link
+    // in the invite → membership → workspace chain is diagnosable in production.
+    const detail = typeof error?.message === 'string' ? error.message.trim() : '';
+    showLogin(detail
+      ? `Unable to load your secure team workspace. ${detail}`
+      : 'Unable to load your secure team workspace.');
   } finally {
     workspaceTransitioning = false;
   }
@@ -1957,8 +2080,11 @@ if (recoveryCallbackPresent) {
   render();
 } else {
   // Login-first bootstrap: unauthenticated visitors always see the sign-in
-  // screen immediately while an existing Supabase session is restored.
-  showLogin();
+  // screen immediately while an existing Supabase session is restored. An
+  // invited coach is shown the invitation screen instead, because they may not
+  // have an account to sign in with yet.
+  if (workspaceInviteToken) showLoading();
+  else showLogin();
 
   supabaseClient.auth.getSession()
     .then(({ data: { session }, error }) => {
@@ -1967,6 +2093,10 @@ if (recoveryCallbackPresent) {
       if (session?.user) {
         showLoading();
         return loadAuthenticatedWorkspace(session.user);
+      }
+
+      if (workspaceInviteToken) {
+        return showInviteLanding(workspaceInviteToken);
       }
 
       return null;
