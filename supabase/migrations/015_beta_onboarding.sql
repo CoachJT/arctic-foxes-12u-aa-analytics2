@@ -210,12 +210,13 @@ begin
 
   insert into public.workspace_invites (
     organization_id, team_id, season_id, role_id, plan_id, token_hash,
-    email_normalized, display_name, invited_by, status, metadata
+    email_normalized, display_name, invited_by, status, expires_at, metadata
   )
   values (
     workspace_organization.id, workspace_team.id, workspace_season.id,
     target_coach_role_id, normalized_plan_id, target_token_hash,
     normalized_email, trim(target_coach_name), caller_id, 'pending',
+    now() + interval '72 hours',
     jsonb_build_object(
       'source', 'beta_onboarding',
       'delivery_state', 'pending_controlled_delivery',
@@ -236,17 +237,152 @@ begin
 end;
 $$;
 
+create or replace function public.revoke_beta_onboarding_invite(
+  target_invite_id uuid
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  caller_id uuid := (select auth.uid());
+  existing_invite public.workspace_invites%rowtype;
+begin
+  if caller_id is null then
+    raise exception 'Authentication is required.';
+  end if;
+
+  if not public.is_platform_admin() then
+    raise exception 'Platform Admin authorization is required to revoke a Beta onboarding invite.';
+  end if;
+
+  select *
+  into existing_invite
+  from public.workspace_invites invite
+  where invite.id = target_invite_id
+  for update;
+
+  if not found
+     or existing_invite.status <> 'pending'
+     or existing_invite.metadata->>'source' <> 'beta_onboarding' then
+    raise exception 'Only a pending Beta onboarding invite can be revoked.';
+  end if;
+
+  update public.workspace_invites
+  set status = 'revoked',
+      updated_at = now(),
+      metadata = coalesce(metadata, '{}'::jsonb)
+        || jsonb_build_object('delivery_state', 'revoked')
+  where id = existing_invite.id
+    and status = 'pending';
+
+  if not found then
+    raise exception 'The Beta onboarding invite changed concurrently.';
+  end if;
+
+  return true;
+end;
+$$;
+
+create or replace function public.reissue_beta_onboarding_invite(
+  target_invite_id uuid,
+  target_token_hash text
+)
+returns table (
+  invite_id uuid,
+  invite_status text,
+  invite_expires_at timestamptz
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  caller_id uuid := (select auth.uid());
+  existing_invite public.workspace_invites%rowtype;
+begin
+  if caller_id is null then
+    raise exception 'Authentication is required.';
+  end if;
+
+  if not public.is_platform_admin() then
+    raise exception 'Platform Admin authorization is required to reissue a Beta onboarding invite.';
+  end if;
+
+  if target_token_hash is null
+     or target_token_hash !~ '^[0-9a-f]{64}$' then
+    raise exception 'A valid token hash is required.';
+  end if;
+
+  select *
+  into existing_invite
+  from public.workspace_invites invite
+  where invite.id = target_invite_id
+  for update;
+
+  if not found
+     or existing_invite.status <> 'pending'
+     or existing_invite.metadata->>'source' <> 'beta_onboarding' then
+    raise exception 'Only a pending Beta onboarding invite can be reissued.';
+  end if;
+
+  if exists (
+    select 1
+    from public.workspace_invites invite
+    where invite.token_hash = target_token_hash
+  ) then
+    raise exception 'The invite token hash already exists.';
+  end if;
+
+  update public.workspace_invites
+  set status = 'revoked',
+      updated_at = now(),
+      metadata = coalesce(metadata, '{}'::jsonb)
+        || jsonb_build_object('delivery_state', 'reissued')
+  where id = existing_invite.id
+    and status = 'pending';
+
+  if not found then
+    raise exception 'The Beta onboarding invite changed concurrently.';
+  end if;
+
+  return query
+  insert into public.workspace_invites (
+    organization_id, team_id, season_id, role_id, plan_id, token_hash,
+    email_normalized, display_name, invited_by, status, expires_at, metadata
+  )
+  values (
+    existing_invite.organization_id, existing_invite.team_id,
+    existing_invite.season_id, existing_invite.role_id,
+    existing_invite.plan_id, target_token_hash,
+    existing_invite.email_normalized, existing_invite.display_name,
+    caller_id, 'pending', now() + interval '72 hours',
+    coalesce(existing_invite.metadata, '{}'::jsonb)
+      || jsonb_build_object(
+        'delivery_state', 'pending_controlled_delivery',
+        'reissued_from_invite_id', existing_invite.id
+      )
+  )
+  returning id, status, expires_at;
+end;
+$$;
+
 revoke all on function public.get_platform_authorization() from public, anon;
 revoke all on function public.beta_onboard_workspace(
   text, text, text, text, text, text, date, date, text, text, text, text,
   text, text, text, text, text, text, text
 ) from public, anon;
+revoke all on function public.revoke_beta_onboarding_invite(uuid) from public, anon;
+revoke all on function public.reissue_beta_onboarding_invite(uuid, text) from public, anon;
 
 grant execute on function public.get_platform_authorization() to authenticated;
 grant execute on function public.beta_onboard_workspace(
   text, text, text, text, text, text, date, date, text, text, text, text,
   text, text, text, text, text, text, text
 ) to authenticated;
+grant execute on function public.revoke_beta_onboarding_invite(uuid) to authenticated;
+grant execute on function public.reissue_beta_onboarding_invite(uuid, text) to authenticated;
 
 do $$
 begin
@@ -254,6 +390,16 @@ begin
      or has_function_privilege(
        'anon',
        'public.beta_onboard_workspace(text,text,text,text,text,text,date,date,text,text,text,text,text,text,text,text,text,text,text)',
+       'execute'
+     )
+     or has_function_privilege(
+       'anon',
+       'public.revoke_beta_onboarding_invite(uuid)',
+       'execute'
+     )
+     or has_function_privilege(
+       'anon',
+       'public.reissue_beta_onboarding_invite(uuid,text)',
        'execute'
      ) then
     raise exception 'Anonymous Beta onboarding execution remains exposed.';

@@ -28,6 +28,7 @@ window.addEventListener('error', event => window.FoxesSupportReporting.recordErr
 window.addEventListener('unhandledrejection', event => window.FoxesSupportReporting.recordError(event.reason, { route: location.pathname }));
 const INVITE_FUNCTION = 'invite-staff';
 const WORKSPACE_INVITE_ACCEPT_FUNCTION = 'accept-workspace-invite';
+const BETA_ONBOARDING_REISSUE_FUNCTION = 'reissue-beta-onboarding-invite';
 let activeStaff = null;
 let authUser = null;
 let authTeam = null;
@@ -448,7 +449,7 @@ function platformAdmin() {
     .map(plan => `<option value="${plan}">${plan}${plan === 'FOUNDING' ? ' · Founding recognition' : ''}</option>`)
     .join('');
   const summary = betaOnboardingSummary
-    ? `<section class="callout onboarding-summary" aria-live="polite"><strong>Workspace ready</strong><br>${escapeHtml(betaOnboardingSummary.organizationName)} · ${escapeHtml(betaOnboardingSummary.teamName)} · ${escapeHtml(betaOnboardingSummary.seasonName)}<br>Plan: ${escapeHtml(betaOnboardingSummary.planId)} · ${escapeHtml(betaOnboardingSummary.recognitionLabel)}<br>First coach invitation: <strong>${escapeHtml(betaOnboardingSummary.inviteStatus)}</strong> for ${escapeHtml(betaOnboardingSummary.coachEmail)}.<br><a href="${escapeHtml(betaOnboardingSummary.inviteUrl)}">One-time acceptance link</a> — copy it to the first coach only through an approved channel. No email was sent.</section>`
+    ? `<section class="callout onboarding-summary" aria-live="polite"><strong>Workspace ready</strong><br>${escapeHtml(betaOnboardingSummary.organizationName)} · ${escapeHtml(betaOnboardingSummary.teamName)} · ${escapeHtml(betaOnboardingSummary.seasonName)}<br>Plan: ${escapeHtml(betaOnboardingSummary.planId)} · ${escapeHtml(betaOnboardingSummary.recognitionLabel)}<br>First coach invitation: <strong>${escapeHtml(betaOnboardingSummary.inviteStatus)}</strong> for ${escapeHtml(betaOnboardingSummary.coachEmail)}.${betaOnboardingSummary.inviteStatus === 'pending' ? `<br><a href="${escapeHtml(betaOnboardingSummary.inviteUrl)}">One-time acceptance link</a> — copy it to the first coach only through an approved channel. Expires in 72 hours; no email was sent.<div class="actions onboarding-actions"><button class="btn" id="reissueBetaOnboardingInvite" type="button">Reissue link</button><button class="btn" id="revokeBetaOnboardingInvite" type="button">Revoke invitation</button></div>` : ''}</section>`
     : '';
   return shell(
     'Platform Admin',
@@ -1011,6 +1012,13 @@ function betaOnboardingInviteUrl(token) {
   return url.toString();
 }
 
+function betaOnboardingStatusMessage(message, kind = '') {
+  const status = document.querySelector('#betaOnboardingStatus');
+  if (!status) return;
+  status.className = `invite-status${kind ? ` ${kind}` : ''}`;
+  status.textContent = message;
+}
+
 async function betaOnboardingTokenHash(token) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
@@ -1060,6 +1068,7 @@ async function submitBetaOnboarding(event) {
       seasonName: betaOnboardingValue(form, 'onboardingSeasonName'),
       planId: result.plan_id,
       recognitionLabel: result.recognition_label,
+      inviteId: result.invite_id,
       inviteStatus: result.invite_status,
       coachEmail: betaOnboardingValue(form, 'onboardingCoachEmail'),
       inviteUrl: betaOnboardingInviteUrl(inviteToken)
@@ -1076,6 +1085,59 @@ async function submitBetaOnboarding(event) {
 function bindBetaOnboardingControls() {
   const form = document.querySelector('#betaOnboardingForm');
   if (form) form.addEventListener('submit', submitBetaOnboarding);
+  document.querySelector('#reissueBetaOnboardingInvite')?.addEventListener('click', reissueBetaOnboardingInvite);
+  document.querySelector('#revokeBetaOnboardingInvite')?.addEventListener('click', revokeBetaOnboardingInvite);
+}
+
+async function reissueBetaOnboardingInvite(event) {
+  if (!betaOnboardingSummary?.inviteId || event.currentTarget.disabled) return;
+  const button = event.currentTarget;
+  button.disabled = true;
+  button.textContent = 'Reissuing…';
+  try {
+    const { data, error } = await supabaseClient.functions.invoke(BETA_ONBOARDING_REISSUE_FUNCTION, {
+      body: { inviteId: betaOnboardingSummary.inviteId }
+    });
+    if (error) throw error;
+    if (!data?.invite_id || !data?.token) {
+      throw new Error('The reissued invitation did not return an acceptance token.');
+    }
+    betaOnboardingSummary = {
+      ...betaOnboardingSummary,
+      inviteId: data.invite_id,
+      inviteStatus: data.status,
+      inviteUrl: data.invite_url || betaOnboardingInviteUrl(data.token)
+    };
+    render('platform-admin');
+  } catch (error) {
+    betaOnboardingStatusMessage(error.message || 'The Beta onboarding invitation could not be reissued.', 'error');
+    button.disabled = false;
+    button.textContent = 'Reissue link';
+  }
+}
+
+async function revokeBetaOnboardingInvite(event) {
+  if (!betaOnboardingSummary?.inviteId || event.currentTarget.disabled) return;
+  if (!window.confirm('Revoke the pending first-coach invitation? Its acceptance link will stop working immediately.')) return;
+  const button = event.currentTarget;
+  button.disabled = true;
+  button.textContent = 'Revoking…';
+  try {
+    const { error } = await supabaseClient.rpc('revoke_beta_onboarding_invite', {
+      target_invite_id: betaOnboardingSummary.inviteId
+    });
+    if (error) throw error;
+    betaOnboardingSummary = {
+      ...betaOnboardingSummary,
+      inviteStatus: 'revoked',
+      inviteUrl: ''
+    };
+    render('platform-admin');
+  } catch (error) {
+    betaOnboardingStatusMessage(error.message || 'The Beta onboarding invitation could not be revoked.', 'error');
+    button.disabled = false;
+    button.textContent = 'Revoke invitation';
+  }
 }
 
 async function activateWorkspace(organizationId, teamId, seasonId = null) {
@@ -1511,12 +1573,17 @@ async function loadPhase2AData(teamId) {
 async function acceptWorkspaceInviteForSignedInUser() {
   if (!workspaceInviteToken || inviteAcceptanceAttempted) return false;
   inviteAcceptanceAttempted = true;
-  const { error } = await supabaseClient.functions.invoke(WORKSPACE_INVITE_ACCEPT_FUNCTION, {
-    body: { token: workspaceInviteToken }
-  });
-  if (error) throw new Error(error.message || 'The workspace invitation could not be accepted.');
-  window.history.replaceState({}, document.title, `${location.pathname}${location.search}`);
-  return true;
+  try {
+    const { error } = await supabaseClient.functions.invoke(WORKSPACE_INVITE_ACCEPT_FUNCTION, {
+      body: { token: workspaceInviteToken }
+    });
+    if (error) throw new Error(error.message || 'The workspace invitation could not be accepted.');
+    window.history.replaceState({}, document.title, `${location.pathname}${location.search}`);
+    return true;
+  } catch (error) {
+    inviteAcceptanceAttempted = false;
+    throw error;
+  }
 }
 
 async function loadAuthenticatedWorkspace(sessionUser = null) {
@@ -1599,6 +1666,7 @@ async function signOut() {
   activeStaff = null;
   platformAdminAuthorized = false;
   betaOnboardingSummary = null;
+  inviteAcceptanceAttempted = false;
   organizationContextManager.clear();
   teamContextManager.clearSelection();
   clearTenantState();
@@ -1620,6 +1688,7 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
     activeStaff = null;
     platformAdminAuthorized = false;
     betaOnboardingSummary = null;
+    inviteAcceptanceAttempted = false;
     organizationContextManager.clear();
     teamContextManager.clearSelection();
     clearTenantState();

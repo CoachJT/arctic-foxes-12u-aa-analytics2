@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 
 const root = path.join(__dirname, '..');
 const migration = fs.readFileSync(
@@ -19,6 +20,39 @@ const brandingMigration = fs.readFileSync(
   path.join(root, 'supabase', 'migrations', '014_organization_branding_asset_pipeline.sql'),
   'utf8'
 );
+const reissueFunction = fs.readFileSync(
+  path.join(root, 'supabase', 'functions', 'reissue-beta-onboarding-invite', 'index.ts'),
+  'utf8'
+);
+
+function extractFunction(source, name) {
+  const start = source.indexOf(`async function ${name}(`);
+  assert.notEqual(start, -1, `Expected ${name} to exist`);
+  const bodyStart = source.indexOf('{', start);
+  let depth = 0;
+  for (let index = bodyStart; index < source.length; index += 1) {
+    if (source[index] === '{') depth += 1;
+    if (source[index] === '}') depth -= 1;
+    if (depth === 0) return source.slice(start, index + 1);
+  }
+  throw new Error(`Could not extract ${name}`);
+}
+
+function acceptanceHarness(invoke) {
+  const context = {
+    Error,
+    Promise,
+    workspaceInviteToken: 'accepted-by-secure-edge-function',
+    inviteAcceptanceAttempted: false,
+    WORKSPACE_INVITE_ACCEPT_FUNCTION: 'accept-workspace-invite',
+    supabaseClient: { functions: { invoke } },
+    window: { history: { replaceState() {} } },
+    document: { title: 'PuckNexus' },
+    location: { pathname: '/', search: '' }
+  };
+  vm.runInNewContext(`${extractFunction(app, 'acceptWorkspaceInviteForSignedInUser')}; this.accept = acceptWorkspaceInviteForSignedInUser;`, context);
+  return context;
+}
 
 test('controlled Beta onboarding has a dedicated platform-admin-only authority', () => {
   assert.match(migration, /create or replace function public\.get_platform_authorization/);
@@ -109,6 +143,101 @@ test('first-coach invitation remains tenant-scoped and uses only known team role
   assert.match(app, /One-time acceptance link/);
   assert.match(app, /accept-workspace-invite/);
   assert.match(app, /body: \{ token: workspaceInviteToken \}/);
+});
+
+test('initial onboarding invites have an explicit 72-hour expiry and acceptance retains expiry, replay, and email checks', () => {
+  assert.match(migration, /now\(\) \+ interval '72 hours'/);
+  assert.match(migration, /email_normalized, display_name, invited_by, status, expires_at, metadata/);
+  const acceptanceMigration = fs.readFileSync(
+    path.join(root, 'supabase', 'migrations', '010_secure_workspace_invite_acceptance.sql'),
+    'utf8'
+  );
+  assert.match(acceptanceMigration, /invite\.expires_at is not null and invite\.expires_at <= now\(\)/);
+  assert.match(acceptanceMigration, /lower\(trim\(caller_email\)\) <> invite\.email_normalized/);
+  assert.match(acceptanceMigration, /invite\.status <> 'pending'/);
+});
+
+test('only a Platform Admin can revoke a still-pending onboarding invitation', () => {
+  assert.match(migration, /create or replace function public\.revoke_beta_onboarding_invite/);
+  assert.match(migration, /Platform Admin authorization is required to revoke a Beta onboarding invite/);
+  assert.match(migration, /existing_invite\.status <> 'pending'/);
+  assert.match(migration, /existing_invite\.metadata->>'source' <> 'beta_onboarding'/);
+  assert.match(migration, /set status = 'revoked'/);
+  assert.match(migration, /revoke all on function public\.revoke_beta_onboarding_invite\(uuid\) from public, anon/);
+  assert.match(migration, /grant execute on function public\.revoke_beta_onboarding_invite\(uuid\) to authenticated/);
+});
+
+test('reissue atomically revokes only a pending onboarding invite and preserves its workspace scope', () => {
+  const reissueMigration = migration.slice(
+    migration.indexOf('create or replace function public.reissue_beta_onboarding_invite'),
+    migration.indexOf('revoke all on function public.get_platform_authorization')
+  );
+  assert.match(reissueMigration, /Platform Admin authorization is required to reissue a Beta onboarding invite/);
+  assert.match(reissueMigration, /where invite\.id = target_invite_id\s+for update/);
+  assert.match(reissueMigration, /existing_invite\.status <> 'pending'/);
+  assert.match(reissueMigration, /existing_invite\.metadata->>'source' <> 'beta_onboarding'/);
+  assert.match(reissueMigration, /where invite\.token_hash = target_token_hash/);
+  assert.match(reissueMigration, /update public\.workspace_invites\s+set status = 'revoked'/);
+  assert.match(reissueMigration, /return query\s+insert into public\.workspace_invites/);
+  assert.match(reissueMigration, /existing_invite\.organization_id, existing_invite\.team_id/);
+  assert.match(reissueMigration, /existing_invite\.season_id, existing_invite\.role_id/);
+  assert.match(reissueMigration, /existing_invite\.plan_id, target_token_hash/);
+  assert.match(reissueMigration, /existing_invite\.email_normalized, existing_invite\.display_name/);
+  assert.match(reissueMigration, /now\(\) \+ interval '72 hours'/);
+  assert.doesNotMatch(reissueMigration, /team_memberships|organization_entitlements|team_membership_entitlements/);
+});
+
+test('reissue Edge Function returns a fresh token once without plaintext persistence or service-role access', () => {
+  assert.match(reissueFunction, /crypto\.getRandomValues/);
+  assert.match(reissueFunction, /crypto\.subtle\.digest/);
+  assert.match(reissueFunction, /reissue_beta_onboarding_invite/);
+  assert.match(reissueFunction, /token: rawToken/);
+  assert.match(reissueFunction, /invite_url: inviteUrl\(rawToken\)/);
+  assert.doesNotMatch(reissueFunction, /SUPABASE_SERVICE_ROLE_KEY|console\.(log|info|error)[\s\S]*rawToken/);
+  assert.match(app, /reissue-beta-onboarding-invite/);
+  assert.match(app, /revoke_beta_onboarding_invite/);
+});
+
+test('acceptance blocks concurrent requests but resets its guard after a failure', async () => {
+  let resolveInvoke;
+  let calls = 0;
+  const context = acceptanceHarness(() => {
+    calls += 1;
+    return new Promise(resolve => { resolveInvoke = resolve; });
+  });
+  const firstAttempt = context.accept();
+  assert.equal(await context.accept(), false);
+  assert.equal(calls, 1);
+  resolveInvoke({ error: new Error('transient failure') });
+  await assert.rejects(firstAttempt, /transient failure/);
+  assert.equal(context.inviteAcceptanceAttempted, false);
+});
+
+test('a transient failure or wrong-user rejection can be retried after the coach signs in again', async () => {
+  let result = { error: new Error('The authenticated email does not match the invite.') };
+  let calls = 0;
+  const context = acceptanceHarness(async () => {
+    calls += 1;
+    return result;
+  });
+  await assert.rejects(context.accept(), /does not match/);
+  assert.equal(context.inviteAcceptanceAttempted, false);
+  result = { error: null };
+  assert.equal(await context.accept(), true);
+  assert.equal(calls, 2);
+  assert.equal(context.inviteAcceptanceAttempted, true);
+  assert.match(app, /inviteAcceptanceAttempted = false;/);
+});
+
+test('a successfully accepted invite remains consumed by the client acceptance guard', async () => {
+  let calls = 0;
+  const context = acceptanceHarness(async () => {
+    calls += 1;
+    return { error: null };
+  });
+  assert.equal(await context.accept(), true);
+  assert.equal(await context.accept(), false);
+  assert.equal(calls, 1);
 });
 
 test('brand input is constrained to a stable HTTPS URL and three colors', () => {
