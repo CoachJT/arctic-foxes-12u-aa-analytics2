@@ -103,7 +103,7 @@ function command() {
   const sortedGames = (phase1Data?.schedule || []).slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
   const nextGame = sortedGames[0];
   const lastGame = sortedGames.slice(-1)[0];
-  const totalGames = record.gp;
+  const totalGames = record.games_played;
   const roster = phase1Data?.roster || [];
   const playersCount = roster.length;
   const goaliesCount = roster.filter(p => p.position === 'G' || p.is_goalie || (p.pos && p.pos.includes('G'))).length;
@@ -131,16 +131,16 @@ function command() {
       <article class="metric-card">
         <span class="metric-label">Games Played</span>
         <strong class="metric-value">${totalGames}</strong>
-        <span class="metric-meta">${record.w}-${record.l}-${record.t} Record</span>
+        <span class="metric-meta">${record.wins}-${record.losses}-${record.ties} Record</span>
       </article>
       <article class="metric-card">
         <span class="metric-label">Goals For</span>
-        <strong class="metric-value">${record.gf}</strong>
+        <strong class="metric-value">${record.goals_for}</strong>
         <span class="metric-meta">Season Total</span>
       </article>
       <article class="metric-card">
         <span class="metric-label">Goals Against</span>
-        <strong class="metric-value">${record.ga}</strong>
+        <strong class="metric-value">${record.goals_against}</strong>
         <span class="metric-meta">Season Total</span>
       </article>
       <article class="metric-card">
@@ -223,8 +223,8 @@ function team() {
       </article>
       <article class="metric-card">
         <span class="metric-label">Record</span>
-        <strong class="metric-value">${record.w}-${record.l}-${record.t}</strong>
-        <span class="metric-meta">${record.gp} GP</span>
+        <strong class="metric-value">${record.wins}-${record.losses}-${record.ties}</strong>
+        <span class="metric-meta">${record.games_played} GP</span>
       </article>
       <article class="metric-card">
         <span class="metric-label">Active Roster</span>
