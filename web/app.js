@@ -132,7 +132,11 @@ function leaders() {
   return (phase1Data?.roster || []).map(player => ({ player, totals: stats.get(player.source_player_id) || {} }))
     .sort((a, b) => (phase1Number(b.totals.goals) + phase1Number(b.totals.assists)) - (phase1Number(a.totals.goals) + phase1Number(a.totals.assists)))
     .slice(0, 4)
-    .map(({ player, totals }) => `<div class="leader"><span class="jersey">#${escapeHtml(player.jersey_number || '–')}</span><div><strong>${escapeHtml(rosterDisplayName(player))}</strong><small>${escapeHtml(player.position || '—')} · ${phase1Number(totals.games)} GP</small></div><span class="leader-value">${phase1Number(totals.goals) + phase1Number(totals.assists)} P</span></div>`).join('');
+    .map(({ player, totals }) => {
+      const goals = phase1Number(totals.goals);
+      const assists = phase1Number(totals.assists);
+      return `<div class="leader"><span class="jersey">#${escapeHtml(player.jersey_number || '–')}</span><div class="leader-info"><strong>${escapeHtml(rosterDisplayName(player))}</strong><small>${escapeHtml(player.position || '—')} · ${phase1Number(totals.games)} GP</small></div><div class="leader-stats"><span>${goals} G</span><span>${assists} A</span></div><span class="leader-value">${goals + assists} P</span></div>`;
+    }).join('');
 }
 function recent(now = new Date()) {
   const today = phase1DateKey(now);
@@ -158,24 +162,71 @@ function command() {
   const roster = activeRosterPlayers(phase1Data?.roster || []);
   const playersCount = roster.length;
   const goaliesCount = roster.filter(isGoalie).length;
-  
+
   const orgName = tenantName();
-  const teamNameStr = authTeam?.team_name || authTeam?.name || 'Selected Team';
+  const teamNameStr = authTeam?.team_name || authTeam?.name || currentWorkspace?.team_name || 'Selected Team';
   const seasonStr = tenantSeasonName();
   const logoUrl = currentWorkspace?.branding?.logo_url || currentWorkspace?.branding?.logo || '';
+  const orgMark = orgName.split(/\s+/).filter(Boolean).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'PN';
+  const welcomeName = activeStaff?.name || activeStaff?.role || 'Coach';
+  const opponentMark = String(nextGame?.opponent || 'OP').split(/\s+/).filter(Boolean).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'OP';
+
+  // Development/performance snapshot: only metrics backed by the canonical
+  // season record and completed games with synced team stats. Nothing is
+  // projected or inferred beyond the synced numbers.
+  const todayKey = phase1DateKey(new Date());
+  const teamStatsByGame = new Map((phase1Data?.teamStats || []).map(row => [row.source_game_id, row]));
+  const recentForm = (phase1Data?.games || [])
+    .filter(game => teamStatsByGame.has(game.source_game_id) && String(game?.date || '') && String(game.date) <= todayKey)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    .slice(0, 5)
+    .map(game => {
+      const stats = teamStatsByGame.get(game.source_game_id) || {};
+      const goalsFor = phase1Number(stats.goals_for);
+      const goalsAgainst = phase1Number(stats.goals_against);
+      return goalsFor > goalsAgainst ? 'W' : goalsFor < goalsAgainst ? 'L' : 'T';
+    });
+  const winPercentage = totalGames ? Math.round((phase1Number(record.wins) / totalGames) * 100) : null;
+
+  const nextGameCard = nextGame ? `
+      <div class="game-top">
+        <div class="opponent">
+          <span class="opponent-mark">${escapeHtml(opponentMark)}</span>
+          <div>
+            <span class="eyebrow">Next Game</span>
+            <h2>vs ${escapeHtml(nextGame.opponent || 'Opponent')}</h2>
+            <p>${escapeHtml(teamNameStr)} &middot; ${escapeHtml(seasonStr)}</p>
+          </div>
+        </div>
+        ${nextGame.home_away ? `<span class="home-pill">${escapeHtml(nextGame.home_away)}</span>` : ''}
+      </div>
+      <div class="game-date">
+        <strong>${escapeHtml(phase1Date(nextGame.date))}</strong>
+        <span>${nextGame.time ? escapeHtml(nextGame.time) : 'Time to be announced'}</span>
+      </div>
+      ${nextGame.notes ? `<div class="game-preview"><span class="eyebrow">Game Preview</span><p>${escapeHtml(nextGame.notes)}</p></div>` : ''}
+      <div class="game-meta">
+        <span>Location<b>${escapeHtml(nextGame.location || 'To be announced')}</b></span>
+        <span>Home / Away<b>${escapeHtml(nextGame.home_away || 'To be announced')}</b></span>
+        <span>Game type<b>${escapeHtml(nextGame.game_type || 'Scheduled game')}</b></span>
+      </div>`
+    : `<div class="next-game-empty"><div class="empty-icon">◷</div><h2>No upcoming games scheduled.</h2><p class="empty-text">The next scheduled game will appear here as soon as it is synced for the selected team and season.</p></div>`;
 
   return shell(
     'Dashboard',
     'Command Center for team performance, scheduling, and analytics.',
     `<section class="hero card command-hero">
-      <div class="brand-hero-header" style="display:flex; align-items:center; gap: 16px; margin-bottom: 12px;">
-        ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(orgName)}" style="max-height:48px; width:auto; border-radius:6px;">` : ''}
-        <div>
-          <h1 style="margin:0;">Welcome to ${escapeHtml(orgName)}</h1>
-          <p class="subtitle" style="margin:4px 0 0 0;">${escapeHtml(teamNameStr)} &middot; ${escapeHtml(seasonStr)}</p>
+      <div class="hero-brand">
+        ${logoUrl
+          ? `<img class="hero-logo" src="${escapeHtml(logoUrl)}" alt="${escapeHtml(orgName)} logo">`
+          : `<span class="hero-mark" aria-hidden="true">${escapeHtml(orgMark)}</span>`}
+        <div class="hero-copy">
+          <span class="eyebrow">${escapeHtml(orgName)}</span>
+          <h1 class="hero-title">${escapeHtml(teamNameStr)}</h1>
+          <p class="hero-meta">${escapeHtml(seasonStr)}</p>
         </div>
       </div>
-      <p style="color:var(--text-muted); font-size:14px; margin-top:8px;">Authorized Workspace Command Center</p>
+      <p class="hero-welcome">Welcome back, ${escapeHtml(welcomeName)}. This is your authorized ${escapeHtml(orgName)} command center.</p>
     </section>
 
     <section class="metrics-grid">
@@ -201,58 +252,73 @@ function command() {
       </article>
     </section>
 
-    <div class="dashboard-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 24px;">
-      <section class="card">
-        <h3>Schedule Overview</h3>
-        ${nextGame ? `
-          <div style="margin-top:12px; padding:12px; background:var(--bg-card); border:1px solid var(--border); border-radius:8px;">
-            <div style="font-size:12px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">Next Game</div>
-            <div style="font-size:16px; font-weight:600; margin-top:4px;">vs ${escapeHtml(nextGame.opponent || 'Opponent')}</div>
-            <div style="font-size:13px; color:var(--text-muted); margin-top:2px;">${escapeHtml(phase1Date(nextGame.date))}${nextGame.time ? ` &middot; ${escapeHtml(nextGame.time)}` : ''}</div>
-          </div>
-        ` : `<p class="empty-text" style="padding:16px 0; color:var(--text-muted);">No upcoming games scheduled.</p>`}
-        <div style="margin-top:16px;">
+    <div class="dashboard-grid">
+      <section class="card next-game dashboard-feature">
+        ${nextGameCard}
+        <div class="card-actions">
           <button class="btn secondary" type="button" onclick="render('schedule')">View Full Schedule &rarr;</button>
         </div>
       </section>
 
       <section class="card">
-        <h3>Recent Activity</h3>
+        <h3>Latest Result</h3>
         ${latestCompleted ? `
-          <div style="margin-top:12px; padding:12px; background:var(--bg-card); border:1px solid var(--border); border-radius:8px;">
-            <div style="font-size:12px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">Latest Result</div>
-            <div style="font-size:16px; font-weight:600; margin-top:4px;">${escapeHtml(latestCompleted.game.opponent || 'Game')} (${phase1Number(latestCompleted.stats.goals_for) > phase1Number(latestCompleted.stats.goals_against) ? 'W' : phase1Number(latestCompleted.stats.goals_for) < phase1Number(latestCompleted.stats.goals_against) ? 'L' : 'T'} ${phase1Number(latestCompleted.stats.goals_for)}–${phase1Number(latestCompleted.stats.goals_against)})</div>
-            <div style="font-size:13px; color:var(--text-muted); margin-top:2px;">${escapeHtml(phase1Date(latestCompleted.game.date))}</div>
+          <div class="latest-result">
+            <strong>${escapeHtml(latestCompleted.game.opponent || 'Game')} (${phase1Number(latestCompleted.stats.goals_for) > phase1Number(latestCompleted.stats.goals_against) ? 'W' : phase1Number(latestCompleted.stats.goals_for) < phase1Number(latestCompleted.stats.goals_against) ? 'L' : 'T'} ${phase1Number(latestCompleted.stats.goals_for)}–${phase1Number(latestCompleted.stats.goals_against)})</strong>
+            <small>${escapeHtml(phase1Date(latestCompleted.game.date))}</small>
           </div>
-        ` : `<p class="empty-text" style="padding:16px 0; color:var(--text-muted);">No recent game results logged.</p>`}
-        <div style="margin-top:16px;">
+        ` : `<p class="empty-text">No recent game results logged.</p>`}
+        <div class="card-actions">
           <button class="btn secondary" type="button" onclick="render('games')">Open Game Center &rarr;</button>
         </div>
       </section>
 
       <section class="card">
-        <h3>Top Players</h3>
-        <div style="margin-top:8px;">
-          ${leaders() || '<p class="empty-text" style="padding:16px 0; color:var(--text-muted);">No roster performers are synced yet.</p>'}
-        </div>
-        <div style="margin-top:16px;">
-          <button class="btn secondary" type="button" onclick="render('stats')">View Stats &rarr;</button>
-        </div>
-      </section>
-
-      <section class="card">
         <h3>Recent Games</h3>
-        <div class="recent" style="margin-top:8px;">
-          ${recent() || '<p class="empty-text" style="padding:16px 0; color:var(--text-muted);">No completed games are synced yet.</p>'}
+        <div class="recent">
+          ${recent() || '<p class="empty-text">No completed games are synced yet.</p>'}
         </div>
-        <div style="margin-top:16px;">
+        <div class="card-actions">
           <button class="btn secondary" type="button" onclick="render('games')">All Games &rarr;</button>
         </div>
       </section>
 
       <section class="card">
+        <h3>Top Players</h3>
+        <div class="leaders-list">
+          ${leaders() || '<p class="empty-text">No roster performers are synced yet.</p>'}
+        </div>
+        <div class="card-actions">
+          <button class="btn secondary" type="button" onclick="render('stats')">View Stats &rarr;</button>
+        </div>
+      </section>
+
+      <section class="card perf-card">
+        <h3>Team Performance</h3>
+        ${totalGames ? `
+          <div class="perf-grid">
+            <div class="perf-metric">
+              <span class="metric-label">Win Rate</span>
+              <strong class="metric-value">${winPercentage}%</strong>
+              <span class="metric-meta">${record.wins}-${record.losses}-${record.ties} over ${totalGames} GP</span>
+            </div>
+            <div class="perf-metric">
+              <span class="metric-label">Goals For / Against</span>
+              <strong class="metric-value perf-score">${record.goals_for} / ${record.goals_against}</strong>
+              <span class="metric-meta">${(phase1Number(record.goals_for) / totalGames).toFixed(1)} GF &middot; ${(phase1Number(record.goals_against) / totalGames).toFixed(1)} GA per game</span>
+            </div>
+            <div class="perf-metric">
+              <span class="metric-label">Recent Record</span>
+              <strong class="metric-value perf-form">${recentForm.length ? recentForm.map(result => `<span class="form-badge ${result === 'W' ? 'win' : result === 'L' ? 'loss' : 'tie'}">${result}</span>`).join('') : '—'}</strong>
+              <span class="metric-meta">${recentForm.length ? `Last ${recentForm.length} completed game${recentForm.length === 1 ? '' : 's'}` : 'No completed games synced'}</span>
+            </div>
+          </div>
+        ` : `<p class="empty-text">Team performance metrics appear once completed games with synced stats are available.</p>`}
+      </section>
+
+      <section class="card">
         <h3>Quick Access</h3>
-        <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;">
+        <div class="quick-access">
           <button class="btn secondary" type="button" onclick="render('team')">Team Overview</button>
           <button class="btn secondary" type="button" onclick="render('players')">Roster</button>
           <button class="btn secondary" type="button" onclick="render('stats')">Player Stats</button>
@@ -608,11 +674,12 @@ function bindAdminControls() {
 }
 function generic(view) { const titles = { games:['Game Center','One place for game-day details and post-game review.'], reports:['Coach Reports','Turn team observations into clear, shareable reports.'], settings:['Settings','Configure the team hub experience and future integrations.'] }; const [title, sub] = titles[view]; return shell(title, sub, `<section class="card empty-view"><div class="empty-icon">${view === 'settings' ? '⚙' : '✦'}</div><h2>Your next workspace layer</h2><p>This team workspace reserves the workflow for ${title.toLowerCase()}. This surface is ready to connect to synced analytics, schedules, reports, and player information.</p></section>`); }
 
-function switcherMarkup(kind, labelText, selectId, ariaLabel, options, selectedValue, singleValue) {
+function switcherMarkup(kind, labelText, selectId, ariaLabel, options, selectedValue, singleValue, icon = '') {
+  const iconMarkup = icon ? `<span class="switcher-icon" aria-hidden="true">${icon}</span>` : '';
   if (singleValue != null) {
-    return `<span class="${kind}-label">${labelText}</span><span class="switcher-value" title="${escapeHtml(singleValue)}">${escapeHtml(singleValue)}</span>`;
+    return `${iconMarkup}<span class="${kind}-label">${labelText}</span><span class="switcher-value" title="${escapeHtml(singleValue)}">${escapeHtml(singleValue)}</span>`;
   }
-  return `<label class="switcher-field"><span class="${kind}-label">${labelText}</span><span class="switcher-select"><select id="${selectId}" aria-label="${ariaLabel}">${options.map(option => `<option value="${escapeHtml(option.value)}" ${option.value === selectedValue ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}</select><span class="switcher-chevron" aria-hidden="true">▾</span></span></label>`;
+  return `${iconMarkup}<label class="switcher-field"><span class="${kind}-label">${labelText}</span><span class="switcher-select"><select id="${selectId}" aria-label="${ariaLabel}">${options.map(option => `<option value="${escapeHtml(option.value)}" ${option.value === selectedValue ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}</select><span class="switcher-chevron" aria-hidden="true">▾</span></span></label>`;
 }
 
 function renderOrganizationSwitcher() {
@@ -620,11 +687,11 @@ function renderOrganizationSwitcher() {
   const organizations = organizationContextManager.context.organizations;
   if (!host || !organizations.length) return;
   if (organizations.length === 1) {
-    host.innerHTML = switcherMarkup('organization-switcher', 'Organization', null, '', [], '', organizations[0].name);
+    host.innerHTML = switcherMarkup('organization-switcher', 'Organization', null, '', [], '', organizations[0].name, '⬒');
   } else {
     host.innerHTML = switcherMarkup('organization-switcher', 'Organization', 'organizationSelect', 'Selected organization',
       organizations.map(organization => ({ value: organization.id, label: organization.name })),
-      organizationContextManager.context.selectedOrganizationId);
+      organizationContextManager.context.selectedOrganizationId, undefined, '⬒');
     host.querySelector('#organizationSelect').addEventListener('change', event => selectOrganization(event.target.value));
   }
   host.hidden = false;
@@ -635,11 +702,11 @@ function renderTeamSwitcher() {
   const teams = organizationContextManager.teamsForSelectedOrganization(workspaceAccessManager.context.workspaces);
   if (!host || !teams.length) return;
   if (teams.length === 1) {
-    host.innerHTML = switcherMarkup('team-switcher', 'Team', null, '', [], '', teamContext.selectedMembership?.teams?.name || 'Selected team');
+    host.innerHTML = switcherMarkup('team-switcher', 'Team', null, '', [], '', teamContext.selectedMembership?.teams?.name || 'Selected team', '🛡');
   } else {
     host.innerHTML = switcherMarkup('team-switcher', 'Team', 'teamSelect', 'Selected team',
       teams.map(workspace => ({ value: workspace.team_id, label: workspace.team_name || workspace.team_id })),
-      teamContext.selectedTeamId);
+      teamContext.selectedTeamId, undefined, '🛡');
     host.querySelector('#teamSelect').addEventListener('change', event => selectTeam(event.target.value));
   }
   host.hidden = false;
@@ -692,11 +759,11 @@ function renderSeasonSwitcher() {
   const host = document.querySelector('#seasonSwitcher');
   if (!host || !seasonContext.seasons.length) return;
   if (seasonContext.seasons.length === 1) {
-    host.innerHTML = switcherMarkup('season-switcher', 'Season', null, '', [], '', seasonContext.selectedSeason?.name || seasonContext.selectedSeason?.season_key || 'Selected season');
+    host.innerHTML = switcherMarkup('season-switcher', 'Season', null, '', [], '', seasonContext.selectedSeason?.name || seasonContext.selectedSeason?.season_key || 'Selected season', '◷');
   } else {
     host.innerHTML = switcherMarkup('season-switcher', 'Season', 'seasonSelect', 'Selected season',
       seasonContext.seasons.map(season => ({ value: season.id, label: season.name || season.season_key })),
-      seasonContext.selectedSeasonId);
+      seasonContext.selectedSeasonId, undefined, '◷');
     host.querySelector('#seasonSelect').addEventListener('change', event => selectSeason(event.target.value));
   }
   host.hidden = false;
@@ -942,6 +1009,10 @@ function bindRosterControls() {
 function renderRoleSwitcher() {
   document.querySelector('#userAvatar').textContent = activeStaff.initials;
   document.querySelector('#userName').textContent = activeStaff.name;
+  const sidebarUser = document.querySelector('#sidebarUser');
+  if (sidebarUser) {
+    sidebarUser.innerHTML = `<span class="sidebar-user-avatar">${escapeHtml(activeStaff.initials || '–')}</span><span class="sidebar-user-copy"><strong>${escapeHtml(activeStaff.name || 'Team member')}</strong><small>${escapeHtml(activeStaff.role || 'Authenticated user')}</small></span>`;
+  }
   const userMenu = document.querySelector('.user-menu');
   if (!userMenu.querySelector('.signout-button')) {
     const button = document.createElement('button');
