@@ -15,6 +15,10 @@ const rosterManager = window.FoxesRosterManagement.createRosterManagement({
   client: supabaseClient,
   getWorkspace: () => currentWorkspace
 });
+const statsEntryManager = window.FoxesStatsEntry.createStatsEntry({
+  client: supabaseClient,
+  getWorkspace: () => currentWorkspace
+});
 const mediaStorage = window.FoxesMediaStorage.createMediaStorage({
   client: supabaseClient,
   getWorkspace: () => currentWorkspace
@@ -48,6 +52,12 @@ let phase2AData = null;
 let phase2ADataError = '';
 let statsSortKey = 'pts';
 let statsSortDir = 'desc';
+let statsEntryGameId = null;
+let statsEntryStep = 'skaters';
+let statsEntryDraft = null;
+let statsEntrySaving = false;
+let statsEntryError = '';
+let statsEntrySavedMessage = '';
 const teamContextManager = window.FoxesTeamContext.createTeamContext({ client: supabaseClient });
 const seasonContextManager = window.FoxesSeasonContext.createSeasonContext({ client: supabaseClient });
 document.addEventListener('error', event => {
@@ -665,19 +675,187 @@ function players() {
     ${empty}
   </section><div id="playerDialog" class="modal-shell" hidden><div class="modal-card"><div class="card-title"><h2 id="playerDialogTitle">Add Player</h2><button class="btn" type="button" id="closePlayerDialog">Close</button></div>${playerForm()}</div></div><div id="importDialog" class="modal-shell" hidden><div class="modal-card"><div class="card-title"><h2>Import Roster</h2><button class="btn" type="button" id="closeImportDialog">Close</button></div><p class="settings-copy">Upload a CSV using the roster template. Invalid rows are rejected and likely duplicates require confirmation.</p><input id="rosterFile" type="file" accept=".csv,text/csv"><div id="importPreview" class="import-preview"></div><div class="player-form-actions"><button class="btn primary" id="confirmRosterImport" type="button" disabled>Confirm import</button></div></div></div>`);
 }
+function canEnterGameStats() {
+  return Boolean(currentWorkspace?.authorized)
+    && can(PERMISSIONS.STATS_EDIT, activeStaff)
+    && entitlements.isFeatureEnabled('stats');
+}
+
+// Games are only ever selectable for stat entry when they belong to the
+// authorized team (phase1Data is already team-scoped by loadPhase1Data), so
+// no cross-team game id can ever appear in this list — the server-side RPC
+// re-validates team/season ownership regardless. team_games rows are, by
+// design, only synced from the Windows app after a game has been played, but
+// as a client-side safety net (mirrored by the save_game_stats RPC's
+// game.date <= current_date guard) a game dated in the future is excluded
+// from the enterable list rather than trusted at face value.
+function statsEntryGames() {
+  const today = phase1DateKey();
+  return (phase1Data?.games || [])
+    .filter(game => String(game.date || '') <= today)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+}
+
+function statsEntryRosterFor(playerType) {
+  const roster = phase1Data?.roster || [];
+  const existing = existingStatRowsForGame(statsEntryGameId);
+  const historicalIds = new Set(existing.filter(row => (row.player_type || 'skater') === playerType).map(row => String(row.source_player_id)));
+  return roster.filter(player => {
+    const matchesType = playerType === 'goalie' ? isGoalie(player) : !isGoalie(player);
+    if (!matchesType) return false;
+    const status = typeof player?.status === 'string' ? player.status.trim().toLowerCase() : '';
+    // Active roster by default, but never drop a player who already has saved
+    // stats for this game — editing historical data must keep working even if
+    // the player has since gone inactive.
+    return status !== 'inactive' || historicalIds.has(String(player.source_player_id));
+  });
+}
+
+function existingStatRowsForGame(sourceGameId) {
+  return (phase1Data?.playerStats || []).filter(row => row.source_game_id === sourceGameId);
+}
+
+function existingTeamStatsForGame(sourceGameId) {
+  return (phase1Data?.teamStats || []).find(row => row.source_game_id === sourceGameId) || null;
+}
+
+function statsEntryRowValues(existingRow, fields) {
+  const values = {};
+  fields.forEach(field => { values[field] = existingRow && existingRow[field] !== undefined ? existingRow[field] : null; });
+  return values;
+}
+
+function ensureStatsEntryDraft(game) {
+  if (statsEntryDraft && statsEntryDraft.source_game_id === game.source_game_id) return statsEntryDraft;
+  const existing = existingStatRowsForGame(game.source_game_id);
+  const existingSkaters = window.FoxesStatsEntry.existingSkaterStatsByPlayer(existing);
+  const existingGoalies = window.FoxesStatsEntry.existingGoalieStatsByPlayer(existing);
+  const skaters = new Map(statsEntryRosterFor('skater').map(player => {
+    const key = String(player.source_player_id);
+    return [key, statsEntryRowValues(existingSkaters.get(key), window.FoxesStatsEntry.SKATER_FIELDS)];
+  }));
+  const goalies = new Map(statsEntryRosterFor('goalie').map(player => {
+    const key = String(player.source_player_id);
+    return [key, statsEntryRowValues(existingGoalies.get(key), window.FoxesStatsEntry.GOALIE_FIELDS)];
+  }));
+  const team = statsEntryRowValues(existingTeamStatsForGame(game.source_game_id), window.FoxesStatsEntry.TEAM_FIELDS);
+  statsEntryDraft = { source_game_id: game.source_game_id, skaters, goalies, team };
+  return statsEntryDraft;
+}
+
+function openStatsEntry(sourceGameId) {
+  const game = statsEntryGames().find(item => item.source_game_id === sourceGameId);
+  if (!game || !canEnterGameStats()) return;
+  statsEntryGameId = sourceGameId;
+  statsEntryStep = 'skaters';
+  statsEntryError = '';
+  statsEntrySavedMessage = '';
+  statsEntryDraft = null;
+  ensureStatsEntryDraft(game);
+  render('games');
+}
+
+function closeStatsEntry() {
+  statsEntryGameId = null;
+  statsEntryStep = 'skaters';
+  statsEntryDraft = null;
+  statsEntryError = '';
+  statsEntrySaving = false;
+}
+
+const STATS_ENTRY_STEPS = [
+  ['skaters', 'Skater Stats'],
+  ['goalies', 'Goalie Stats'],
+  ['team', 'Team Stats'],
+  ['review', 'Review & Save']
+];
+const SKATER_ENTRY_COLUMNS = [['GP', 'gp'], ['G', 'goals'], ['A', 'assists'], ['SOG', 'shots'], ['PIM', 'penalty_minutes'], ['+/-', 'plus_minus'], ['Blocks', 'blocks'], ['FOW', 'faceoff_wins'], ['FOL', 'faceoff_losses'], ['PPG', 'power_play_goals'], ['PPP', 'power_play_points'], ['SHG', 'short_handed_goals'], ['SHP', 'short_handed_points']];
+const GOALIE_ENTRY_COLUMNS = [['GP', 'gp'], ['W', 'wins'], ['L', 'losses'], ['T', 'ties'], ['Saves', 'saves'], ['GA', 'goals_against'], ['Min', 'minutes'], ['SO', 'shutouts']];
+const TEAM_ENTRY_COLUMNS = [['Goals For', 'goals_for'], ['Goals Against', 'goals_against'], ['Shots For', 'shots_for'], ['Shots Against', 'shots_against']];
+
+function statsEntryCellValue(value) { return value === null || value === undefined ? '' : String(value); }
+
+function statsEntryStepNav() {
+  return `<div class="stat-entry-steps">${STATS_ENTRY_STEPS.map(([key, label], index) => `<button type="button" class="stat-entry-step${statsEntryStep === key ? ' active' : ''}" data-stats-step="${key}">${index + 1}. ${label}</button>`).join('')}</div>`;
+}
+
+function statsEntryPlayerTable(playerType, columns) {
+  const roster = statsEntryRosterFor(playerType);
+  const draft = playerType === 'goalie' ? statsEntryDraft.goalies : statsEntryDraft.skaters;
+  const rows = roster.map(player => {
+    const key = String(player.source_player_id);
+    const values = draft.get(key) || {};
+    const cells = columns.map(([, field]) => `<td><input type="text" inputmode="decimal" class="stat-cell-input" data-stats-player="${escapeHtml(key)}" data-stats-type="${playerType}" data-stats-field="${field}" value="${escapeHtml(statsEntryCellValue(values[field]))}"></td>`).join('');
+    return `<tr><td class="team-number">#${escapeHtml(player.jersey_number || '#')}</td><td>${escapeHtml(player.name || 'Player')}</td>${cells}</tr>`;
+  }).join('');
+  return `<div class="table-wrap"><table class="data-table compact-table stat-entry-table"><thead><tr><th>#</th><th>Player</th>${columns.map(([label]) => `<th>${label}</th>`).join('')}</tr></thead><tbody>${rows || `<tr><td colspan="${columns.length + 2}" class="empty-state">No ${playerType === 'goalie' ? 'goalies' : 'skaters'} are available on the active roster for this game.</td></tr>`}</tbody></table></div>`;
+}
+
+function statsEntryTeamForm() {
+  const values = statsEntryDraft.team || {};
+  const fields = TEAM_ENTRY_COLUMNS.map(([label, field]) => `<label>${label}<input type="text" inputmode="decimal" class="stat-cell-input" data-stats-team-field="${field}" value="${escapeHtml(statsEntryCellValue(values[field]))}"></label>`).join('');
+  return `<form class="player-form" id="statsEntryTeamForm">${fields}</form>`;
+}
+
+function statsEntryReview(game) {
+  const skaterRows = [...statsEntryDraft.skaters.entries()].filter(([, row]) => Object.values(row).some(value => value !== null));
+  const goalieRows = [...statsEntryDraft.goalies.entries()].filter(([, row]) => Object.values(row).some(value => value !== null));
+  const teamTouched = Object.values(statsEntryDraft.team || {}).some(value => value !== null);
+  const rosterByKey = new Map((phase1Data?.roster || []).map(player => [String(player.source_player_id), player]));
+  const skaterSummary = skaterRows.map(([key, row]) => {
+    const player = rosterByKey.get(key);
+    const pts = window.FoxesStatsEntry.derivePoints(row);
+    return `<li><strong>${escapeHtml(player?.name || key)}</strong> — GP ${statsEntryCellValue(row.gp) || '—'}, G ${statsEntryCellValue(row.goals) || '—'}, A ${statsEntryCellValue(row.assists) || '—'}, PTS ${pts === null ? '—' : pts}</li>`;
+  }).join('');
+  const goalieSummary = goalieRows.map(([key, row]) => {
+    const player = rosterByKey.get(key);
+    const { shotsAgainst, savePct } = window.FoxesStatsEntry.deriveGoalieMetrics(row);
+    return `<li><strong>${escapeHtml(player?.name || key)}</strong> — GP ${statsEntryCellValue(row.gp) || '—'}, Saves ${statsEntryCellValue(row.saves) || '—'}, SA ${shotsAgainst === null ? '—' : shotsAgainst}, SV% ${savePct === null ? '—' : `${(savePct * 100).toFixed(1)}%`}</li>`;
+  }).join('');
+  return `<section class="card">${cardTitle(`Review · ${escapeHtml(game.opponent || 'Opponent unavailable')}`)}<p class="settings-copy">Saving writes skater, goalie, and team stats together. If any row fails validation, nothing is saved.</p>
+    <h3>Skaters (${skaterRows.length})</h3><ul class="stat-review-list">${skaterSummary || '<li>No skater stats entered.</li>'}</ul>
+    <h3>Goalies (${goalieRows.length})</h3><ul class="stat-review-list">${goalieSummary || '<li>No goalie stats entered.</li>'}</ul>
+    <h3>Team stats</h3><p>${teamTouched ? TEAM_ENTRY_COLUMNS.map(([label, field]) => `${label}: ${statsEntryCellValue(statsEntryDraft.team[field]) || '—'}`).join(' · ') : 'No team stats entered.'}</p>
+    ${statsEntryError ? `<div class="auth-error" role="alert">${escapeHtml(statsEntryError)}</div>` : ''}
+    ${statsEntrySavedMessage ? `<div class="callout">${escapeHtml(statsEntrySavedMessage)}</div>` : ''}
+    <div class="player-form-actions"><button class="btn" type="button" id="cancelStatsEntry">Cancel</button><button class="btn primary" type="button" id="saveStatsEntry" ${statsEntrySaving ? 'disabled' : ''}>${statsEntrySaving ? 'Saving…' : 'Save Stats'}</button></div>
+  </section>`;
+}
+
+function statsEntrySection(game) {
+  ensureStatsEntryDraft(game);
+  const stepBody = statsEntryStep === 'skaters' ? statsEntryPlayerTable('skater', SKATER_ENTRY_COLUMNS)
+    : statsEntryStep === 'goalies' ? statsEntryPlayerTable('goalie', GOALIE_ENTRY_COLUMNS)
+    : statsEntryStep === 'team' ? statsEntryTeamForm()
+    : statsEntryReview(game);
+  return `<div class="callout"><strong>Enter Stats · ${escapeHtml(game.opponent || 'Opponent unavailable')}</strong><br>${escapeHtml(phase1Date(game.date))} · Blank cells stay untracked (not zero). Use Tab to move between cells.</div>
+    ${statsEntryStepNav()}
+    <section class="card stat-entry-shell">${stepBody}</section>
+    ${statsEntryStep !== 'review' ? `<div class="player-form-actions"><button class="btn" type="button" id="cancelStatsEntry">Cancel</button><button class="btn primary" type="button" id="nextStatsStep">Next</button></div>` : ''}`;
+}
+
 function gameCenter() {
   const teamStats = new Map((phase1Data?.teamStats || []).map(row => [row.source_game_id, row]));
   const playerStats = new Map();
   (phase1Data?.playerStats || []).forEach(row => playerStats.set(row.source_game_id, (playerStats.get(row.source_game_id) || 0) + 1));
-  const games = (phase1Data?.games || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const games = statsEntryGames();
+  if (statsEntryGameId) {
+    const activeGame = games.find(item => item.source_game_id === statsEntryGameId);
+    if (activeGame) return shell('Game Center', 'Enter or edit official game stats for the selected team and season.', statsEntrySection(activeGame));
+    closeStatsEntry();
+  }
+  const canEnter = canEnterGameStats();
+  const scheduled = (phase1Data?.schedule || []).filter(item => !games.some(game => game.source_game_id === item.linked_game_source_id));
+  const scheduledCards = scheduled.slice().sort(phase1ScheduleSort).map(item => `<article class="card game-card"><div class="game-card-head"><div><span class="eyebrow">${escapeHtml(phase1Date(item.date))}</span><h2>${escapeHtml(item.opponent || 'Opponent unavailable')}</h2><p>${escapeHtml(item.home_away || '')} · ${escapeHtml(item.location || 'Location unavailable')}</p></div><span class="tag">Scheduled</span></div></article>`).join('');
   const cards = games.map(game => {
     const stats = teamStats.get(game.source_game_id);
     const hasScore = stats && (stats.goals_for !== null || stats.goals_against !== null);
     const score = hasScore ? `${phase1Number(stats.goals_for)}–${phase1Number(stats.goals_against)}` : 'Score unavailable';
     const result = hasScore ? (stats.goals_for > stats.goals_against ? 'WIN' : stats.goals_for < stats.goals_against ? 'LOSS' : 'TIE') : 'NOT SCORED';
-    return `<article class="card game-card"><div class="game-card-head"><div><span class="eyebrow">${escapeHtml(phase1Date(game.date))}</span><h2>${escapeHtml(game.opponent || 'Opponent unavailable')}</h2><p>${escapeHtml(game.period_length_min ? `${game.period_length_min}-minute periods` : 'Game details synced from Windows')}</p></div><span class="result ${result === 'WIN' ? 'win' : result === 'LOSS' ? 'loss' : ''}">${result}</span></div><div class="game-score">${escapeHtml(score)}</div><div class="game-card-meta"><span>${playerStats.get(game.source_game_id) || 0} player-stat rows</span><span>${stats ? `${phase1Number(stats.shots_for)} shots for` : 'Official team stats unavailable'}</span><span class="tag">Read only</span></div></article>`;
+    const hasStats = (playerStats.get(game.source_game_id) || 0) > 0 || Boolean(stats);
+    return `<article class="card game-card"><div class="game-card-head"><div><span class="eyebrow">${escapeHtml(phase1Date(game.date))}</span><h2>${escapeHtml(game.opponent || 'Opponent unavailable')}</h2><p>${escapeHtml(game.period_length_min ? `${game.period_length_min}-minute periods` : 'Game details synced from Windows')}</p></div><span class="result ${result === 'WIN' ? 'win' : result === 'LOSS' ? 'loss' : ''}">${result}</span></div><div class="game-score">${escapeHtml(score)}</div><div class="game-card-meta"><span>${playerStats.get(game.source_game_id) || 0} player-stat rows</span><span>${stats ? `${phase1Number(stats.shots_for)} shots for` : 'Official team stats unavailable'}</span><span class="tag">Completed</span></div>${canEnter ? `<div class="player-form-actions"><button class="btn primary" type="button" data-enter-stats="${escapeHtml(game.source_game_id)}">${hasStats ? 'Edit Stats' : 'Enter Stats'}</button></div>` : ''}</article>`;
   }).join('');
-  return shell('Game Center', 'Read-only game summaries from the selected team and season.', `<div class="callout"><strong>${games.length} games synced</strong><br>Game Center shows official cloud-backed summaries only. Detailed video, TOI, tracking, and local game workflows remain in the Windows app.</div><div class="game-center-grid">${cards || '<section class="card empty-view"><div class="empty-icon">▣</div><h2>No games available</h2><p>No completed games are synced for the selected team and season.</p></section>'}</div>`);
+  return shell('Game Center', canEnter ? 'Select a completed game to enter or edit official stats.' : 'Read-only game summaries from the selected team and season.', `<div class="callout"><strong>${games.length} game${games.length === 1 ? '' : 's'} synced</strong><br>Only completed games from the authorized team and season are available for stat entry. Detailed video, TOI, tracking, and local game workflows remain in the Windows app.</div><div class="game-center-grid">${cards || '<section class="card empty-view"><div class="empty-icon">▣</div><h2>No games available</h2><p>No completed games are synced for the selected team and season.</p></section>'}${scheduledCards}</div>`);
 }
 function scouting() {
   if (phase2ADataError) return shell('Scouting', 'Read-only opponent identities synced from the Windows app.', `<section class="card empty-view"><div class="empty-icon">!</div><h2>Unable to load opponent data</h2><p>${escapeHtml(phase2ADataError)}</p><button class="btn primary" id="retryPhase2AData" type="button">Retry</button></section>`);
@@ -985,6 +1163,8 @@ function clearTenantState() {
   entitlements.clear();
   workspaceAccessManager.clearWorkspace();
   rosterManager.clearWorkspace();
+  statsEntryManager.clearWorkspace();
+  closeStatsEntry();
   teamContextManager.clearSelection();
   seasonContextManager.clear();
   const organizationSwitcher = document.querySelector('#organizationSwitcher');
@@ -1150,6 +1330,7 @@ async function activateWorkspace(organizationId, teamId, seasonId = null) {
     currentWorkspace = workspace;
     workspaceAccessManager.persistPreference(workspace);
     rosterManager.setWorkspace(workspace);
+    statsEntryManager.setWorkspace(workspace);
     organizationContextManager.select(workspace.organization_id);
     teamContextManager.selectWorkspace(workspace);
     authTeam = teamContext.selectedMembership;
@@ -1301,6 +1482,67 @@ function downloadRosterTemplate() {
   URL.revokeObjectURL(link.href);
 }
 
+function statsEntryDraftMap(playerType) {
+  return playerType === 'goalie' ? statsEntryDraft?.goalies : statsEntryDraft?.skaters;
+}
+
+function collectStatsEntryTeamForm() {
+  const form = document.querySelector('#statsEntryTeamForm');
+  if (!form || !statsEntryDraft) return;
+  form.querySelectorAll('[data-stats-team-field]').forEach(input => {
+    statsEntryDraft.team[input.dataset.statsTeamField] = window.FoxesStatsEntry.parseStatValue(input.value);
+  });
+}
+
+function bindGameCenterControls() {
+  document.querySelectorAll('[data-enter-stats]').forEach(button => button.addEventListener('click', () => openStatsEntry(button.dataset.enterStats)));
+  if (!statsEntryGameId) return;
+  document.querySelector('#cancelStatsEntry')?.addEventListener('click', () => { closeStatsEntry(); render('games'); });
+  document.querySelectorAll('.stat-entry-step').forEach(button => button.addEventListener('click', () => {
+    if (statsEntryStep === 'team') collectStatsEntryTeamForm();
+    statsEntryStep = button.dataset.statsStep;
+    statsEntryError = '';
+    render('games');
+  }));
+  document.querySelector('#nextStatsStep')?.addEventListener('click', () => {
+    if (statsEntryStep === 'team') collectStatsEntryTeamForm();
+    const index = STATS_ENTRY_STEPS.findIndex(([key]) => key === statsEntryStep);
+    statsEntryStep = STATS_ENTRY_STEPS[Math.min(index + 1, STATS_ENTRY_STEPS.length - 1)][0];
+    statsEntryError = '';
+    render('games');
+  });
+  // Input updates write directly into the draft without re-rendering, so
+  // native tab order and cursor position are preserved for fast entry.
+  document.querySelectorAll('.stat-cell-input[data-stats-player]').forEach(input => {
+    input.addEventListener('input', () => {
+      const map = statsEntryDraftMap(input.dataset.statsType);
+      const row = map?.get(input.dataset.statsPlayer);
+      if (row) row[input.dataset.statsField] = window.FoxesStatsEntry.parseStatValue(input.value);
+    });
+  });
+  document.querySelector('#saveStatsEntry')?.addEventListener('click', async () => {
+    if (!statsEntryDraft) return;
+    statsEntrySaving = true;
+    statsEntryError = '';
+    statsEntrySavedMessage = '';
+    render('games');
+    try {
+      const skaterRows = [...statsEntryDraft.skaters.entries()].map(([source_player_id, row]) => ({ source_player_id, ...row }));
+      const goalieRows = [...statsEntryDraft.goalies.entries()].map(([source_player_id, row]) => ({ source_player_id, ...row }));
+      await statsEntryManager.save(statsEntryGameId, { skaterRows, goalieRows, teamStats: statsEntryDraft.team });
+      await loadPhase1Data(currentWorkspace.team_id);
+      statsEntryDraft = null;
+      statsEntrySavedMessage = 'Game stats saved. The Stats Dashboard reflects this game now.';
+      statsEntrySaving = false;
+      render('games');
+    } catch (error) {
+      statsEntrySaving = false;
+      statsEntryError = error.message || 'Game stats could not be saved.';
+      render('games');
+    }
+  });
+}
+
 function bindRosterControls() {
   if (!rosterCanManage()) return;
   document.querySelector('#addPlayerButton')?.addEventListener('click', () => showPlayerDialog());
@@ -1422,6 +1664,7 @@ function render(view = 'command') {
   if (view === 'management') bindAdminControls();
   if (view === 'platform-admin') bindBetaOnboardingControls();
   if (view === 'players') bindRosterControls();
+  if (view === 'games') bindGameCenterControls();
   if (view === 'support') bindSupportControls();
   syncNavigation(view);
   document.querySelector('#sidebar').classList.remove('open'); document.querySelector('#scrim').classList.remove('show'); window.scrollTo(0, 0);
