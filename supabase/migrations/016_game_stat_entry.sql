@@ -76,6 +76,42 @@ create trigger team_game_team_stats_validate_season
 before insert or update of season_id, team_id on public.team_game_team_stats
 for each row execute function public.validate_team_game_season();
 
+-- Every numeric stat value accepted by save_game_stats passes through this
+-- parser. It preserves the null-vs-zero distinction (blank/omitted input stays
+-- SQL NULL, never coerced to 0) and explicitly rejects non-finite values
+-- (NaN, Infinity, -Infinity). Postgres numeric can represent NaN on all
+-- supported versions and Infinity/-Infinity on Postgres 14+, so a client that
+-- calls the RPC directly (bypassing the browser's finite-number-only parser)
+-- could otherwise smuggle a non-finite value into a stat column. Text-based
+-- detection (rather than a second numeric/float8 comparison) is used so this
+-- rejects non-finite input the same way on every supported Postgres version,
+-- without any risk of a large-but-finite value overflowing during comparison.
+create or replace function public.parse_finite_stat(raw_value text, field_label text)
+returns numeric
+language plpgsql
+immutable
+as $$
+declare
+  parsed numeric;
+begin
+  if raw_value is null or length(trim(raw_value)) = 0 then
+    return null;
+  end if;
+  begin
+    parsed := raw_value::numeric;
+  exception when others then
+    raise exception 'The value for % must be a finite number.', field_label;
+  end;
+  if parsed::text ~* 'inf|nan' then
+    raise exception 'The value for % must be a finite number.', field_label;
+  end if;
+  return parsed;
+end;
+$$;
+
+revoke all on function public.parse_finite_stat(text, text) from public, anon;
+grant execute on function public.parse_finite_stat(text, text) to authenticated;
+
 -- Atomic save: skater stats, goalie stats, and team-game stats are written in a
 -- single SECURITY DEFINER transaction. Any failure raises an exception, which
 -- rolls back every insert/update made earlier in this call — there is no
@@ -87,7 +123,16 @@ for each row execute function public.validate_team_game_season();
 -- reference a player who was never rostered here. Only raw counting stats are
 -- accepted as input — derived values (PTS, SV%, GAA, faceoff %) are never read
 -- from the client payload; they are computed for display only and recomputed
--- server-side (or by the dashboard) from these canonical columns.
+-- server-side (or by the dashboard) from these canonical columns. Every numeric
+-- value is parsed through parse_finite_stat() so a directly-called RPC (not
+-- just the browser UI) cannot smuggle NaN/Infinity into a stat column. Roster
+-- membership is intentionally checked regardless of active/inactive status
+-- (team_roster_players.status), so editing historical stats for a player who
+-- has since gone inactive keeps working — only truly cross-team or never-
+-- rostered player ids are rejected. A row that omits a field always writes
+-- SQL NULL for that field on both insert and update (by design: the web form
+-- always sends a full per-player snapshot, preloaded from any existing saved
+-- values, so a field intentionally left blank explicitly clears it).
 create or replace function public.save_game_stats(
   target_team_id uuid,
   target_season_id uuid,
@@ -124,14 +169,20 @@ begin
   -- The game must belong to the caller's team, and — when the game already
   -- carries a season — to the caller's target season. Games synced before
   -- season tagging existed (season_id is null) are adopted into the caller's
-  -- season below rather than rejected outright.
+  -- season below rather than rejected outright. team_games rows are, by
+  -- design, only ever synced from the Windows app after a game has been
+  -- played (there is no separate "status" column); game.date <= current_date
+  -- is therefore the canonical, server-enforced eligibility predicate that
+  -- proves the selected game cannot be a future/unplayed game, independent of
+  -- whatever the client UI claims about "completed" vs "scheduled".
   if not exists (
     select 1 from public.team_games game
     where game.team_id = target_team_id
       and game.source_game_id = target_source_game_id
       and (game.season_id is null or game.season_id = target_season_id)
+      and game.date <= current_date
   ) then
-    raise exception 'The selected game does not belong to the authorized team and season.';
+    raise exception 'The selected game does not belong to the authorized team and season, or is not yet eligible for stat entry.';
   end if;
 
   update public.team_games
@@ -165,13 +216,20 @@ begin
     ) values (
       target_team_id, target_season_id, target_source_game_id,
       skater_row ->> 'source_player_id', 'skater',
-      (skater_row ->> 'gp')::numeric, (skater_row ->> 'goals')::numeric,
-      (skater_row ->> 'assists')::numeric, (skater_row ->> 'shots')::numeric,
-      (skater_row ->> 'penalty_minutes')::numeric, (skater_row ->> 'plus_minus')::numeric,
-      (skater_row ->> 'blocks')::numeric, (skater_row ->> 'faceoff_wins')::numeric,
-      (skater_row ->> 'faceoff_losses')::numeric, (skater_row ->> 'power_play_goals')::numeric,
-      (skater_row ->> 'power_play_points')::numeric, (skater_row ->> 'short_handed_goals')::numeric,
-      (skater_row ->> 'short_handed_points')::numeric, now(), now()
+      public.parse_finite_stat(skater_row ->> 'gp', 'gp'),
+      public.parse_finite_stat(skater_row ->> 'goals', 'goals'),
+      public.parse_finite_stat(skater_row ->> 'assists', 'assists'),
+      public.parse_finite_stat(skater_row ->> 'shots', 'shots'),
+      public.parse_finite_stat(skater_row ->> 'penalty_minutes', 'penalty_minutes'),
+      public.parse_finite_stat(skater_row ->> 'plus_minus', 'plus_minus'),
+      public.parse_finite_stat(skater_row ->> 'blocks', 'blocks'),
+      public.parse_finite_stat(skater_row ->> 'faceoff_wins', 'faceoff_wins'),
+      public.parse_finite_stat(skater_row ->> 'faceoff_losses', 'faceoff_losses'),
+      public.parse_finite_stat(skater_row ->> 'power_play_goals', 'power_play_goals'),
+      public.parse_finite_stat(skater_row ->> 'power_play_points', 'power_play_points'),
+      public.parse_finite_stat(skater_row ->> 'short_handed_goals', 'short_handed_goals'),
+      public.parse_finite_stat(skater_row ->> 'short_handed_points', 'short_handed_points'),
+      now(), now()
     )
     on conflict (team_id, source_game_id, source_player_id, player_type)
     do update set
@@ -205,10 +263,14 @@ begin
     ) values (
       target_team_id, target_season_id, target_source_game_id,
       goalie_row ->> 'source_player_id', 'goalie',
-      (goalie_row ->> 'gp')::numeric, (goalie_row ->> 'wins')::numeric,
-      (goalie_row ->> 'losses')::numeric, (goalie_row ->> 'ties')::numeric,
-      (goalie_row ->> 'saves')::numeric, (goalie_row ->> 'goals_against')::numeric,
-      (goalie_row ->> 'minutes')::numeric, (goalie_row ->> 'shutouts')::numeric,
+      public.parse_finite_stat(goalie_row ->> 'gp', 'gp'),
+      public.parse_finite_stat(goalie_row ->> 'wins', 'wins'),
+      public.parse_finite_stat(goalie_row ->> 'losses', 'losses'),
+      public.parse_finite_stat(goalie_row ->> 'ties', 'ties'),
+      public.parse_finite_stat(goalie_row ->> 'saves', 'saves'),
+      public.parse_finite_stat(goalie_row ->> 'goals_against', 'goals_against'),
+      public.parse_finite_stat(goalie_row ->> 'minutes', 'minutes'),
+      public.parse_finite_stat(goalie_row ->> 'shutouts', 'shutouts'),
       now(), now()
     )
     on conflict (team_id, source_game_id, source_player_id, player_type)
@@ -226,8 +288,10 @@ begin
       source_updated_at, updated_at
     ) values (
       target_team_id, target_season_id, target_source_game_id,
-      (team_stats ->> 'goals_for')::numeric, (team_stats ->> 'goals_against')::numeric,
-      (team_stats ->> 'shots_for')::numeric, (team_stats ->> 'shots_against')::numeric,
+      public.parse_finite_stat(team_stats ->> 'goals_for', 'goals_for'),
+      public.parse_finite_stat(team_stats ->> 'goals_against', 'goals_against'),
+      public.parse_finite_stat(team_stats ->> 'shots_for', 'shots_for'),
+      public.parse_finite_stat(team_stats ->> 'shots_against', 'shots_against'),
       now(), now()
     )
     on conflict (team_id, source_game_id)
@@ -263,5 +327,16 @@ begin
   if not has_function_privilege('authenticated', 'public.save_game_stats(uuid,uuid,text,jsonb,jsonb,jsonb)', 'execute') then
     raise exception 'Authenticated execution is missing for save_game_stats.';
   end if;
+  if has_function_privilege('anon', 'public.parse_finite_stat(text,text)', 'execute') then
+    raise exception 'Anonymous execution is granted for parse_finite_stat.';
+  end if;
+  if public.parse_finite_stat('NaN', 'test') is not null then
+    raise exception 'parse_finite_stat failed to reject NaN.';
+  end if;
+exception
+  when others then
+    if sqlerrm not like 'The value for%' then
+      raise;
+    end if;
 end;
 $$;

@@ -40,8 +40,8 @@ test('save_game_stats is SECURITY DEFINER, re-validates authorization server-sid
 });
 
 test('save_game_stats re-validates the game belongs to the caller\'s team and season, not just client-supplied ids', () => {
-  assert.match(migration, /where game\.team_id = target_team_id\s*\n\s*and game\.source_game_id = target_source_game_id\s*\n\s*and \(game\.season_id is null or game\.season_id = target_season_id\)/);
-  assert.match(migration, /raise exception 'The selected game does not belong to the authorized team and season\.'/);
+  assert.match(migration, /where game\.team_id = target_team_id\s*\n\s*and game\.source_game_id = target_source_game_id\s*\n\s*and \(game\.season_id is null or game\.season_id = target_season_id\)\s*\n\s*and game\.date <= current_date/);
+  assert.match(migration, /raise exception 'The selected game does not belong to the authorized team and season, or is not yet eligible for stat entry\.'/);
 });
 
 test('save_game_stats upserts by the unique keys instead of inserting duplicates', () => {
@@ -51,10 +51,13 @@ test('save_game_stats upserts by the unique keys instead of inserting duplicates
   assert.equal(conflictCount, 3, 'expected exactly one upsert per stat table: skaters, goalies, team stats');
 });
 
-test('save_game_stats casts jsonb fields to numeric so blank/omitted values stay null instead of coercing to 0', () => {
-  assert.match(migration, /\(skater_row ->> 'goals'\)::numeric/);
-  assert.match(migration, /\(goalie_row ->> 'saves'\)::numeric/);
-  assert.match(migration, /\(team_stats ->> 'goals_for'\)::numeric/);
+test('save_game_stats parses every numeric field through parse_finite_stat instead of casting client JSON directly to numeric', () => {
+  assert.doesNotMatch(migration, /\(skater_row ->> '[a-z_]+'\)::numeric/);
+  assert.doesNotMatch(migration, /\(goalie_row ->> '[a-z_]+'\)::numeric/);
+  assert.doesNotMatch(migration, /\(team_stats ->> '[a-z_]+'\)::numeric/);
+  assert.match(migration, /public\.parse_finite_stat\(skater_row ->> 'goals', 'goals'\)/);
+  assert.match(migration, /public\.parse_finite_stat\(goalie_row ->> 'saves', 'saves'\)/);
+  assert.match(migration, /public\.parse_finite_stat\(team_stats ->> 'goals_for', 'goals_for'\)/);
 });
 
 test('a single PL/pgSQL function body is one transaction: any raised exception rolls back every prior statement in the call', () => {
@@ -89,5 +92,25 @@ test('save_game_stats validates every skater/goalie row against this team\'s ros
 
 test('save_game_stats never trusts client-supplied derived stats: it only accepts and writes raw canonical columns', () => {
   assert.doesNotMatch(migration, /'points'|'pts'|'save_pct'|'sv_pct'|'gaa'|'faceoff_pct'/);
+});
+
+test('parse_finite_stat preserves null-vs-zero, rejects unparsable input, and rejects NaN/Infinity/-Infinity before any numeric column is written', () => {
+  assert.match(migration, /create or replace function public\.parse_finite_stat\(raw_value text, field_label text\)/);
+  assert.match(migration, /if raw_value is null or length\(trim\(raw_value\)\) = 0 then\s*\n\s*return null;/);
+  assert.match(migration, /parsed := raw_value::numeric;/);
+  assert.match(migration, /if parsed::text ~\* 'inf\|nan' then/);
+  assert.match(migration, /raise exception 'The value for % must be a finite number\.', field_label;/);
+  assert.match(migration, /revoke all on function public\.parse_finite_stat\(text, text\) from public, anon;/);
+  assert.match(migration, /grant execute on function public\.parse_finite_stat\(text, text\) to authenticated;/);
+});
+
+test('save_game_stats rejects future/ineligible games server-side using the canonical game date, independent of client UI claims', () => {
+  assert.match(migration, /and game\.date <= current_date/);
+  assert.match(migration, /is not yet eligible for stat entry/);
+});
+
+test('migration self-tests parse_finite_stat against NaN as part of its own runtime assertions', () => {
+  assert.match(migration, /public\.parse_finite_stat\('NaN', 'test'\)/);
+  assert.match(migration, /parse_finite_stat failed to reject NaN/);
 });
 

@@ -203,6 +203,10 @@ test('Game Stat Entry wires the stats-entry module and RPC into the Game Center 
 test('Game Center never lets a caller select a game outside the authorized team (client-side gating)', () => {
   // statsEntryGames() reads only from phase1Data.games, which loadPhase1Data
   // populates from a query already filtered with .eq('team_id', teamId).
-  assert.match(appSource, /function statsEntryGames\(\) \{\s*return \(phase1Data\?\.games/);
+  assert.match(appSource, /function statsEntryGames\(\) \{/);
   assert.match(appSource, /read\('games', 'team_games'.*PERMISSIONS\.GAMES_VIEW\)/);
+});
+
+test('Game Center excludes future-dated games from the enterable list client-side, mirroring the server-side eligibility guard', () => {
+  assert.match(appSource, /function statsEntryGames\(\) \{\s*\n\s*const today = phase1DateKey\(\);\s*\n\s*return \(phase1Data\?\.games \|\| \[\]\)\s*\n\s*\.filter\(game => String\(game\.date \|\| ''\) <= today\)/);
 });

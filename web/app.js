@@ -684,9 +684,16 @@ function canEnterGameStats() {
 // Games are only ever selectable for stat entry when they belong to the
 // authorized team (phase1Data is already team-scoped by loadPhase1Data), so
 // no cross-team game id can ever appear in this list — the server-side RPC
-// re-validates team/season ownership regardless.
+// re-validates team/season ownership regardless. team_games rows are, by
+// design, only synced from the Windows app after a game has been played, but
+// as a client-side safety net (mirrored by the save_game_stats RPC's
+// game.date <= current_date guard) a game dated in the future is excluded
+// from the enterable list rather than trusted at face value.
 function statsEntryGames() {
-  return (phase1Data?.games || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const today = phase1DateKey();
+  return (phase1Data?.games || [])
+    .filter(game => String(game.date || '') <= today)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)));
 }
 
 function statsEntryRosterFor(playerType) {
