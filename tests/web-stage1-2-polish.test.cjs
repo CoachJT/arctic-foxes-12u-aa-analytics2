@@ -95,11 +95,11 @@ test('Stage 1.2 hero renders tenant identity from workspace branding, never hard
   });
 
   assert.match(rendered, /class="hero card command-hero"/);
-  assert.match(rendered, /<img class="hero-logo" src="https:\/\/cdn\.example\/logo\.png" alt="Avonworth Hockey logo">/);
-  assert.match(rendered, /<span class="eyebrow">Avonworth Hockey<\/span>/);
-  assert.match(rendered, /<h1 class="hero-title">14U A<\/h1>/);
-  assert.match(rendered, /<p class="hero-meta">2026-27<\/p>/);
-  assert.match(rendered, /Welcome back, Dave Coach\./);
+  assert.match(rendered, /<img class="identity-logo" src="https:\/\/cdn\.example\/logo\.png" alt="Avonworth Hockey logo">/);
+  assert.match(rendered, /<span class="eyebrow">Welcome back,<\/span>/);
+  assert.match(rendered, /<h1 class="welcome-title">Dave Coach\.<\/h1>/);
+  assert.match(rendered, /Head Coach <b>·<\/b> 14U A <b>·<\/b> 2026-27/);
+  assert.match(rendered, /View Latest Game Film/);
 
   const commandSource = extractFunction(app, 'command');
   assert.doesNotMatch(commandSource, /Arctic Foxes|Avonworth|#d71920/);
@@ -111,9 +111,9 @@ test('Stage 1.2 hero falls back to a branded monogram mark when no logo is synce
     workspace: { branding: { display_name: 'Steel City Selects', logo_url: '' } }
   });
 
-  assert.doesNotMatch(rendered, /hero-logo/);
-  assert.match(rendered, /<span class="hero-mark" aria-hidden="true">SC<\/span>/);
-  assert.match(rendered, /Welcome back, Head Coach\./);
+  assert.doesNotMatch(rendered, /identity-logo/);
+  assert.match(rendered, /<span class="identity-mark" aria-hidden="true">SC<\/span>/);
+  assert.match(rendered, /<h1 class="welcome-title">Head Coach\.<\/h1>/);
 });
 
 test('Stage 1.2 Next Game is prominent, future-only, and shows full game identity', () => {

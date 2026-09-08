@@ -64,12 +64,10 @@
         .select('id,team_id,name,season_key,status,starts_on,ends_on')
         .eq('team_id', teamId)
         .order('starts_on', { ascending: false, nullsFirst: false });
-      const brandingRequest = workspace
-        ? Promise.resolve({ data: workspace.branding, error: null })
-        : client.from('team_branding')
-          .select('team_id,display_name,short_name,logo_url,primary_color,secondary_color,accent_color,settings')
-          .eq('team_id', teamId)
-          .maybeSingle();
+      const brandingRequest = client.from('team_branding')
+        .select('team_id,display_name,short_name,logo_url,primary_color,secondary_color,accent_color,settings')
+        .eq('team_id', teamId)
+        .maybeSingle();
       const [{ data: seasons, error: seasonsError }, { data: branding, error: brandingError }] = await Promise.all([
         seasonsRequest,
         brandingRequest
@@ -84,7 +82,7 @@
       context.selectedSeasonId = selected?.id || '';
       context.selectedSeason = selected;
       if (selected) storage?.setItem('foxes-selected-season-id', selected.id);
-      applyBranding(branding);
+      applyBranding({ ...(branding || {}), ...(workspace?.branding || {}), settings: branding?.settings || {} });
       context.loading = false;
       return context;
     }
