@@ -79,7 +79,7 @@ test('Stage 1.3 shell identity is workspace-driven and uses a safe fallback', ()
 
 test('Stage 1.3 preserves real-data dashboard, context isolation, and login-first bootstrap', () => {
   assert.match(app, /function activeRosterPlayers/);
-  assert.match(app, /<strong class="metric-value">\$\{playersCount\} Players<\/strong>/);
+  assert.match(app, /<strong class="metric-value">\$\{playersCount\}<\/strong>/);
   assert.match(app, /function phase1NextScheduledGame/);
   assert.match(app, /function phase1LatestCompletedGame/);
   assert.match(app, /clearTenantState\(\);\s*render\(\);\s*try \{\s*const workspace = await workspaceAccessManager\.resolveWorkspace/);

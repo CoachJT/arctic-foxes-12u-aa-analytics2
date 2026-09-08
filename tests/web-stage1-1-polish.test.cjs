@@ -74,6 +74,7 @@ function renderShellHarness(phase1Data, now = '2026-09-08T12:00:00') {
     ${extractFunction(app, 'tenantSeasonName')}
     ${extractFunction(app, 'shell')}
     ${extractFunction(app, 'phase1Number')}
+    ${extractFunction(app, 'orgInitials')}
     ${extractFunction(app, 'phase1Date')}
     ${extractFunction(app, 'phase1Record')}
     ${extractFunction(app, 'phase1DateKey')}
@@ -163,8 +164,8 @@ test('dashboard roster count uses active roster status while Players view keeps 
     seasonRecord: { games_played: 3, wins: 2, losses: 1, ties: 0, goals_for: 9, goals_against: 7 }
   });
 
-  assert.match(rendered.renderedCommand, /Active Roster<\/span>\s*<strong class="metric-value">2 Players<\/strong>/);
-  assert.match(rendered.renderedCommand, /1 Goalie<\/span>/);
+  assert.match(rendered.renderedCommand, /Players<\/span>\s*<strong class="metric-value">2<\/strong>/);
+  assert.match(rendered.renderedCommand, /Goalies<\/span>\s*<strong class="metric-value">1<\/strong>/);
   assert.match(rendered.renderedPlayers, /3 players<\/div>/);
   assert.match(rendered.renderedPlayers, /Ava Skater/);
   assert.match(rendered.renderedPlayers, /Gabe Goalie/);
@@ -184,8 +185,8 @@ test('dashboard roster count preserves legacy rows that do not include status', 
     seasonRecord: { games_played: 3, wins: 2, losses: 1, ties: 0, goals_for: 9, goals_against: 7 }
   });
 
-  assert.match(rendered.renderedCommand, /Active Roster<\/span>\s*<strong class="metric-value">2 Players<\/strong>/);
-  assert.match(rendered.renderedCommand, /1 Goalie<\/span>/);
+  assert.match(rendered.renderedCommand, /Players<\/span>\s*<strong class="metric-value">2<\/strong>/);
+  assert.match(rendered.renderedCommand, /Goalies<\/span>\s*<strong class="metric-value">1<\/strong>/);
 });
 
 test('dashboard and roster views derive from phase1Data roster reads scoped by team', () => {

@@ -62,6 +62,7 @@ function renderCommandHarness({ phase1Data, workspace = {}, staff = {}, team = {
     ${extractFunction(app, 'tenantSeasonName')}
     ${extractFunction(app, 'shell')}
     ${extractFunction(app, 'phase1Number')}
+    ${extractFunction(app, 'orgInitials')}
     ${extractFunction(app, 'phase1Date')}
     ${extractFunction(app, 'phase1Record')}
     ${extractFunction(app, 'phase1DateKey')}
@@ -209,7 +210,7 @@ test('Stage 1.2 Top Players sorts by points from canonical synced stats with G/A
     }
   });
 
-  assert.match(rendered, /<h3>Top Players<\/h3>/);
+  assert.match(rendered, /<h4>Top Players<\/h4>/);
   assert.ok(rendered.indexOf('Playmaker Pat') < rendered.indexOf('Sniper Sam'), '5 points outranks 4 points');
   assert.match(rendered, /<span class="jersey">#9<\/span><div class="leader-info"><strong>Playmaker Pat<\/strong><small>F · 2 GP<\/small><\/div><div class="leader-stats"><span>1 G<\/span><span>4 A<\/span><\/div><span class="leader-value">5 P<\/span>/);
   assert.match(rendered, /<span class="jersey">#4<\/span><div class="leader-info"><strong>Sniper Sam<\/strong><small>D · 2 GP<\/small><\/div><div class="leader-stats"><span>4 G<\/span><span>0 A<\/span><\/div><span class="leader-value">4 P<\/span>/);
@@ -244,7 +245,7 @@ test('Stage 1.2 performance card uses only real record metrics and no invented t
     }
   });
 
-  assert.match(rendered, /<h3>Team Performance<\/h3>/);
+  assert.match(rendered, /<h3>Team Development<\/h3>/);
   assert.match(rendered, /<span class="metric-label">Win Rate<\/span>\s*<strong class="metric-value">33%<\/strong>/);
   assert.match(rendered, /<strong class="metric-value perf-score">9 \/ 7<\/strong>/);
   assert.match(rendered, /3\.0 GF &middot; 2\.3 GA per game/);
@@ -280,9 +281,9 @@ test('Stage 1.2 dashboard active roster count and goalie count remain unchanged'
     }
   });
 
-  assert.match(rendered, /Active Roster<\/span>\s*<strong class="metric-value">2 Players<\/strong>/);
-  assert.match(rendered, /1 Goalie<\/span>/);
-  assert.doesNotMatch(rendered, />3<\/strong>\s*<span class="metric-meta">.*Goalie/);
+  assert.match(rendered, /Players<\/span>\s*<strong class="metric-value">2<\/strong>/);
+  assert.match(rendered, /Goalies<\/span>\s*<strong class="metric-value">1<\/strong>/);
+  assert.doesNotMatch(rendered, /Goalies<\/span>\s*<strong class="metric-value">3<\/strong>/);
 });
 
 test('Stage 1.2 sidebar keeps entitlement gating, beta badge, and adds a footer user area', () => {
