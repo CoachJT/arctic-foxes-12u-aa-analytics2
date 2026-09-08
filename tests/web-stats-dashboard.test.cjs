@@ -116,6 +116,80 @@ test('Stats Dashboard aggregates goalie season rows and season save percentage f
   assert.doesNotMatch(rendered.renderedStats, /NaN|Infinity/);
 });
 
+test('Stats Dashboard goalie Shots Against derives from Saves + Goals Against when the canonical field is absent (hotfix regression)', () => {
+  const rendered = renderStats({
+    roster: [
+      { source_player_id: 'g1', jersey_number: '31', name: 'Hudson Bouchard', position: 'G', status: 'active', player_type: 'goalie' }
+    ],
+    playerStats: [
+      // No shots_against key present, matching the production schema after the hotfix.
+      { source_player_id: 'g1', player_type: 'goalie', gp: 1, wins: 1, saves: 10, goals_against: 1, minutes: 20 },
+      { source_player_id: 'g1', player_type: 'goalie', gp: 1, losses: 1, saves: 15, goals_against: 2, minutes: 28 }
+    ]
+  });
+
+  assert.equal(rendered.goalies.length, 1);
+  assert.equal(rendered.goalies[0].saves, 25);
+  assert.equal(rendered.goalies[0].goalsAgainst, 3);
+  assert.equal(rendered.goalies[0].shotsAgainst, 28);
+  assert.equal(rendered.goalies[0].savePct, 25 / 28);
+  assert.doesNotMatch(rendered.renderedStats, /NaN|Infinity/);
+});
+
+test('Stats Dashboard goalie Shots Against stays unavailable (not fabricated) when Saves is missing', () => {
+  const rendered = renderStats({
+    roster: [
+      { source_player_id: 'g1', jersey_number: '31', name: 'Hudson Bouchard', position: 'G', status: 'active', player_type: 'goalie' }
+    ],
+    playerStats: [
+      { source_player_id: 'g1', player_type: 'goalie', gp: 1, wins: 1, goals_against: 1, minutes: 20 }
+    ]
+  });
+
+  assert.equal(rendered.goalies.length, 1);
+  assert.equal(rendered.goalies[0].saves, null);
+  assert.equal(rendered.goalies[0].goalsAgainst, 1);
+  assert.equal(rendered.goalies[0].shotsAgainst, null);
+  assert.equal(rendered.goalies[0].savePct, null);
+  const goalieRow = rendered.renderedStats.match(/Hudson Bouchard[\s\S]*?<\/tr>/)[0];
+  assert.match(goalieRow, /<td>—<\/td><td>—<\/td>/);
+  assert.doesNotMatch(rendered.renderedStats, /NaN|Infinity/);
+});
+
+test('Stats Dashboard goalie Shots Against stays unavailable (not fabricated) when Goals Against is missing', () => {
+  const rendered = renderStats({
+    roster: [
+      { source_player_id: 'g1', jersey_number: '31', name: 'Hudson Bouchard', position: 'G', status: 'active', player_type: 'goalie' }
+    ],
+    playerStats: [
+      { source_player_id: 'g1', player_type: 'goalie', gp: 1, wins: 1, saves: 10, minutes: 20 }
+    ]
+  });
+
+  assert.equal(rendered.goalies.length, 1);
+  assert.equal(rendered.goalies[0].saves, 10);
+  assert.equal(rendered.goalies[0].goalsAgainst, null);
+  assert.equal(rendered.goalies[0].shotsAgainst, null);
+  assert.equal(rendered.goalies[0].savePct, null);
+  assert.doesNotMatch(rendered.renderedStats, /NaN|Infinity/);
+});
+
+test('Stats Dashboard goalie Shots Against uses a canonical source.shots_against value when it is legitimately present', () => {
+  const rendered = renderStats({
+    roster: [
+      { source_player_id: 'g1', jersey_number: '31', name: 'Hudson Bouchard', position: 'G', status: 'active', player_type: 'goalie' }
+    ],
+    playerStats: [
+      // Canonical field present and disagrees with saves+GA; canonical must win (future-compatible path).
+      { source_player_id: 'g1', player_type: 'goalie', gp: 1, wins: 1, saves: 10, goals_against: 1, shots_against: 12, minutes: 20 }
+    ]
+  });
+
+  assert.equal(rendered.goalies[0].shotsAgainst, 12);
+  assert.equal(rendered.goalies[0].savePct, 10 / 12);
+  assert.doesNotMatch(rendered.renderedStats, /NaN|Infinity/);
+});
+
 test('Stats Dashboard active players metric includes active goalies and excludes inactive roster rows', () => {
   const rendered = renderStats({
     roster: [

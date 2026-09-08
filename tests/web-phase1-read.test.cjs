@@ -109,6 +109,20 @@ test('web Phase 1 dashboard reads the synced team datasets', () => {
   assert.match(app, /seasonRecord/);
 });
 
+test('web Phase 1 playerStats query never requests the nonexistent shots_against column (hotfix regression)', () => {
+  const playerStatsRead = app.match(/read\('playerStats', 'team_game_player_stats', '([^']+)'/);
+  assert.ok(playerStatsRead, 'expected a playerStats read() call for team_game_player_stats');
+  const columns = playerStatsRead[1].split(',');
+  assert.ok(!columns.includes('shots_against'), 'playerStats select must not request the nonexistent shots_against column');
+  // Full team data load still requires saves and goals_against so goalie SA can be derived.
+  assert.ok(columns.includes('saves'));
+  assert.ok(columns.includes('goals_against'));
+  // teamStats (a different, schema-valid table) legitimately has shots_against and must be unaffected.
+  const teamStatsRead = app.match(/read\('teamStats', 'team_game_team_stats', '([^']+)'/);
+  assert.ok(teamStatsRead, 'expected a teamStats read() call for team_game_team_stats');
+  assert.ok(teamStatsRead[1].split(',').includes('shots_against'));
+});
+
 test('web Phase 1 dashboard does not write to Supabase', () => {
   assert.doesNotMatch(app, /\.insert\(/);
   assert.doesNotMatch(app, /\.update\(/);
