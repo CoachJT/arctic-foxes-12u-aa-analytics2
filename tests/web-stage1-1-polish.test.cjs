@@ -303,7 +303,7 @@ test('Stage 1.1 polish styles cover badges, switchers, and responsive reflow', (
 });
 
 test('changed Stage 1.1 assets are cache-busted', () => {
-  assert.match(index, /styles\.css\?v=beta-stage-1-1/);
-  assert.match(index, /app\.js\?v=beta-stage-1-1/);
+  assert.match(index, /styles\.css\?v=beta-stage-1-2/);
+  assert.match(index, /app\.js\?v=beta-stage-1-2/);
   assert.match(index, /season-context\.js\?v=beta-stage-1-1/);
 });

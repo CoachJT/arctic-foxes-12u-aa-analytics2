@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#07111e" />
     <title>PuckNexus | The Connected Hockey Platform</title>
-    <link rel="stylesheet" href="./styles.css?v=beta-stage-1-1" />
+    <link rel="stylesheet" href="./styles.css?v=beta-stage-1-2" />
   </head>
   <body>
     <div class="auth-screen" id="authScreen" hidden></div>
@@ -47,6 +47,7 @@
           <button class="nav-item" data-section="system" data-view="settings"><span>⚙</span> Settings</button>
         </nav>
         <div class="sidebar-foot">
+          <div class="sidebar-user" id="sidebarUser"></div>
           <div class="sample-badge"><span class="pulse"></span> PuckNexus Beta Workspace</div>
           <small id="teamStatus">Supabase session active</small>
         </div>
@@ -63,7 +64,7 @@
             <span id="workspaceRole" class="workspace-indicator">No workspace</span>
             <span id="workspacePlan" class="workspace-indicator">No plan</span>
             <span class="season-pill" id="seasonPill">Live season <i></i></span>
-            <button class="icon-button" aria-label="Notifications">♢<em>3</em></button>
+            <button class="icon-button" aria-label="Notifications" title="Notifications are not enabled in this beta">♢</button>
             <div class="user-menu"><div class="avatar" id="userAvatar">JK</div><span id="userName">User</span><b>⌄</b></div>
           </div>
         </header>
@@ -85,6 +86,6 @@
     <script src="./roster-management.js?v=stage-f-1"></script>
     <script src="./media-storage.js?v=stage-f-2"></script>
     <script src="./support-reporting.js?v=stage-f-2"></script>
-    <script src="./app.js?v=beta-stage-1-1"></script>
+    <script src="./app.js?v=beta-stage-1-2"></script>
   </body>
 </html>
