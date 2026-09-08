@@ -5,9 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#07111e" />
     <title>PuckNexus | The Connected Hockey Platform</title>
-    <link rel="stylesheet" href="./styles.css?v=beta-stage-1-2" />
+    <link rel="stylesheet" href="./styles.css?v=beta-stage-1-3" />
   </head>
   <body>
+    <svg class="icon-sprite" aria-hidden="true">
+      <symbol id="icon-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10H3z"/><path d="M9 20v-6h6v6"/></symbol>
+      <symbol id="icon-team" viewBox="0 0 24 24"><path d="M12 3 20 6v5c0 5-3.4 8.3-8 10-4.6-1.7-8-5-8-10V6z"/><path d="M8 12h8M12 8v8"/></symbol>
+      <symbol id="icon-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/></symbol>
+      <symbol id="icon-game" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 8h8v8H8z"/></symbol>
+      <symbol id="icon-players" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2"/><path d="M3 20c.5-4 3-6 6-6s5.5 2 6 6M15 15c3 0 5 1.6 5.5 5"/></symbol>
+      <symbol id="icon-stats" viewBox="0 0 24 24"><path d="M4 20V10m6 10V4m6 16v-7m6 7V7"/></symbol>
+      <symbol id="icon-film" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/></symbol>
+      <symbol id="icon-scouting" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m16 16 5 5M8 11h6M11 8v6"/></symbol>
+      <symbol id="icon-reports" viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="M9 11h6m-6 4h6M15 3v4h4"/></symbol>
+      <symbol id="icon-development" viewBox="0 0 24 24"><path d="M4 19 10 13l4 3 6-8"/><path d="M15 8h5v5"/></symbol>
+      <symbol id="icon-tools" viewBox="0 0 24 24"><path d="m14 6 4-4 2 2-4 4M3 21l8-8M5 5l4 4m-4 0 4-4"/></symbol>
+      <symbol id="icon-management" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 0 0-1.7-1L14.5 3h-5L9 6.1a7 7 0 0 0-1.7 1L5 6l-2 3.4L5 11a7 7 0 0 0 0 2l-2 1.5L5 18l2.3-1a7 7 0 0 0 1.7 1l.5 3h5l.5-3a7 7 0 0 0 1.7-1l2.3 1 2-3.5-2-1.5c.1-.3.1-.7.1-1z"/></symbol>
+      <symbol id="icon-support" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 4.2 1.8c-1.2 1.1-1.7 1.5-1.7 3.2M12 17h.01"/></symbol>
+      <symbol id="icon-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="m19 12 2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.7-1L14.5 4h-5L9 7a7 7 0 0 0-1.7 1L5 7 3 10.5 5 12a7 7 0 0 0 0 2l-2 1.5L5 17l2.3-1a7 7 0 0 0 1.7 1l.5 3h5l.5-3a7 7 0 0 0 1.7-1l2.3 1 2-3.5-2-1.5a7 7 0 0 0 .5-2z"/></symbol>
+      <symbol id="icon-platform" viewBox="0 0 24 24"><path d="M3 10h18M5 10v10m5-10v10m4-10v10m5-10v10M2 21h20M12 3l9 5H3z"/></symbol>
+      <symbol id="icon-bell" viewBox="0 0 24 24"><path d="M18 10a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 22h4"/></symbol>
+    </svg>
     <div class="auth-screen" id="authScreen" hidden></div>
     <div class="app-shell" id="appShell" hidden>
       <aside class="sidebar" id="sidebar">
@@ -24,27 +42,30 @@
         <button class="mobile-close" id="closeSidebar" aria-label="Close navigation">×</button>
         <nav class="nav" aria-label="Primary navigation">
           <p class="nav-label" data-section="overview">Overview</p>
-          <button class="nav-item active" data-section="overview" data-view="command" aria-current="page"><span>⌂</span> Home</button>
-          <button class="nav-item" data-section="overview" data-view="team"><span>🛡</span> Team</button>
-          <button class="nav-item" data-section="overview" data-view="schedule"><span>◷</span> Schedule</button>
-          <button class="nav-item" data-section="overview" data-view="games"><span>▣</span> Games</button>
+          <button class="nav-item active" data-section="overview" data-view="command" aria-current="page"><svg class="nav-icon"><use href="#icon-home"></use></svg> Home</button>
+          <button class="nav-item" data-section="overview" data-view="team"><svg class="nav-icon"><use href="#icon-team"></use></svg> Team</button>
+          <button class="nav-item" data-section="overview" data-view="schedule"><svg class="nav-icon"><use href="#icon-calendar"></use></svg> Schedule</button>
+          <button class="nav-item" data-section="overview" data-view="games"><svg class="nav-icon"><use href="#icon-game"></use></svg> Games</button>
 
           <p class="nav-label" data-section="analytics">Analytics & Roster</p>
-          <button class="nav-item" data-section="analytics" data-view="players"><span>♙</span> Players</button>
-          <button class="nav-item" data-section="analytics" data-view="stats"><span>↗</span> Stats</button>
-          <button class="nav-item" data-section="analytics" data-view="film"><span>🎬</span> Film Room</button>
-          <button class="nav-item" data-section="analytics" data-view="scouting"><span>⌁</span> Scouting</button>
-          <button class="nav-item" data-section="analytics" data-view="reports"><span>▤</span> Reports</button>
+          <button class="nav-item" data-section="analytics" data-view="players"><svg class="nav-icon"><use href="#icon-players"></use></svg> Players</button>
+          <button class="nav-item" data-section="analytics" data-view="stats"><svg class="nav-icon"><use href="#icon-stats"></use></svg> Stats</button>
+          <button class="nav-item" data-section="analytics" data-view="film"><svg class="nav-icon"><use href="#icon-film"></use></svg> Film Room</button>
+          <button class="nav-item" data-section="analytics" data-view="scouting"><svg class="nav-icon"><use href="#icon-scouting"></use></svg> Scouting</button>
+          <button class="nav-item" data-section="analytics" data-view="reports"><svg class="nav-icon"><use href="#icon-reports"></use></svg> Reports</button>
 
           <p class="nav-label" data-section="coaching">Coaching & Dev</p>
-          <button class="nav-item" data-section="coaching" data-view="development"><span>📈</span> Player Development</button>
-          <button class="nav-item" data-section="coaching" data-view="coaching"><span>📋</span> Coaching Tools</button>
-          <button class="nav-item" data-section="coaching" data-view="management"><span>⚙</span> Team Management</button>
+          <button class="nav-item" data-section="coaching" data-view="development"><svg class="nav-icon"><use href="#icon-development"></use></svg> Player Development</button>
+          <button class="nav-item" data-section="coaching" data-view="coaching"><svg class="nav-icon"><use href="#icon-tools"></use></svg> Coaching Tools</button>
+          <button class="nav-item" data-section="coaching" data-view="management"><svg class="nav-icon"><use href="#icon-management"></use></svg> Team Management</button>
 
           <p class="nav-label" data-section="system">System</p>
-          <button class="nav-item" data-section="system" data-view="support"><span>?</span> Support</button>
-          <button class="nav-item" data-section="system" data-view="admin"><span>♙</span> Admin</button>
-          <button class="nav-item" data-section="system" data-view="settings"><span>⚙</span> Settings</button>
+          <button class="nav-item" data-section="system" data-view="support"><svg class="nav-icon"><use href="#icon-support"></use></svg> Support</button>
+          <button class="nav-item" data-section="system" data-view="settings"><svg class="nav-icon"><use href="#icon-settings"></use></svg> Settings</button>
+          <div class="platform-navigation">
+            <p class="nav-label" data-section="platform">Platform</p>
+            <button class="nav-item platform-admin-nav" data-section="platform" data-view="platform-admin"><svg class="nav-icon"><use href="#icon-platform"></use></svg> Platform Admin</button>
+          </div>
         </nav>
         <div class="sidebar-foot">
           <div class="sidebar-user" id="sidebarUser"></div>
@@ -64,7 +85,7 @@
             <span id="workspaceRole" class="workspace-indicator">No workspace</span>
             <span id="workspacePlan" class="workspace-indicator">No plan</span>
             <span class="season-pill" id="seasonPill">Live season <i></i></span>
-            <button class="icon-button" aria-label="Notifications" title="Notifications are not enabled in this beta">♢</button>
+            <button class="icon-button" aria-label="Notifications" title="Notifications are not enabled in this beta"><svg class="nav-icon"><use href="#icon-bell"></use></svg></button>
             <div class="user-menu"><div class="avatar" id="userAvatar">JK</div><span id="userName">User</span><b>⌄</b></div>
           </div>
         </header>
@@ -86,6 +107,6 @@
     <script src="./roster-management.js?v=stage-f-1"></script>
     <script src="./media-storage.js?v=stage-f-2"></script>
     <script src="./support-reporting.js?v=stage-f-2"></script>
-    <script src="./app.js?v=beta-stage-1-2"></script>
+    <script src="./app.js?v=beta-stage-1-3"></script>
   </body>
 </html>

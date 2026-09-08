@@ -163,7 +163,7 @@ test('dashboard roster count uses active roster status while Players view keeps 
     seasonRecord: { games_played: 3, wins: 2, losses: 1, ties: 0, goals_for: 9, goals_against: 7 }
   });
 
-  assert.match(rendered.renderedCommand, /Roster Size<\/span>\s*<strong class="metric-value">2<\/strong>/);
+  assert.match(rendered.renderedCommand, /Active Roster<\/span>\s*<strong class="metric-value">2 Players<\/strong>/);
   assert.match(rendered.renderedCommand, /1 Goalie<\/span>/);
   assert.match(rendered.renderedPlayers, /3 players<\/div>/);
   assert.match(rendered.renderedPlayers, /Ava Skater/);
@@ -184,7 +184,7 @@ test('dashboard roster count preserves legacy rows that do not include status', 
     seasonRecord: { games_played: 3, wins: 2, losses: 1, ties: 0, goals_for: 9, goals_against: 7 }
   });
 
-  assert.match(rendered.renderedCommand, /Roster Size<\/span>\s*<strong class="metric-value">2<\/strong>/);
+  assert.match(rendered.renderedCommand, /Active Roster<\/span>\s*<strong class="metric-value">2 Players<\/strong>/);
   assert.match(rendered.renderedCommand, /1 Goalie<\/span>/);
 });
 
@@ -234,7 +234,7 @@ test('context selectors render premium labeled select shells with dropdown affor
   const source = `
     ${extractFunction(app, 'escapeHtml')}
     ${extractFunction(app, 'switcherMarkup')}
-    this.single = switcherMarkup('team-switcher', 'Team', null, '', [], '', 'Arctic Foxes 12U AA');
+    this.single = switcherMarkup('team-switcher', 'Team', null, '', [], '', 'Demo Team', 'team');
     this.multi = switcherMarkup('organization-switcher', 'Organization', 'organizationSelect', 'Selected organization', [
       { value: 'org-a', label: 'Arctic Foxes' },
       { value: 'org-b', label: 'Avonworth Hockey' }
@@ -245,7 +245,8 @@ test('context selectors render premium labeled select shells with dropdown affor
 
   assert.match(context.single, /team-switcher-label">Team<\/span>/);
   assert.match(context.single, /switcher-value/);
-  assert.match(context.single, /Arctic Foxes 12U AA/);
+  assert.match(context.single, /Demo Team/);
+  assert.match(context.single, /<svg class="switcher-icon" aria-hidden="true"><use href="#icon-team"><\/use><\/svg>/);
   assert.doesNotMatch(context.single, /<select/);
 
   assert.match(context.multi, /organization-switcher-label">Organization<\/span>/);
@@ -303,7 +304,7 @@ test('Stage 1.1 polish styles cover badges, switchers, and responsive reflow', (
 });
 
 test('changed Stage 1.1 assets are cache-busted', () => {
-  assert.match(index, /styles\.css\?v=beta-stage-1-2/);
-  assert.match(index, /app\.js\?v=beta-stage-1-2/);
+  assert.match(index, /styles\.css\?v=beta-stage-1-3/);
+  assert.match(index, /app\.js\?v=beta-stage-1-3/);
   assert.match(index, /season-context\.js\?v=beta-stage-1-1/);
 });

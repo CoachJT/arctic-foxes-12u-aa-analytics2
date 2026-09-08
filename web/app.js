@@ -56,9 +56,9 @@ const prototypeMode = !authCallbackPresent
   && location.hostname === 'localhost'
   && queryParams.get('prototype') === '1';
 
-const viewNames = { command: 'Home', team: 'Team Overview', schedule: 'Schedule', games: 'Game Center', players: 'Players', stats: 'Team Stats', film: 'Film Room', scouting: 'Scouting', reports: 'Coach Reports', development: 'Player Development', coaching: 'Coaching Tools', management: 'Team Management', support: 'Support', settings: 'Settings', admin: 'Admin' };
-const roleViews = { command: PERMISSIONS.DASHBOARD_VIEW, team: PERMISSIONS.PLAYERS_VIEW, schedule: PERMISSIONS.SCHEDULE_VIEW, games: PERMISSIONS.GAMES_VIEW, players: PERMISSIONS.PLAYERS_VIEW, stats: PERMISSIONS.STATS_VIEW, film: PERMISSIONS.GAMES_VIEW, scouting: PERMISSIONS.SCOUTING_VIEW, reports: PERMISSIONS.REPORTS_VIEW, development: PERMISSIONS.PLAYERS_VIEW, coaching: PERMISSIONS.REPORTS_VIEW, management: PERMISSIONS.PLAYERS_VIEW, support: PERMISSIONS.DASHBOARD_VIEW, settings: PERMISSIONS.DASHBOARD_VIEW, admin: PERMISSIONS.ADMIN_USERS };
-const viewFeatures = { command: 'dashboard', team: 'players', schedule: 'schedule', games: 'games', players: 'players', stats: 'stats', film: 'games', scouting: 'scouting', reports: 'reports', development: 'players', coaching: 'reports', management: 'admin', support: 'dashboard', settings: 'dashboard', admin: 'admin' };
+const viewNames = { command: 'Home', team: 'Team Overview', schedule: 'Schedule', games: 'Game Center', players: 'Players', stats: 'Team Stats', film: 'Film Room', scouting: 'Scouting', reports: 'Coach Reports', development: 'Player Development', coaching: 'Coaching Tools', management: 'Team Management', support: 'Support', settings: 'Settings', 'platform-admin': 'Platform Admin' };
+const roleViews = { command: PERMISSIONS.DASHBOARD_VIEW, team: PERMISSIONS.PLAYERS_VIEW, schedule: PERMISSIONS.SCHEDULE_VIEW, games: PERMISSIONS.GAMES_VIEW, players: PERMISSIONS.PLAYERS_VIEW, stats: PERMISSIONS.STATS_VIEW, film: PERMISSIONS.GAMES_VIEW, scouting: PERMISSIONS.SCOUTING_VIEW, reports: PERMISSIONS.REPORTS_VIEW, development: PERMISSIONS.PLAYERS_VIEW, coaching: PERMISSIONS.REPORTS_VIEW, management: PERMISSIONS.ADMIN_USERS, support: PERMISSIONS.DASHBOARD_VIEW, settings: PERMISSIONS.DASHBOARD_VIEW };
+const viewFeatures = { command: 'dashboard', team: 'players', schedule: 'schedule', games: 'games', players: 'players', stats: 'stats', film: 'games', scouting: 'scouting', reports: 'reports', development: 'players', coaching: 'reports', management: 'admin', support: 'dashboard', settings: 'dashboard' };
 
 function cardTitle(title, link = '') { return `<div class="card-title"><h2>${title}</h2>${link ? `<a href="#">${link} →</a>` : ''}</div>`; }
 function tenantName() { return currentWorkspace?.branding?.display_name || currentWorkspace?.team_name || seasonContext.branding?.display_name || authTeam?.teams?.name || 'Selected team'; }
@@ -246,9 +246,9 @@ function command() {
         <span class="metric-meta">Season Total</span>
       </article>
       <article class="metric-card">
-        <span class="metric-label">Roster Size</span>
-        <strong class="metric-value">${playersCount}</strong>
-        <span class="metric-meta">${playersCount ? (goaliesCount > 0 ? `${goaliesCount} Goalie${goaliesCount === 1 ? '' : 's'}` : 'Active Players') : 'No players synced'}</span>
+        <span class="metric-label">Active Roster</span>
+        <strong class="metric-value">${playersCount} Players</strong>
+        <span class="metric-meta">${playersCount && goaliesCount > 0 ? `${goaliesCount} Goalie${goaliesCount === 1 ? '' : 's'}` : playersCount ? 'Active players' : 'No players synced'}</span>
       </article>
     </section>
 
@@ -418,14 +418,18 @@ function coaching() {
 }
 
 function management() {
+  return teamManagement();
+}
+
+function platformAdmin() {
   return shell(
-    'Team Management',
-    'Staff assignments, team administration, and workspace entitlements surface.',
+    'Platform Admin',
+    'Platform-level access is separate from team coaching and management.',
     `<section class="card empty-view">
-      <div class="empty-icon">🛡️</div>
-      <h2>Team Management Surface</h2>
-      <p>Administrative management of staff roles, invites, and team entitlements surface.</p>
-      <span class="badge" style="margin-top:12px; background:var(--surface); color:var(--text-muted); border:1px solid var(--border);">Beta Surface &middot; Read Only</span>
+      <div class="empty-icon">Platform</div>
+      <h2>Platform administration is authorized</h2>
+      <p>This protected platform surface does not grant or expose team-management actions. Team access remains governed by the selected workspace.</p>
+      <span class="badge">Platform authorization required</span>
     </section>`
   );
 }
@@ -551,9 +555,9 @@ function bindSupportControls() {
   });
 }
 
-function admin() {
+function teamManagement() {
   const owner = can(PERMISSIONS.ADMIN_USERS, activeStaff);
-  return shell('Admin', 'Set up the people and access model for the team.', `${owner
+  return shell('Team Management', 'Set up the people and access model for the selected team.', `${owner
     ? `<section class="card">${cardTitle('Accounts & permissions', 'Database-enforced Owner controls')}
       <div class="callout admin-context-note"><strong>${escapeHtml(tenantName())}</strong> · ${escapeHtml(tenantSeasonName())}<br>Memberships and capabilities are loaded from the selected team context. Account changes remain limited to the approved invite and setup-link flows.</div>
       <div class="staff-grid"><article class="staff-card"><div class="staff-avatar">${activeStaff.initials}</div><div><h3>${escapeHtml(activeStaff.name)}</h3><p>${escapeHtml(activeStaff.role)}</p><span class="role-status">Authenticated team member</span></div></article></div>
@@ -618,8 +622,7 @@ async function submitStaffInvite(event) {
     action: 'invite',
     displayName: form.querySelector('#inviteName').value.trim(),
     email: form.querySelector('#inviteEmail').value.trim(),
-    roleId: form.querySelector('#inviteRole').value,
-    teamSlug: 'arctic-foxes-12u-aa'
+    roleId: form.querySelector('#inviteRole').value
   };
   const { data, error } = await supabaseClient.functions.invoke(INVITE_FUNCTION, { body });
   button.disabled = false;
@@ -675,7 +678,7 @@ function bindAdminControls() {
 function generic(view) { const titles = { games:['Game Center','One place for game-day details and post-game review.'], reports:['Coach Reports','Turn team observations into clear, shareable reports.'], settings:['Settings','Configure the team hub experience and future integrations.'] }; const [title, sub] = titles[view]; return shell(title, sub, `<section class="card empty-view"><div class="empty-icon">${view === 'settings' ? '⚙' : '✦'}</div><h2>Your next workspace layer</h2><p>This team workspace reserves the workflow for ${title.toLowerCase()}. This surface is ready to connect to synced analytics, schedules, reports, and player information.</p></section>`); }
 
 function switcherMarkup(kind, labelText, selectId, ariaLabel, options, selectedValue, singleValue, icon = '') {
-  const iconMarkup = icon ? `<span class="switcher-icon" aria-hidden="true">${icon}</span>` : '';
+  const iconMarkup = icon ? `<svg class="switcher-icon" aria-hidden="true"><use href="#icon-${icon}"></use></svg>` : '';
   if (singleValue != null) {
     return `${iconMarkup}<span class="${kind}-label">${labelText}</span><span class="switcher-value" title="${escapeHtml(singleValue)}">${escapeHtml(singleValue)}</span>`;
   }
@@ -687,11 +690,11 @@ function renderOrganizationSwitcher() {
   const organizations = organizationContextManager.context.organizations;
   if (!host || !organizations.length) return;
   if (organizations.length === 1) {
-    host.innerHTML = switcherMarkup('organization-switcher', 'Organization', null, '', [], '', organizations[0].name, '⬒');
+    host.innerHTML = switcherMarkup('organization-switcher', 'Organization', null, '', [], '', organizations[0].name, 'platform');
   } else {
     host.innerHTML = switcherMarkup('organization-switcher', 'Organization', 'organizationSelect', 'Selected organization',
       organizations.map(organization => ({ value: organization.id, label: organization.name })),
-      organizationContextManager.context.selectedOrganizationId, undefined, '⬒');
+      organizationContextManager.context.selectedOrganizationId, undefined, 'platform');
     host.querySelector('#organizationSelect').addEventListener('change', event => selectOrganization(event.target.value));
   }
   host.hidden = false;
@@ -702,11 +705,11 @@ function renderTeamSwitcher() {
   const teams = organizationContextManager.teamsForSelectedOrganization(workspaceAccessManager.context.workspaces);
   if (!host || !teams.length) return;
   if (teams.length === 1) {
-    host.innerHTML = switcherMarkup('team-switcher', 'Team', null, '', [], '', teamContext.selectedMembership?.teams?.name || 'Selected team', '🛡');
+    host.innerHTML = switcherMarkup('team-switcher', 'Team', null, '', [], '', teamContext.selectedMembership?.teams?.name || 'Selected team', 'team');
   } else {
     host.innerHTML = switcherMarkup('team-switcher', 'Team', 'teamSelect', 'Selected team',
       teams.map(workspace => ({ value: workspace.team_id, label: workspace.team_name || workspace.team_id })),
-      teamContext.selectedTeamId, undefined, '🛡');
+      teamContext.selectedTeamId, undefined, 'team');
     host.querySelector('#teamSelect').addEventListener('change', event => selectTeam(event.target.value));
   }
   host.hidden = false;
@@ -722,6 +725,14 @@ function renderTenantBranding() {
   const tenantSeasonLabel = document.querySelector('#tenantSeasonLabel');
   const tenantFooter = document.querySelector('#tenantFooter');
   const teamStatus = document.querySelector('#teamStatus');
+  const branding = currentWorkspace?.branding || {};
+  const rootStyle = document.documentElement?.style;
+  if (rootStyle) {
+    rootStyle.setProperty('--brand-primary', branding.primary_color || '#236c9e');
+    rootStyle.setProperty('--brand-secondary', branding.secondary_color || '#102338');
+    rootStyle.setProperty('--brand-accent', branding.accent_color || branding.primary_color || '#61d4f5');
+    rootStyle.setProperty('--org-surface', branding.secondary_color || '#0c1b2c');
+  }
   if (tenantMark) {
     if (logoUrl) {
       tenantMark.innerHTML = `<img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(displayName)}" class="brand-logo-img">`;
@@ -759,11 +770,11 @@ function renderSeasonSwitcher() {
   const host = document.querySelector('#seasonSwitcher');
   if (!host || !seasonContext.seasons.length) return;
   if (seasonContext.seasons.length === 1) {
-    host.innerHTML = switcherMarkup('season-switcher', 'Season', null, '', [], '', seasonContext.selectedSeason?.name || seasonContext.selectedSeason?.season_key || 'Selected season', '◷');
+    host.innerHTML = switcherMarkup('season-switcher', 'Season', null, '', [], '', seasonContext.selectedSeason?.name || seasonContext.selectedSeason?.season_key || 'Selected season', 'calendar');
   } else {
     host.innerHTML = switcherMarkup('season-switcher', 'Season', 'seasonSelect', 'Selected season',
       seasonContext.seasons.map(season => ({ value: season.id, label: season.name || season.season_key })),
-      seasonContext.selectedSeasonId, undefined, '◷');
+      seasonContext.selectedSeasonId, undefined, 'calendar');
     host.querySelector('#seasonSelect').addEventListener('change', event => selectSeason(event.target.value));
   }
   host.hidden = false;
@@ -852,6 +863,7 @@ function renderWorkspaceIndicators() {
 }
 
 function workspaceAuthorizedForView(view) {
+  if (view === 'platform-admin') return hasPlatformAdminAuthorization();
   return Boolean(currentWorkspace?.authorized)
     && can(roleViews[view], activeStaff)
     && entitlements.isFeatureEnabled(viewFeatures[view]);
@@ -861,8 +873,14 @@ const NAV_SECTIONS = [
   { id: 'overview', views: ['command', 'team', 'schedule', 'games'] },
   { id: 'analytics', views: ['players', 'stats', 'film', 'scouting', 'reports'] },
   { id: 'coaching', views: ['development', 'coaching', 'management'] },
-  { id: 'system', views: ['support', 'admin', 'settings'] }
+  { id: 'system', views: ['support', 'settings'] },
+  { id: 'platform', views: ['platform-admin'] }
 ];
+
+function hasPlatformAdminAuthorization() {
+  return Boolean(currentWorkspace?.authorized)
+    && authCapabilities.includes('platform.admin');
+}
 
 function navigationModel(authorizedForView, sections = NAV_SECTIONS) {
   return sections.map(section => {
@@ -1038,7 +1056,7 @@ function render(view = 'command') {
       ? shell('Team data unavailable', 'The authenticated workspace is available, but the live team data could not be read.', `<section class="card empty-view"><div class="empty-icon">!</div><h2>Unable to load synced team data</h2><p>${escapeHtml(phase1DataError)}</p><button class="btn primary" id="retryPhase1Data" type="button">Retry</button></section>`)
       : !phase1Data
         ? shell('Loading team data', 'Reading the live team roster, schedule, games, and stats…', '<section class="card empty-view"><div class="empty-icon">⌁</div><h2>Loading synced team data</h2><p>Please wait while the secure workspace reads your team data.</p></section>')
-        : view === 'command' ? command() : view === 'team' ? team() : view === 'schedule' ? schedule() : view === 'stats' ? stats() : view === 'players' ? players() : view === 'games' ? gameCenter() : view === 'film' ? film() : view === 'reports' ? reports() : view === 'development' ? development() : view === 'coaching' ? coaching() : view === 'management' ? management() : view === 'settings' ? settings() : view === 'support' ? support() : view === 'admin' ? admin() : generic(view);
+        : view === 'command' ? command() : view === 'team' ? team() : view === 'schedule' ? schedule() : view === 'stats' ? stats() : view === 'players' ? players() : view === 'games' ? gameCenter() : view === 'film' ? film() : view === 'reports' ? reports() : view === 'development' ? development() : view === 'coaching' ? coaching() : view === 'management' ? management() : view === 'settings' ? settings() : view === 'support' ? support() : view === 'platform-admin' ? platformAdmin() : generic(view);
   const planNotice = currentWorkspace?.authorized && !currentWorkspace?.plan_id
     ? notice('This workspace does not have an active plan entitlement yet, so plan-gated modules and data stay hidden. Contact your organization administrator to provision the workspace plan.')
     : '';
@@ -1053,7 +1071,7 @@ function render(view = 'command') {
   if (seasonPill) seasonPill.firstChild.textContent = tenantSeasonName();
   document.querySelector('#retryPhase1Data')?.addEventListener('click', () => loadPhase1Data(authTeam.team_id));
   document.querySelector('#retryPhase2AData')?.addEventListener('click', () => loadPhase2AData(authTeam.team_id));
-  if (view === 'admin') bindAdminControls();
+  if (view === 'management') bindAdminControls();
   if (view === 'players') bindRosterControls();
   if (view === 'support') bindSupportControls();
   syncNavigation(view);
