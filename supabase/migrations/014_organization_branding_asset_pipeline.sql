@@ -46,6 +46,22 @@
 --     finalize failed -- narrowly scoped to the caller's own still-'pending'
 --     row, never touches team_branding/settings, and returns only the exact
 --     bucket/object path the caller is authorized to clean up
+--   * finalize/delete/abort each `select ... for update` the target asset
+--     row before branching on its current status, closing the
+--     check-then-act race window between two concurrent RPC calls racing
+--     against the same asset id (e.g. finalize and abort called back to
+--     back for the same still-pending upload): the second caller's SELECT
+--     blocks until the first transaction commits or rolls back, then
+--     re-evaluates the WHERE status = '...' predicate against the
+--     now-committed row, so it correctly reports "not found" instead of
+--     unconditionally overwriting a status the other transaction already
+--     moved past
+--   * the dedicated Storage delete policy authorizes cleanup for either
+--     terminal state that carries metadata.state = 'cleanup_eligible':
+--     status = 'deleted' (via delete_organization_branding_asset) and
+--     status = 'failed' (via abort_organization_branding_asset) -- so the
+--     browser helper's post-abort storage.remove() call is actually
+--     authorized instead of always being denied
 
 -- ---------------------------------------------------------------------------
 -- 1. Bucket provisioning: fail closed, never silently reconcile.
@@ -221,7 +237,15 @@ grant execute on function public.can_manage_organization_branding(uuid, uuid) to
 --    insert policy additionally keeps the pending-status and uploaded_by
 --    checks, since the storage.upload() call is expected to come from the
 --    same authenticated session that called prepare_organization_branding_
---    asset() and was assigned as uploaded_by at that time.
+--    asset() and was assigned as uploaded_by at that time. The delete policy
+--    authorizes removal for BOTH cleanup outcomes that mark
+--    metadata.state = 'cleanup_eligible': a soft-deleted asset
+--    (status = 'deleted', via delete_organization_branding_asset) and an
+--    aborted never-finalized upload (status = 'failed', via
+--    abort_organization_branding_asset) -- otherwise the browser helper's
+--    post-abort storage.remove() call would always be denied by this same
+--    policy, leaving every aborted upload's blob orphaned and still
+--    (transiently) reachable.
 -- ---------------------------------------------------------------------------
 create policy organization_branding_objects_insert
 on storage.objects for insert to authenticated
@@ -247,7 +271,7 @@ using (
     where asset.bucket_name = bucket_id
       and asset.object_path = name
       and asset.asset_type = 'branding'
-      and asset.status = 'deleted'
+      and asset.status in ('deleted', 'failed')
       and asset.metadata->>'state' = 'cleanup_eligible'
       and public.can_manage_organization_branding(asset.organization_id, asset.team_id)
   )
@@ -550,7 +574,8 @@ begin
   where id = target_asset_id
     and bucket_name = 'organization-branding'
     and asset_type = 'branding'
-    and status = 'pending';
+    and status = 'pending'
+  for update;
 
   if not found then
     raise exception 'A pending branding upload was not found for this asset.';
@@ -690,7 +715,8 @@ begin
     and team_id = target_team_id
     and asset_type = 'branding'
     and bucket_name = 'organization-branding'
-    and status <> 'deleted';
+    and status <> 'deleted'
+  for update;
 
   if not found then
     raise exception 'Branding asset was not found for the requested workspace.';
@@ -772,7 +798,8 @@ begin
   where id = target_asset_id
     and bucket_name = 'organization-branding'
     and asset_type = 'branding'
-    and status = 'pending';
+    and status = 'pending'
+  for update;
 
   if not found then
     raise exception 'A pending branding upload was not found for this asset.';
