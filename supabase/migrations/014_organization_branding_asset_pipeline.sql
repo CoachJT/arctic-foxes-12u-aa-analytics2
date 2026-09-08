@@ -41,6 +41,11 @@
 --     uploaded / failed / deleted contract -- "superseded" and
 --     "cleanup_eligible" are metadata-only markers, never fabricated status
 --     values)
+--   * abort_organization_branding_asset() lets the browser helper safely
+--     cancel a single newly prepared asset when upload succeeded but
+--     finalize failed -- narrowly scoped to the caller's own still-'pending'
+--     row, never touches team_branding/settings, and returns only the exact
+--     bucket/object path the caller is authorized to clean up
 
 -- ---------------------------------------------------------------------------
 -- 1. Bucket provisioning: fail closed, never silently reconcile.
@@ -721,3 +726,77 @@ revoke all on function public.delete_organization_branding_asset(uuid, uuid, uui
 grant execute on function public.prepare_organization_branding_asset(uuid, uuid, text, text, bigint) to authenticated;
 grant execute on function public.finalize_organization_branding_asset(uuid) to authenticated;
 grant execute on function public.delete_organization_branding_asset(uuid, uuid, uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 10. Abort: safely cancel a single newly prepared asset after a successful
+--    upload but a failed finalize (the storage object may exist even though
+--    the media_assets row never left 'pending'). Narrowly scoped: it never
+--    touches team_branding/settings (a 'pending' asset was never made
+--    "current" by finalize, so there is nothing to clear, unlike delete),
+--    never deletes storage.objects itself, and returns only the exact
+--    bucket/object path the caller is authorized to remove -- the caller
+--    (browser helper, below) performs that removal itself, keeping this
+--    RPC's blast radius limited to the single row it was asked about.
+--
+--    Requires authentication (explicit auth.uid() is null check, rather than
+--    relying on a NULL-comparison short-circuit that could silently pass a
+--    false condition), requires the caller to be the original uploader, and
+--    re-checks can_manage_organization_branding() -- identical authorization
+--    posture to prepare/finalize/delete and the dedicated Storage policies.
+--    Operates only on a 'pending' row; a caller cannot abort an already
+--    'uploaded'/'failed'/'deleted' asset through this function. The status
+--    transition (pending -> failed, metadata.state = 'cleanup_eligible')
+--    stays entirely within the existing status check constraint.
+-- ---------------------------------------------------------------------------
+create or replace function public.abort_organization_branding_asset(
+  target_asset_id uuid
+)
+returns table (bucket_name text, object_path text)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  asset record;
+begin
+  if target_asset_id is null then
+    raise exception 'A target asset id is required.';
+  end if;
+
+  if (select auth.uid()) is null then
+    raise exception 'Authentication is required to abort a branding asset.';
+  end if;
+
+  select * into asset
+  from public.media_assets
+  where id = target_asset_id
+    and bucket_name = 'organization-branding'
+    and asset_type = 'branding'
+    and status = 'pending';
+
+  if not found then
+    raise exception 'A pending branding upload was not found for this asset.';
+  end if;
+
+  if asset.uploaded_by <> (select auth.uid()) then
+    raise exception 'Only the uploader may abort this branding asset.';
+  end if;
+
+  -- (2) Exact canonical authorization, identical to prepare/finalize/delete
+  -- and to the dedicated Storage policies.
+  if not public.can_manage_organization_branding(asset.organization_id, asset.team_id) then
+    raise exception 'Insufficient authority to abort this branding asset.';
+  end if;
+
+  update public.media_assets
+  set status = 'failed',
+      updated_at = now(),
+      metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object('state', 'cleanup_eligible')
+  where id = target_asset_id;
+
+  return query select asset.bucket_name, asset.object_path;
+end;
+$$;
+
+revoke all on function public.abort_organization_branding_asset(uuid) from public, anon;
+grant execute on function public.abort_organization_branding_asset(uuid) to authenticated;

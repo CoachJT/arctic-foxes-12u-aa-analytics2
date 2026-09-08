@@ -42,16 +42,16 @@ test('a single canonical authorization predicate is used verbatim by the RPCs an
   assert.match(migration, /public\.is_platform_admin\(\)\s*\n\s*or public\.has_org_role\(target_organization_id, 'org_owner'\)\s*\n\s*or public\.has_org_role\(target_organization_id, 'org_admin'\)\s*\n\s*or public\.is_team_owner\(target_team_id\)/);
 
   const usages = migration.match(/can_manage_organization_branding\(/g) || [];
-  // definition + grant + revoke + prepare + finalize + delete + 2 storage
-  // policies, some of which reference the function more than once (e.g. a
-  // signature in a comment/header plus the call site) = 10.
-  assert.equal(usages.length, 10, `expected can_manage_organization_branding referenced by definition, grants, prepare/finalize/delete, and both storage policies; found ${usages.length} occurrences`);
+  // definition + grant + revoke + prepare + finalize + delete + abort +
+  // 2 storage policies + 2 header/doc-comment mentions = 12.
+  assert.equal(usages.length, 12, `expected can_manage_organization_branding referenced by definition, grants, prepare/finalize/delete/abort, and both storage policies; found ${usages.length} occurrences`);
 
   assert.match(migration, /create policy organization_branding_objects_insert[\s\S]*?can_manage_organization_branding\(asset\.organization_id, asset\.team_id\)/);
   assert.match(migration, /create policy organization_branding_objects_delete[\s\S]*?can_manage_organization_branding\(asset\.organization_id, asset\.team_id\)/);
   assert.match(migration, /create or replace function public\.prepare_organization_branding_asset[\s\S]*?can_manage_organization_branding\(target_organization_id, target_team_id\)/);
   assert.match(migration, /create or replace function public\.finalize_organization_branding_asset[\s\S]*?can_manage_organization_branding\(asset\.organization_id, asset\.team_id\)/);
   assert.match(migration, /create or replace function public\.delete_organization_branding_asset[\s\S]*?can_manage_organization_branding\(target_organization_id, target_team_id\)/);
+  assert.match(migration, /create or replace function public\.abort_organization_branding_asset[\s\S]*?can_manage_organization_branding\(asset\.organization_id, asset\.team_id\)/);
 });
 
 test('the new bucket gets dedicated least-privilege insert/delete policies and no update policy', () => {
@@ -212,4 +212,66 @@ test('behavior contract: org owner/admin allow, team owner only own team, platfo
   for (const pattern of authzSites) {
     assert.match(migration, pattern);
   }
+});
+
+function abortFunctionBody() {
+  const match = migration.match(/create or replace function public\.abort_organization_branding_asset[\s\S]*?\n\$\$;/);
+  assert.ok(match, 'expected to find abort_organization_branding_asset function body');
+  return match[0];
+}
+
+test('abort_organization_branding_asset exists, requires authentication explicitly, and denies anonymous callers', () => {
+  const abortBody = abortFunctionBody();
+  assert.match(abortBody, /create or replace function public\.abort_organization_branding_asset\(\s*\n\s*target_asset_id uuid\s*\n\)/);
+  assert.match(abortBody, /returns table \(bucket_name text, object_path text\)/);
+  // Anonymous denial cannot rely on a NULL comparison silently evaluating
+  // false in an `if` -- there is an explicit null check that raises.
+  assert.match(abortBody, /if \(select auth\.uid\(\)\) is null then\s*\n\s*raise exception 'Authentication is required to abort a branding asset\.';/);
+  assert.match(migration, /revoke all on function public\.abort_organization_branding_asset\(uuid\) from public, anon;/);
+  assert.match(migration, /grant execute on function public\.abort_organization_branding_asset\(uuid\) to authenticated;/);
+});
+
+test('abort_organization_branding_asset authorizes only the caller-owned pending asset (cross-tenant denied)', () => {
+  const abortBody = abortFunctionBody();
+  assert.match(abortBody, /and status = 'pending'/);
+  assert.match(abortBody, /if asset\.uploaded_by <> \(select auth\.uid\(\)\) then\s*\n\s*raise exception 'Only the uploader may abort this branding asset\.';/);
+  // The exact canonical predicate -- identical to prepare/finalize/delete --
+  // is re-checked here too, so a cross-tenant admin of a DIFFERENT
+  // organization/team can never abort this asset even if they somehow guess
+  // its id.
+  assert.match(abortBody, /if not public\.can_manage_organization_branding\(asset\.organization_id, asset\.team_id\) then/);
+});
+
+test('abort_organization_branding_asset never touches team_branding/settings and never fabricates a status value', () => {
+  const abortBody = abortFunctionBody();
+  assert.doesNotMatch(abortBody, /team_branding/);
+  assert.doesNotMatch(abortBody, /apply_organization_branding_setting|clear_organization_branding_setting_if_matches/);
+  assert.match(abortBody, /set status = 'failed',/);
+  assert.match(abortBody, /jsonb_build_object\('state', 'cleanup_eligible'\)/);
+  assert.doesNotMatch(abortBody, /status = 'aborted'|status = 'cancelled'/);
+  // Never deletes storage.objects itself -- only returns the path for the
+  // caller to remove.
+  assert.doesNotMatch(abortBody, /delete from storage\.objects/i);
+  assert.match(abortBody, /return query select asset\.bucket_name, asset\.object_path;/);
+});
+
+test('abort_organization_branding_asset requires only target_asset_id and cannot be called on a non-pending asset', () => {
+  assert.match(migration, /public\.abort_organization_branding_asset\(\s*\n\s*target_asset_id uuid\s*\n\)/);
+  const abortBody = abortFunctionBody();
+  assert.match(abortBody, /if target_asset_id is null then\s*\n\s*raise exception 'A target asset id is required\.';/);
+  assert.match(abortBody, /and bucket_name = 'organization-branding'\s*\n\s*and asset_type = 'branding'\s*\n\s*and status = 'pending';/);
+});
+
+test('a previously live branding pointer is unaffected by aborting a still-pending asset (only finalize ever sets the pointer)', () => {
+  const abortBody = abortFunctionBody();
+  // The pointer-writing helpers are only ever invoked from finalize/delete;
+  // abort has no reference to them at all, so a pending asset that never
+  // became "current" cannot regress an existing live pointer when aborted.
+  assert.doesNotMatch(abortBody, /apply_organization_branding_setting|clear_organization_branding_setting_if_matches|current_organization_branding_url/);
+  const pointerWriterCallers = migration.match(/perform public\.apply_organization_branding_setting\(/g) || [];
+  // Exactly two call sites: finalize (sets the newest asset as current) and
+  // clear_organization_branding_setting_if_matches (clears via null, used
+  // only by delete when the deleted asset's own URL matches the live
+  // pointer). abort has neither.
+  assert.equal(pointerWriterCallers.length, 2, 'apply_organization_branding_setting must only ever be invoked from finalize and the guarded clear helper');
 });
