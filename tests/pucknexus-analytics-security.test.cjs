@@ -20,7 +20,8 @@ test('analytics migration is uniquely numbered after the authoritative migration
   const numbers = fs.readdirSync('supabase/migrations')
     .map(name => Number(name.match(/^(\d+)_/)?.[1]))
     .filter(Number.isFinite);
-  assert.equal(Math.max(...numbers), 19);
+  assert.ok(numbers.includes(19));
+  assert.equal(new Set(numbers).size, numbers.length);
   assert.ok(fs.existsSync(migrationPath));
 });
 
