@@ -12,6 +12,9 @@ test('web invite flow keeps service-role access server-side', () => {
   assert.match(functionSource, /SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(functionSource, /auth\.admin\.inviteUserByEmail/);
   assert.match(functionSource, /admin\.users/);
+  assert.match(functionSource, /requiredText\(payload\?\.teamId, 'Team', 80\)/);
+  assert.match(functionSource, /\.eq\('id', teamId\)/);
+  assert.doesNotMatch(functionSource, /\.eq\('slug', 'arctic-foxes-12u-aa'\)/);
 });
 
 test('web invite flow only exposes assistant roles and creates invited membership', () => {
@@ -49,8 +52,17 @@ test('invited members can receive a setup link without changing membership data'
   assert.match(app, /Resend setup link/);
 });
 
+test('web invite flow sends the selected authorized team id for list, invite, and resend actions', () => {
+  assert.match(app, /function currentInviteTeamId\(\)/);
+  assert.match(app, /!currentWorkspace\?\.authorized \|\| !currentWorkspace\?\.team_id/);
+  assert.match(app, /body: \{ action: 'list', teamId: currentInviteTeamId\(\) \}/);
+  assert.match(app, /action: 'invite',\s*teamId: currentInviteTeamId\(\)/);
+  assert.match(app, /body: \{ action: 'resend_setup', teamId: currentInviteTeamId\(\), userId \}/);
+  assert.doesNotMatch(app, /teamSlug:\s*'arctic-foxes-12u-aa'/);
+});
+
 test('admin UI is cache-busted to the invite-flow build', () => {
-  assert.match(index, /app\.js\?v=multi-team-1/);
+  assert.match(index, /app\.js\?v=[\w-]+/);
   assert.match(app, /id="inviteForm"/);
   assert.match(app, /id="inviteList"/);
 });

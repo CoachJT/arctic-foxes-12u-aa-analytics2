@@ -51,3 +51,27 @@ npm test
 ```
 
 See `AI_CONTEXT.md`, `ROADMAP.md`, and `NEXT_TASKS.md` for the handoff and evolution plan.
+# Organization branding asset settings
+
+The organization dashboard uses the existing structured branding colors and `logo_url`. Optional rich assets live in the existing `team_branding.settings` JSON object; no schema change is required:
+
+```json
+{
+  "hero_image_url": "https://cdn.example.org/hero.jpg",
+  "welcome_image_url": "https://cdn.example.org/welcome.jpg",
+  "secondary_image_url": "https://cdn.example.org/secondary.jpg",
+  "wordmark_url": "https://cdn.example.org/wordmark.svg",
+  "watermark_url": "https://cdn.example.org/watermark.svg",
+  "tagline": "Organization tagline",
+  "motto": "Organization motto",
+  "feature_images": {
+    "film": "https://cdn.example.org/film.jpg",
+    "scouting": "https://cdn.example.org/scouting.jpg",
+    "reports": "https://cdn.example.org/reports.jpg",
+    "development": "https://cdn.example.org/development.jpg",
+    "coaching_tools": "https://cdn.example.org/coaching.jpg"
+  }
+}
+```
+
+Image values accept trimmed HTTP(S) URLs only. Missing, malformed, or unsafe values (`javascript:`, `data:`, `file:`, and `blob:`) resolve to `null`; a failed remote `<img>` is hidden and surrounding typography, crest/monogram, and premium generic graphic fallback remain available. Branding photography must not contain baked-in UI text, buttons, or dashboard content because PuckNexus renders those elements in the accessible UI layer. Production never infers organization imagery or uses fixture assets.

@@ -51,12 +51,14 @@ async function getOwnerContext(request: Request) {
   const { data: userData, error: userError } = await callerClient.auth.getUser();
   if (userError || !userData.user) throw new Error('Authentication is required.');
 
+  const payload = await request.json();
+  const teamId = requiredText(payload?.teamId, 'Team', 80);
   const { data: team, error: teamError } = await callerClient
     .from('teams')
     .select('id,name,slug')
-    .eq('slug', 'arctic-foxes-12u-aa')
+    .eq('id', teamId)
     .single();
-  if (teamError || !team) throw new Error('The Arctic Foxes team could not be found.');
+  if (teamError || !team) throw new Error('The selected team could not be found.');
 
   const { data: hasCapability, error: capabilityError } = await callerClient.rpc(
     'has_team_capability',
@@ -70,7 +72,8 @@ async function getOwnerContext(request: Request) {
     publicClient: createClient(supabaseUrl, anonKey),
     adminClient: createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false }
-    })
+    }),
+    payload
   };
 }
 
@@ -222,7 +225,7 @@ Deno.serve(async request => {
 
   try {
     const context = await getOwnerContext(request);
-    const payload = await request.json();
+    const payload = context.payload;
     if (payload?.action === 'list') return json({ invites: await listInvites(context) });
     if (payload?.action === 'invite') return json(await inviteStaff(context, payload));
     if (payload?.action === 'resend_setup') return json(await resendSetupLink(context, payload));
