@@ -21,7 +21,7 @@ function extractFunction(source, name) {
 
 const EMPTY_RECORD = { games_played: 0, wins: 0, losses: 0, ties: 0, goals_for: 0, goals_against: 0 };
 
-function renderStats(phase1Data, now = '2026-09-08T12:00:00') {
+function renderStats(phase1Data, now = '2026-09-08T12:00:00', sort = {}) {
   const source = `
     const PLATFORM = { name: 'PuckNexus' };
     let currentWorkspace = { branding: { display_name: 'Arctic Foxes' }, team_name: '12U AA', season_name: '2026-27' };
@@ -29,8 +29,8 @@ function renderStats(phase1Data, now = '2026-09-08T12:00:00') {
     let activeStaff = { role: 'Head Coach' };
     let phase1Data = ${JSON.stringify({ roster: [], games: [], playerStats: [], teamStats: [], seasonRecord: EMPTY_RECORD, ...phase1Data })};
     const seasonContext = { branding: { display_name: 'Arctic Foxes' }, selectedSeason: { name: '2026-27' } };
-    let statsSortKey = 'pts';
-    let statsSortDir = 'desc';
+    let statsSortKey = ${JSON.stringify(sort.key || 'pts')};
+    let statsSortDir = ${JSON.stringify(sort.dir || 'desc')};
     ${extractFunction(app, 'tenantName')}
     ${extractFunction(app, 'tenantSeasonName')}
     ${extractFunction(app, 'shell')}
@@ -45,6 +45,7 @@ function renderStats(phase1Data, now = '2026-09-08T12:00:00') {
     ${extractFunction(app, 'statsPercent')}
     ${extractFunction(app, 'statsFormat')}
     ${extractFunction(app, 'statsCompare')}
+    ${extractFunction(app, 'statsDescendingCompare')}
     ${extractFunction(app, 'statsRankedRows')}
     ${extractFunction(app, 'statsRows')}
     ${extractFunction(app, 'goalieRows')}
@@ -56,6 +57,20 @@ function renderStats(phase1Data, now = '2026-09-08T12:00:00') {
   const rendered = { Date: class FixedDate extends Date { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return new Date(now).getTime(); } } };
   vm.runInNewContext(source, rendered);
   return rendered;
+}
+
+function skaterTableSection(renderedStats) {
+  const match = renderedStats.match(/<section class="card skater-table-shell">([\s\S]*?)<\/section>/);
+  assert.ok(match, 'expected skater table section');
+  return match[1];
+}
+
+function skaterTableNames(renderedStats) {
+  return [...skaterTableSection(renderedStats).matchAll(/<tr><td class="team-number">#[^<]*<\/td><td><div class="player-cell"><span class="player-photo">[^<]*<\/span><strong>([^<]+)<\/strong>/g)].map(match => match[1]);
+}
+
+function skaterTableJerseys(renderedStats) {
+  return [...skaterTableSection(renderedStats).matchAll(/<tr><td class="team-number">#([^<]*)<\/td><td><div class="player-cell">/g)].map(match => match[1]);
 }
 
 test('Stats Dashboard preserves tracked zeroes and keeps unavailable categories out of leaderboards', () => {
@@ -155,4 +170,33 @@ test('Stats Dashboard season leaders indicate ties instead of implying a sole le
   assert.match(pointsLeader[0], /Sniper Sam/);
   assert.match(pointsLeader[0], /Tied leader/);
   assert.doesNotMatch(rendered.renderedStats, /NaN|Infinity/);
+});
+
+test('Stats Dashboard skater table sorts names, jerseys, and numeric stats in the displayed direction', () => {
+  const phase1Data = {
+    roster: [
+      { source_player_id: 's1', jersey_number: '12', name: 'Bravo Ben', position: 'F', status: 'active' },
+      { source_player_id: 's2', jersey_number: '3', name: 'Alpha Amy', position: 'D', status: 'active' },
+      { source_player_id: 's3', jersey_number: '27', name: 'Charlie Cam', position: 'F', status: 'active' }
+    ],
+    playerStats: [
+      { source_player_id: 's1', gp: 1, goals: 2, assists: 0 },
+      { source_player_id: 's2', gp: 1, goals: 5, assists: 0 },
+      { source_player_id: 's3', gp: 1, goals: 1, assists: 0 }
+    ]
+  };
+
+  const nameAsc = renderStats(phase1Data, '2026-09-08T12:00:00', { key: 'name', dir: 'asc' });
+  const nameDesc = renderStats(phase1Data, '2026-09-08T12:00:00', { key: 'name', dir: 'desc' });
+  const jerseyAsc = renderStats(phase1Data, '2026-09-08T12:00:00', { key: 'jersey_number', dir: 'asc' });
+  const jerseyDesc = renderStats(phase1Data, '2026-09-08T12:00:00', { key: 'jersey_number', dir: 'desc' });
+  const goalsAsc = renderStats(phase1Data, '2026-09-08T12:00:00', { key: 'g', dir: 'asc' });
+  const goalsDesc = renderStats(phase1Data, '2026-09-08T12:00:00', { key: 'g', dir: 'desc' });
+
+  assert.deepEqual(skaterTableNames(nameAsc.renderedStats), ['Alpha Amy', 'Bravo Ben', 'Charlie Cam']);
+  assert.deepEqual(skaterTableNames(nameDesc.renderedStats), ['Charlie Cam', 'Bravo Ben', 'Alpha Amy']);
+  assert.deepEqual(skaterTableJerseys(jerseyAsc.renderedStats), ['3', '12', '27']);
+  assert.deepEqual(skaterTableJerseys(jerseyDesc.renderedStats), ['27', '12', '3']);
+  assert.deepEqual(skaterTableNames(goalsAsc.renderedStats), ['Charlie Cam', 'Bravo Ben', 'Alpha Amy']);
+  assert.deepEqual(skaterTableNames(goalsDesc.renderedStats), ['Alpha Amy', 'Bravo Ben', 'Charlie Cam']);
 });

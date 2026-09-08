@@ -447,13 +447,14 @@ function statsCompare(left, right) {
   if (right === null || right === undefined) return -1;
   const leftNumber = Number(left);
   const rightNumber = Number(right);
-  if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) return rightNumber - leftNumber;
+  if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) return leftNumber - rightNumber;
   return String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: 'base' });
 }
+function statsDescendingCompare(left, right) { return statsCompare(right, left); }
 function statsRankedRows(rows, key) {
-  return rows.slice().sort((left, right) => statsCompare(left[key], right[key])
-    || statsCompare(left.pts, right.pts)
-    || statsCompare(left.g, right.g)
+  return rows.slice().sort((left, right) => statsDescendingCompare(left[key], right[key])
+    || statsDescendingCompare(left.pts, right.pts)
+    || statsDescendingCompare(left.g, right.g)
     || String(left.name || '').localeCompare(String(right.name || ''), undefined, { sensitivity: 'base' })
     || String(left.jersey_number || '').localeCompare(String(right.jersey_number || ''), undefined, { numeric: true, sensitivity: 'base' }));
 }
@@ -516,8 +517,8 @@ function goalieRows() {
     const savePct = row.saves !== null && shotsAgainst !== null && shotsAgainst > 0 ? row.saves / shotsAgainst : null;
     const gaa = row.goalsAgainst !== null && row.minutes !== null && row.minutes > 0 ? row.goalsAgainst / (row.minutes / 60) : null;
     return { ...row, shotsAgainst, savePct, gaa };
-  }).sort((left, right) => statsCompare(left.savePct, right.savePct)
-    || statsCompare(left.saves, right.saves)
+  }).sort((left, right) => statsDescendingCompare(left.savePct, right.savePct)
+    || statsDescendingCompare(left.saves, right.saves)
     || String(left.name || '').localeCompare(String(right.name || ''), undefined, { sensitivity: 'base' }));
 }
 function stats() {
@@ -552,7 +553,7 @@ function stats() {
     const result = statsCompare(left[statsSortKey], right[statsSortKey])
       || String(left.name || '').localeCompare(String(right.name || ''), undefined, { sensitivity: 'base' })
       || String(left.jersey_number || '').localeCompare(String(right.jersey_number || ''), undefined, { numeric: true, sensitivity: 'base' });
-    return statsSortDir === 'desc' ? result : -result;
+    return statsSortDir === 'asc' ? result : -result;
   });
   const skaterTable = sorted.map(row => `<tr><td class="team-number">#${escapeHtml(row.jersey_number || '#')}</td><td><div class="player-cell"><span class="player-photo">${escapeHtml(String(row.jersey_number || '#').slice(0, 2))}</span><strong>${escapeHtml(row.name || 'Player')}</strong></div></td><td>${escapeHtml(row.position || 'F')}</td><td>${row.gp}</td><td>${statsFormat(row.g, 0)}</td><td>${statsFormat(row.a, 0)}</td><td>${statsFormat(row.pts, 0)}</td><td>${statsFormat(row.sog, 0)}</td><td>${statsFormat(row.shootingPct)}${row.shootingPct === null ? '' : '%'}</td><td>${statsFormat(row.pim, 0)}</td><td>${statsFormat(row.pm, 0)}</td><td>${statsFormat(row.blocks, 0)}</td><td>${statsFormat(row.faceoffAttempts, 0)}</td><td>${statsFormat(row.fow, 0)}</td><td>${statsFormat(row.faceoffPct)}${row.faceoffPct === null ? '' : '%'}</td><td>${statsFormat(row.ppg, 0)}</td><td>${statsFormat(row.ppp, 0)}</td><td>${statsFormat(row.shg, 0)}</td><td>${statsFormat(row.shp, 0)}</td></tr>`).join('') || '<tr><td colspan="19" class="empty-state">No skater statistics are available.</td></tr>';
   const goalieTable = goalies.map(row => `<tr><td class="team-number">#${escapeHtml(row.jersey_number)}</td><td><div class="player-cell"><span class="player-photo">G</span><strong>${escapeHtml(row.name)}</strong></div></td><td>${row.gp}</td><td>${row.wins}</td><td>${row.losses}</td><td>${row.ties}</td><td>${statsFormat(row.shotsAgainst, 0)}</td><td>${statsFormat(row.saves, 0)}</td><td>${statsFormat(row.goalsAgainst, 0)}</td><td>${row.savePct === null ? '—' : `${statsFormat(row.savePct * 100)}%`}</td><td>${row.gaa === null ? '—' : statsFormat(row.gaa)}</td></tr>`).join('') || '<tr><td colspan="11" class="empty-state">No legitimate goalie data exists.</td></tr>';
