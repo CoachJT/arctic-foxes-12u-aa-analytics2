@@ -602,13 +602,22 @@ function renderInviteList(invites = []) {
 async function loadInviteStatus() {
   const list = document.querySelector('#inviteList');
   if (list) list.innerHTML = '<span class="permission-lock">Loading invite status…</span>';
-  const { data, error } = await supabaseClient.functions.invoke(INVITE_FUNCTION, { body: { action: 'list' } });
+  const { data, error } = await supabaseClient.functions.invoke(INVITE_FUNCTION, {
+    body: { action: 'list', teamId: currentInviteTeamId() }
+  });
   if (error) {
     console.warn('Could not load invite status:', error);
     if (list) list.innerHTML = `<span class="auth-error">${escapeHtml(error.message || 'Invite status is unavailable.')}</span>`;
     return;
   }
   renderInviteList(data?.invites || []);
+}
+
+function currentInviteTeamId() {
+  if (!currentWorkspace?.authorized || !currentWorkspace?.team_id) {
+    throw new Error('An authorized team workspace is required.');
+  }
+  return currentWorkspace.team_id;
 }
 
 async function submitStaffInvite(event) {
@@ -620,6 +629,7 @@ async function submitStaffInvite(event) {
   inviteStatusMessage('Verifying Owner permissions and creating the pending membership…');
   const body = {
     action: 'invite',
+    teamId: currentInviteTeamId(),
     displayName: form.querySelector('#inviteName').value.trim(),
     email: form.querySelector('#inviteEmail').value.trim(),
     roleId: form.querySelector('#inviteRole').value
@@ -645,7 +655,7 @@ async function resendSetupLink(event) {
   button.textContent = 'Sending…';
   inviteStatusMessage('Verifying the invited membership and sending a new setup link…');
   const { data, error } = await supabaseClient.functions.invoke(INVITE_FUNCTION, {
-    body: { action: 'resend_setup', userId }
+    body: { action: 'resend_setup', teamId: currentInviteTeamId(), userId }
   });
   if (error) {
     console.warn('Setup link resend rejected:', error);

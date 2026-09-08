@@ -262,6 +262,10 @@ test('legacy invite-staff remains compatible and assistant-only', () => {
   assert.match(legacyInvite, /payload\?\.action === 'invite'/);
   assert.match(legacyInvite, /payload\?\.action === 'resend_setup'/);
   assert.match(legacyInvite, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(legacyInvite, /requiredText\(payload\?\.teamId, 'Team', 80\)/);
+  assert.match(legacyInvite, /\.eq\('id', teamId\)/);
+  assert.match(legacyInvite, /target_team_id: team\.id, requested_capability: 'admin\.users'/);
+  assert.doesNotMatch(legacyInvite, /\.eq\('slug', 'arctic-foxes-12u-aa'\)/);
 });
 
 test('Stage 1A hardening and final-owner protections remain asserted', () => {
