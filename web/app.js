@@ -66,8 +66,42 @@ function tenantSeasonName() { return currentWorkspace?.season_name || seasonCont
 function shell(title, subtitle, body) { return `<div class="page-head"><div><div class="eyebrow">${PLATFORM.name} · ${escapeHtml(tenantName())} workspace</div><h1>${title}</h1><p>${subtitle}</p></div></div>${body}`; }
 function notice(text) { return `<div class="callout prototype-note">${text}</div>`; }
 function phase1Number(value) { return Number.isFinite(Number(value)) ? Number(value) : 0; }
-function phase1Date(value) { return value ? new Date(`${value}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' }) : 'Date unavailable'; }
+function phase1Date(value) { return value ? new Date(`${value}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' }) : 'Date unavailable'; }
 function phase1Record() { return phase1Data?.seasonRecord || { games_played: 0, wins: 0, losses: 0, ties: 0, goals_for: 0, goals_against: 0 }; }
+function phase1DateKey(value = new Date()) { return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`; }
+function phase1TimeValue(value) {
+  if (!/^\d{2}:\d{2}$/.test(value || '')) return null;
+  const [hours, minutes] = value.split(':').map(Number);
+  return hours > 23 || minutes > 59 ? null : (hours * 60) + minutes;
+}
+function phase1ScheduleSort(a, b) {
+  return String(a?.date || '').localeCompare(String(b?.date || ''))
+    || String(a?.time || '99:99').localeCompare(String(b?.time || '99:99'));
+}
+function phase1NextScheduledGame(now = new Date()) {
+  const today = phase1DateKey(now);
+  const minutesNow = (now.getHours() * 60) + now.getMinutes();
+  return (phase1Data?.schedule || [])
+    .filter(game => {
+      const date = String(game?.date || '');
+      if (!date) return false;
+      if (date > today) return true;
+      if (date < today) return false;
+      const timeValue = phase1TimeValue(game?.time);
+      return timeValue == null || timeValue >= minutesNow;
+    })
+    .slice()
+    .sort(phase1ScheduleSort)[0] || null;
+}
+function phase1LatestCompletedGame(now = new Date()) {
+  const today = phase1DateKey(now);
+  const teamStats = new Map((phase1Data?.teamStats || []).map(row => [row.source_game_id, row]));
+  return (phase1Data?.games || [])
+    .map(game => ({ game, stats: teamStats.get(game.source_game_id) || null }))
+    .filter(({ game, stats }) => stats && String(game?.date || '') && String(game.date) <= today)
+    .slice()
+    .sort((a, b) => String(b.game?.date || '').localeCompare(String(a.game?.date || '')))[0] || null;
+}
 function playerStatTotals() {
   const totals = new Map();
   (phase1Data?.playerStats || []).forEach(row => {
@@ -100,9 +134,8 @@ function recent() {
 
 function command() {
   const record = phase1Record();
-  const sortedGames = (phase1Data?.schedule || []).slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
-  const nextGame = sortedGames[0];
-  const lastGame = sortedGames.slice(-1)[0];
+  const nextGame = phase1NextScheduledGame();
+  const latestCompleted = phase1LatestCompletedGame();
   const totalGames = record.games_played;
   const roster = phase1Data?.roster || [];
   const playersCount = roster.length;
@@ -157,7 +190,7 @@ function command() {
           <div style="margin-top:12px; padding:12px; background:var(--bg-card); border:1px solid var(--border); border-radius:8px;">
             <div style="font-size:12px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">Next Game</div>
             <div style="font-size:16px; font-weight:600; margin-top:4px;">vs ${escapeHtml(nextGame.opponent || 'Opponent')}</div>
-            <div style="font-size:13px; color:var(--text-muted); margin-top:2px;">${escapeHtml(nextGame.date || '')} ${nextGame.time ? '&middot; ' + escapeHtml(nextGame.time) : ''}</div>
+            <div style="font-size:13px; color:var(--text-muted); margin-top:2px;">${escapeHtml(phase1Date(nextGame.date))}${nextGame.time ? ` &middot; ${escapeHtml(nextGame.time)}` : ''}</div>
           </div>
         ` : `<p class="empty-text" style="padding:16px 0; color:var(--text-muted);">No upcoming games scheduled.</p>`}
         <div style="margin-top:16px;">
@@ -167,11 +200,11 @@ function command() {
 
       <section class="card">
         <h3>Recent Activity</h3>
-        ${lastGame ? `
+        ${latestCompleted ? `
           <div style="margin-top:12px; padding:12px; background:var(--bg-card); border:1px solid var(--border); border-radius:8px;">
             <div style="font-size:12px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">Latest Result</div>
-            <div style="font-size:16px; font-weight:600; margin-top:4px;">${escapeHtml(lastGame.opponent || 'Game')} (${escapeHtml(lastGame.result || lastGame.score || 'Final')})</div>
-            <div style="font-size:13px; color:var(--text-muted); margin-top:2px;">${escapeHtml(lastGame.date || '')}</div>
+            <div style="font-size:16px; font-weight:600; margin-top:4px;">${escapeHtml(latestCompleted.game.opponent || 'Game')} (${phase1Number(latestCompleted.stats.goals_for) > phase1Number(latestCompleted.stats.goals_against) ? 'W' : phase1Number(latestCompleted.stats.goals_for) < phase1Number(latestCompleted.stats.goals_against) ? 'L' : 'T'} ${phase1Number(latestCompleted.stats.goals_for)}–${phase1Number(latestCompleted.stats.goals_against)})</div>
+            <div style="font-size:13px; color:var(--text-muted); margin-top:2px;">${escapeHtml(phase1Date(latestCompleted.game.date))}</div>
           </div>
         ` : `<p class="empty-text" style="padding:16px 0; color:var(--text-muted);">No recent game results logged.</p>`}
         <div style="margin-top:16px;">
