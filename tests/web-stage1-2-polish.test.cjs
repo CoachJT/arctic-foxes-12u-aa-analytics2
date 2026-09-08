@@ -280,7 +280,7 @@ test('Stage 1.2 dashboard active roster count and goalie count remain unchanged'
     }
   });
 
-  assert.match(rendered, /Roster Size<\/span>\s*<strong class="metric-value">2<\/strong>/);
+  assert.match(rendered, /Active Roster<\/span>\s*<strong class="metric-value">2 Players<\/strong>/);
   assert.match(rendered, /1 Goalie<\/span>/);
   assert.doesNotMatch(rendered, />3<\/strong>\s*<span class="metric-meta">.*Goalie/);
 });
@@ -302,20 +302,20 @@ test('Stage 1.2 context selectors keep authorized handlers and gain icons withou
   const source = `
     ${extractFunction(app, 'escapeHtml')}
     ${extractFunction(app, 'switcherMarkup')}
-    this.single = switcherMarkup('team-switcher', 'Team', null, '', [], '', 'Demo Team', '🛡');
+    this.single = switcherMarkup('team-switcher', 'Team', null, '', [], '', 'Demo Team', 'team');
     this.multi = switcherMarkup('organization-switcher', 'Organization', 'organizationSelect', 'Selected organization', [
       { value: 'org-a', label: 'Org A' },
       { value: 'org-b', label: 'Org B' }
-    ], 'org-b', undefined, '⬒');
+    ], 'org-b', undefined, 'platform');
     this.legacy = switcherMarkup('season-switcher', 'Season', null, '', [], '', '2026-27');
   `;
   const context = {};
   vm.runInNewContext(source, context);
 
-  assert.match(context.single, /<span class="switcher-icon" aria-hidden="true">🛡<\/span>/);
+  assert.match(context.single, /<svg class="switcher-icon" aria-hidden="true"><use href="#icon-team"><\/use><\/svg>/);
   assert.match(context.single, /team-switcher-label">Team<\/span>/);
   assert.match(context.single, /switcher-value/);
-  assert.match(context.multi, /<span class="switcher-icon" aria-hidden="true">⬒<\/span>/);
+  assert.match(context.multi, /<svg class="switcher-icon" aria-hidden="true"><use href="#icon-platform"><\/use><\/svg>/);
   assert.match(context.multi, /switcher-chevron/);
   assert.match(context.multi, /<select id="organizationSelect" aria-label="Selected organization">/);
   assert.doesNotMatch(context.legacy, /switcher-icon/);
@@ -358,6 +358,6 @@ test('Stage 1.2 notifications placeholder carries no fabricated unread count', (
 });
 
 test('Stage 1.2 changed assets are cache-busted', () => {
-  assert.match(index, /styles\.css\?v=beta-stage-1-2/);
-  assert.match(index, /app\.js\?v=beta-stage-1-2/);
+  assert.match(index, /styles\.css\?v=beta-stage-1-3/);
+  assert.match(index, /app\.js\?v=beta-stage-1-3/);
 });
