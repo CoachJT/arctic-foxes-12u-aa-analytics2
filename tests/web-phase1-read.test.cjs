@@ -67,6 +67,7 @@ function renderStage1(phase1Data, now = '2026-09-08T12:00:00') {
     ${extractFunction(app, 'tenantSeasonName')}
     ${extractFunction(app, 'shell')}
     ${extractFunction(app, 'phase1Number')}
+    ${extractFunction(app, 'orgInitials')}
     ${extractFunction(app, 'phase1Date')}
     ${extractFunction(app, 'phase1Record')}
     ${extractFunction(app, 'phase1DateKey')}
@@ -158,7 +159,7 @@ test('Stage 1 dashboard and team overview render canonical season record fields'
   });
 
   assert.match(rendered.renderedCommand, />18<\/strong>/);
-  assert.match(rendered.renderedCommand, /11-5-2 Record/);
+  assert.match(rendered.renderedCommand, /Record<\/span>\s*<strong class="metric-value">11-5-2<\/strong>/);
   assert.match(rendered.renderedCommand, />64<\/strong>/);
   assert.match(rendered.renderedCommand, />41<\/strong>/);
   assert.match(rendered.renderedTeam, />11-5-2<\/strong>/);

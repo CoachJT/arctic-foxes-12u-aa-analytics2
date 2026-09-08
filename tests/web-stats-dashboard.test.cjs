@@ -39,6 +39,7 @@ function renderStats(phase1Data, now = '2026-09-08T12:00:00', sort = {}) {
     ${extractFunction(app, 'isGoalie')}
     ${extractFunction(app, 'activeRosterPlayers')}
     ${extractFunction(app, 'escapeHtml')}
+    ${extractFunction(app, 'orgInitials')}
     ${extractFunction(app, 'statsNumber')}
     ${extractFunction(app, 'statsValue')}
     ${extractFunction(app, 'statsAccumulate')}
