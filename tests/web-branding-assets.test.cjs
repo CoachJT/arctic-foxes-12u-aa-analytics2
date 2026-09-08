@@ -54,6 +54,7 @@ test('branding assets provide null fallbacks and preserve only safe text', () =>
 
 test('Home and Stats use the shared asset model and failed image rendering is hidden', () => {
   assert.match(indexSource, /branding-assets\.js\?v=premium-org-assets-1/);
+  assert.match(indexSource, /season-context\.js\?v=beta-stage-1-1&rev=premium-org-assets-1/);
   assert.match(appSource, /FoxesBrandingAssets\?\.normalize/);
   assert.match(appSource, /event\.target\.hidden = true/);
   assert.match(appSource, /brandingAssets\.heroImageUrl/);
