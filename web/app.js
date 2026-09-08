@@ -56,9 +56,9 @@ const prototypeMode = !authCallbackPresent
   && location.hostname === 'localhost'
   && queryParams.get('prototype') === '1';
 
-const viewNames = { command: 'Command Center', schedule: 'Schedule', stats: 'Team Stats', players: 'Player Profiles', games: 'Game Center', scouting: 'Scouting', reports: 'Coach Reports', development: 'Player Development', admin: 'Admin', settings: 'Settings', support: 'Support' };
-const roleViews = { command: PERMISSIONS.DASHBOARD_VIEW, schedule: PERMISSIONS.SCHEDULE_VIEW, stats: PERMISSIONS.STATS_VIEW, players: PERMISSIONS.PLAYERS_VIEW, games: PERMISSIONS.GAMES_VIEW, scouting: PERMISSIONS.SCOUTING_VIEW, reports: PERMISSIONS.REPORTS_VIEW, development: PERMISSIONS.PLAYERS_VIEW, admin: PERMISSIONS.ADMIN_USERS, settings: PERMISSIONS.DASHBOARD_VIEW, support: PERMISSIONS.DASHBOARD_VIEW };
-const viewFeatures = { command: 'dashboard', schedule: 'schedule', stats: 'stats', players: 'players', games: 'games', scouting: 'scouting', reports: 'reports', development: 'players', admin: 'admin', settings: 'dashboard', support: 'dashboard' };
+const viewNames = { command: 'Home', team: 'Team Overview', schedule: 'Schedule', games: 'Game Center', players: 'Players', stats: 'Team Stats', film: 'Film Room', scouting: 'Scouting', reports: 'Coach Reports', development: 'Player Development', coaching: 'Coaching Tools', management: 'Team Management', support: 'Support', settings: 'Settings', admin: 'Admin' };
+const roleViews = { command: PERMISSIONS.DASHBOARD_VIEW, team: PERMISSIONS.PLAYERS_VIEW, schedule: PERMISSIONS.SCHEDULE_VIEW, games: PERMISSIONS.GAMES_VIEW, players: PERMISSIONS.PLAYERS_VIEW, stats: PERMISSIONS.STATS_VIEW, film: PERMISSIONS.GAMES_VIEW, scouting: PERMISSIONS.SCOUTING_VIEW, reports: PERMISSIONS.REPORTS_VIEW, development: PERMISSIONS.PLAYERS_VIEW, coaching: PERMISSIONS.REPORTS_VIEW, management: PERMISSIONS.PLAYERS_VIEW, support: PERMISSIONS.DASHBOARD_VIEW, settings: PERMISSIONS.DASHBOARD_VIEW, admin: PERMISSIONS.ADMIN_USERS };
+const viewFeatures = { command: 'dashboard', team: 'players', schedule: 'schedule', games: 'games', players: 'players', stats: 'stats', film: 'games', scouting: 'scouting', reports: 'reports', development: 'players', coaching: 'reports', management: 'admin', support: 'dashboard', settings: 'dashboard', admin: 'admin' };
 
 function cardTitle(title, link = '') { return `<div class="card-title"><h2>${title}</h2>${link ? `<a href="#">${link} →</a>` : ''}</div>`; }
 function tenantName() { return currentWorkspace?.branding?.display_name || currentWorkspace?.team_name || seasonContext.branding?.display_name || authTeam?.teams?.name || 'Selected team'; }
@@ -66,8 +66,42 @@ function tenantSeasonName() { return currentWorkspace?.season_name || seasonCont
 function shell(title, subtitle, body) { return `<div class="page-head"><div><div class="eyebrow">${PLATFORM.name} · ${escapeHtml(tenantName())} workspace</div><h1>${title}</h1><p>${subtitle}</p></div></div>${body}`; }
 function notice(text) { return `<div class="callout prototype-note">${text}</div>`; }
 function phase1Number(value) { return Number.isFinite(Number(value)) ? Number(value) : 0; }
-function phase1Date(value) { return value ? new Date(`${value}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' }) : 'Date unavailable'; }
+function phase1Date(value) { return value ? new Date(`${value}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' }) : 'Date unavailable'; }
 function phase1Record() { return phase1Data?.seasonRecord || { games_played: 0, wins: 0, losses: 0, ties: 0, goals_for: 0, goals_against: 0 }; }
+function phase1DateKey(value = new Date()) { return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`; }
+function phase1TimeValue(value) {
+  if (!/^\d{2}:\d{2}$/.test(value || '')) return null;
+  const [hours, minutes] = value.split(':').map(Number);
+  return hours > 23 || minutes > 59 ? null : (hours * 60) + minutes;
+}
+function phase1ScheduleSort(a, b) {
+  return String(a?.date || '').localeCompare(String(b?.date || ''))
+    || String(a?.time || '99:99').localeCompare(String(b?.time || '99:99'));
+}
+function phase1NextScheduledGame(now = new Date()) {
+  const today = phase1DateKey(now);
+  const minutesNow = (now.getHours() * 60) + now.getMinutes();
+  return (phase1Data?.schedule || [])
+    .filter(game => {
+      const date = String(game?.date || '');
+      if (!date) return false;
+      if (date > today) return true;
+      if (date < today) return false;
+      const timeValue = phase1TimeValue(game?.time);
+      return timeValue == null || timeValue >= minutesNow;
+    })
+    .slice()
+    .sort(phase1ScheduleSort)[0] || null;
+}
+function phase1LatestCompletedGame(now = new Date()) {
+  const today = phase1DateKey(now);
+  const teamStats = new Map((phase1Data?.teamStats || []).map(row => [row.source_game_id, row]));
+  return (phase1Data?.games || [])
+    .map(game => ({ game, stats: teamStats.get(game.source_game_id) || null }))
+    .filter(({ game, stats }) => stats && String(game?.date || '') && String(game.date) <= today)
+    .slice()
+    .sort((a, b) => String(b.game?.date || '').localeCompare(String(a.game?.date || '')))[0] || null;
+}
 function playerStatTotals() {
   const totals = new Map();
   (phase1Data?.playerStats || []).forEach(row => {
@@ -100,9 +134,198 @@ function recent() {
 
 function command() {
   const record = phase1Record();
-  const next = (phase1Data?.schedule || []).slice().sort((a, b) => String(a.date).localeCompare(String(b.date)))[0];
-  return shell('Good morning, Coach.', 'Here is the live team picture from Supabase.', `<div class="grid hero-grid"><section class="card next-game">${cardTitle('NEXT GAME', 'Schedule')}<div class="game-top"><div class="opponent"><div class="opponent-mark">${escapeHtml(String(next?.opponent || 'AF').slice(0, 2).toUpperCase())}</div><div><p>${next ? `${phase1Date(next.date)} · ${escapeHtml(next.home_away)}` : 'No scheduled games'}</p><h2>${escapeHtml(next?.opponent || 'No upcoming game')}</h2><p>${escapeHtml(next?.location || 'Schedule details unavailable')}${next?.time ? ` · ${escapeHtml(next.time)}` : ''}</p></div></div><span class="home-pill">${escapeHtml(next?.home_away || '—')}</span></div><div class="game-date"><strong>${phase1Data?.schedule?.length || 0} <span>scheduled</span></strong><span>${phase1Data?.games?.length || 0} completed games synced</span></div></section><section class="card record-card">${cardTitle('SEASON RECORD', 'View schedule')}<div class="record"><span class="record-number">${record.wins}<span>–</span>${record.losses}<span>–</span>${record.ties}</span><div class="record-copy"><strong>${record.games_played} games played</strong>${record.goals_for} goals for<br>${record.goals_against} goals against</div></div></section></div><div class="grid stat-grid">${[['GOALS FOR / GAME', (record.goals_for / Math.max(record.games_played, 1)).toFixed(2), 'From synced team games'],['GOALS AGAINST / GAME', (record.goals_against / Math.max(record.games_played, 1)).toFixed(2), 'From synced team games'],['SCHEDULED GAMES', String(phase1Data?.schedule?.length || 0), 'Live Supabase schedule'],['ROSTER', String(phase1Data?.roster?.length || 0), 'Live Supabase roster']].map(x => `<div class="card stat-card"><small>${x[0]}</small><strong>${x[1]}</strong><span>${x[2]}</span></div>`).join('')}</div><div class="grid split"><section class="card">${cardTitle('TOP PLAYERS', 'Player Profiles')}${leaders()}</section><section class="card recent">${cardTitle('RECENT GAMES', 'Game Center')}${recent()}</section></div>`);
+  const nextGame = phase1NextScheduledGame();
+  const latestCompleted = phase1LatestCompletedGame();
+  const totalGames = record.games_played;
+  const roster = phase1Data?.roster || [];
+  const playersCount = roster.length;
+  const goaliesCount = roster.filter(p => p.position === 'G' || p.is_goalie || (p.pos && p.pos.includes('G'))).length;
+  
+  const orgName = tenantName();
+  const teamNameStr = authTeam?.team_name || authTeam?.name || 'Selected Team';
+  const seasonStr = tenantSeasonName();
+  const logoUrl = currentWorkspace?.branding?.logo_url || currentWorkspace?.branding?.logo || '';
+
+  return shell(
+    'Dashboard',
+    'Command Center for team performance, scheduling, and analytics.',
+    `<section class="hero card command-hero">
+      <div class="brand-hero-header" style="display:flex; align-items:center; gap: 16px; margin-bottom: 12px;">
+        ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(orgName)}" style="max-height:48px; width:auto; border-radius:6px;">` : ''}
+        <div>
+          <h1 style="margin:0;">Welcome to ${escapeHtml(orgName)}</h1>
+          <p class="subtitle" style="margin:4px 0 0 0;">${escapeHtml(teamNameStr)} &middot; ${escapeHtml(seasonStr)}</p>
+        </div>
+      </div>
+      <p style="color:var(--text-muted); font-size:14px; margin-top:8px;">Authorized Workspace Command Center</p>
+    </section>
+
+    <section class="metrics-grid">
+      <article class="metric-card">
+        <span class="metric-label">Games Played</span>
+        <strong class="metric-value">${totalGames}</strong>
+        <span class="metric-meta">${record.wins}-${record.losses}-${record.ties} Record</span>
+      </article>
+      <article class="metric-card">
+        <span class="metric-label">Goals For</span>
+        <strong class="metric-value">${record.goals_for}</strong>
+        <span class="metric-meta">Season Total</span>
+      </article>
+      <article class="metric-card">
+        <span class="metric-label">Goals Against</span>
+        <strong class="metric-value">${record.goals_against}</strong>
+        <span class="metric-meta">Season Total</span>
+      </article>
+      <article class="metric-card">
+        <span class="metric-label">Roster Size</span>
+        <strong class="metric-value">${playersCount}</strong>
+        <span class="metric-meta">${goaliesCount > 0 ? goaliesCount + ' Goalies' : 'Active Players'}</span>
+      </article>
+    </section>
+
+    <div class="dashboard-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 24px;">
+      <section class="card">
+        <h3>Schedule Overview</h3>
+        ${nextGame ? `
+          <div style="margin-top:12px; padding:12px; background:var(--bg-card); border:1px solid var(--border); border-radius:8px;">
+            <div style="font-size:12px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">Next Game</div>
+            <div style="font-size:16px; font-weight:600; margin-top:4px;">vs ${escapeHtml(nextGame.opponent || 'Opponent')}</div>
+            <div style="font-size:13px; color:var(--text-muted); margin-top:2px;">${escapeHtml(phase1Date(nextGame.date))}${nextGame.time ? ` &middot; ${escapeHtml(nextGame.time)}` : ''}</div>
+          </div>
+        ` : `<p class="empty-text" style="padding:16px 0; color:var(--text-muted);">No upcoming games scheduled.</p>`}
+        <div style="margin-top:16px;">
+          <button class="btn secondary" type="button" onclick="render('schedule')">View Full Schedule &rarr;</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>Recent Activity</h3>
+        ${latestCompleted ? `
+          <div style="margin-top:12px; padding:12px; background:var(--bg-card); border:1px solid var(--border); border-radius:8px;">
+            <div style="font-size:12px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">Latest Result</div>
+            <div style="font-size:16px; font-weight:600; margin-top:4px;">${escapeHtml(latestCompleted.game.opponent || 'Game')} (${phase1Number(latestCompleted.stats.goals_for) > phase1Number(latestCompleted.stats.goals_against) ? 'W' : phase1Number(latestCompleted.stats.goals_for) < phase1Number(latestCompleted.stats.goals_against) ? 'L' : 'T'} ${phase1Number(latestCompleted.stats.goals_for)}–${phase1Number(latestCompleted.stats.goals_against)})</div>
+            <div style="font-size:13px; color:var(--text-muted); margin-top:2px;">${escapeHtml(phase1Date(latestCompleted.game.date))}</div>
+          </div>
+        ` : `<p class="empty-text" style="padding:16px 0; color:var(--text-muted);">No recent game results logged.</p>`}
+        <div style="margin-top:16px;">
+          <button class="btn secondary" type="button" onclick="render('games')">Open Game Center &rarr;</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>Quick Access</h3>
+        <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;">
+          <button class="btn secondary" type="button" onclick="render('team')">Team Overview</button>
+          <button class="btn secondary" type="button" onclick="render('players')">Roster</button>
+          <button class="btn secondary" type="button" onclick="render('stats')">Player Stats</button>
+          <button class="btn secondary" type="button" onclick="render('scouting')">Scouting</button>
+          <button class="btn secondary" type="button" onclick="render('reports')">Reports</button>
+        </div>
+      </section>
+    </div>`
+  );
 }
+
+function team() {
+  const record = phase1Record();
+  const roster = phase1Data?.roster || [];
+  const orgName = tenantName();
+  const teamNameStr = authTeam?.team_name || authTeam?.name || 'Authorized Team';
+  const seasonStr = tenantSeasonName();
+  const logoUrl = currentWorkspace?.branding?.logo_url || currentWorkspace?.branding?.logo || '';
+
+  return shell(
+    'Team Overview',
+    'Team identity, season standings, staff access, and roster summary.',
+    `<section class="hero card" style="display:flex; align-items:center; gap:20px; flex-wrap:wrap;">
+      ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(orgName)}" style="max-height:64px; width:auto; border-radius:8px;">` : ''}
+      <div>
+        <h1 style="margin:0;">${escapeHtml(teamNameStr)}</h1>
+        <p class="subtitle" style="margin:4px 0 0 0;">${escapeHtml(orgName)} &middot; ${escapeHtml(seasonStr)}</p>
+      </div>
+    </section>
+
+    <section class="metrics-grid" style="margin-top:20px;">
+      <article class="metric-card">
+        <span class="metric-label">Organization</span>
+        <strong class="metric-value" style="font-size:18px;">${escapeHtml(orgName)}</strong>
+      </article>
+      <article class="metric-card">
+        <span class="metric-label">Season</span>
+        <strong class="metric-value" style="font-size:18px;">${escapeHtml(seasonStr)}</strong>
+      </article>
+      <article class="metric-card">
+        <span class="metric-label">Record</span>
+        <strong class="metric-value">${record.wins}-${record.losses}-${record.ties}</strong>
+        <span class="metric-meta">${record.games_played} GP</span>
+      </article>
+      <article class="metric-card">
+        <span class="metric-label">Active Roster</span>
+        <strong class="metric-value">${roster.length}</strong>
+        <span class="metric-meta">Players Enrolled</span>
+      </article>
+    </section>
+
+    <div class="dashboard-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 24px;">
+      <section class="card">
+        <h3>Staff & Role Summary</h3>
+        <div style="margin-top:12px; font-size:14px; color:var(--text);">
+          <p><strong>Your Access Role:</strong> <span class="badge" style="background:var(--brand-primary); color:white;">${escapeHtml(activeStaff?.role || 'Member')}</span></p>
+          <p><strong>Workspace Plan:</strong> ${escapeHtml(currentWorkspace?.plan_id || 'Standard')}</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>Quick Actions</h3>
+        <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px;">
+          <button class="btn secondary" type="button" onclick="render('players')">Manage & View Roster</button>
+          <button class="btn secondary" type="button" onclick="render('schedule')">Schedule & Events</button>
+          <button class="btn secondary" type="button" onclick="render('stats')">Season Leaderboards</button>
+        </div>
+      </section>
+    </div>`
+  );
+}
+
+function film() {
+  return shell(
+    'Film Room',
+    'Video analysis, tag clips, and game film review module surface.',
+    `<section class="card empty-view">
+      <div class="empty-icon">🎥</div>
+      <h2>Film Room Module Surface</h2>
+      <p>Video breakdown tools and clip tagging will connect to live video sources in upcoming PuckNexus Beta releases.</p>
+      <span class="badge" style="margin-top:12px; background:var(--surface); color:var(--text-muted); border:1px solid var(--border);">Beta Surface &middot; Read Only</span>
+    </section>`
+  );
+}
+
+function coaching() {
+  return shell(
+    'Coaching Tools',
+    'Practice plans, line combination tools, and tactical playbook module surface.',
+    `<section class="card empty-view">
+      <div class="empty-icon">📋</div>
+      <h2>Coaching Tools Surface</h2>
+      <p>Line builder, playbook designer, and practice plan generator module surface.</p>
+      <span class="badge" style="margin-top:12px; background:var(--surface); color:var(--text-muted); border:1px solid var(--border);">Beta Surface &middot; Read Only</span>
+    </section>`
+  );
+}
+
+function management() {
+  return shell(
+    'Team Management',
+    'Staff assignments, team administration, and workspace entitlements surface.',
+    `<section class="card empty-view">
+      <div class="empty-icon">🛡️</div>
+      <h2>Team Management Surface</h2>
+      <p>Administrative management of staff roles, invites, and team entitlements surface.</p>
+      <span class="badge" style="margin-top:12px; background:var(--surface); color:var(--text-muted); border:1px solid var(--border);">Beta Surface &middot; Read Only</span>
+    </section>`
+  );
+}
+
 function schedule() { return shell('Schedule','Live schedule synced from the team Windows app.',`<section class="card">${cardTitle(`Team schedule · ${phase1Data?.schedule?.length || 0} entries`,'Supabase read-only')}<div class="schedule-list">${(phase1Data?.schedule || []).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).map(game=>`<div class="schedule-item"><div class="schedule-date"><strong>${escapeHtml(new Date(`${game.date}T00:00:00`).toLocaleDateString(undefined,{month:'short',day:'2-digit'}).toUpperCase())}</strong>${escapeHtml(String(game.date).slice(0,4))}</div><div><h3>${escapeHtml(game.opponent)}</h3><p>${escapeHtml(game.home_away)} · ${escapeHtml(game.location || 'Location unavailable')}${game.time ? ` · ${escapeHtml(game.time)}` : ''}</p></div><span class="tag">${escapeHtml(game.game_type)}</span></div>`).join('') || '<div class="empty-view"><h2>No schedule entries</h2><p>No synced schedule entries are available for this team.</p></div>'}</div></section>`); }
 function stats() { const edit = can(PERMISSIONS.STATS_EDIT_OFFICIAL, activeStaff); const record = phase1Record(); const teamStats = phase1Data?.teamStats || []; const totals = teamStats.reduce((sum, row) => ({ shots: sum.shots + phase1Number(row.shots_for), pp: sum.pp + phase1Number(row.power_play_success), ppChances: sum.ppChances + phase1Number(row.power_play_chances), foW: sum.foW + phase1Number(row.faceoff_wins), foL: sum.foL + phase1Number(row.faceoff_losses) }), { shots: 0, pp: 0, ppChances: 0, foW: 0, foL: 0 }); return shell('Team Stats','Read-only statistics from the synced team game data.',`<div class="grid stat-grid">${[['RECORD',`${record.wins}–${record.losses}–${record.ties}`,`${record.games_played} games`],['SHOTS / GAME',(totals.shots / Math.max(teamStats.length,1)).toFixed(1),'From team game stats'],['FACE-OFFS',`${((totals.foW / Math.max(totals.foW + totals.foL,1)) * 100).toFixed(1)}%`,'From team game stats'],['PLAYER-STAT ROWS',String(phase1Data?.playerStats?.length || 0),'Synced player-stat rows']].map(x=>`<div class="card stat-card"><small>${x[0]}</small><strong>${x[1]}</strong><span>${x[2]}</span></div>`).join('')}</div><section class="card">${cardTitle('Season overview','Supabase read-only')}${edit ? '<span class="permission-lock">Official stat editing remains disabled in this web read-only phase.</span>' : '<span class="permission-lock">Statistics are read-only for this phase.</span>'}<div class="table-wrap"><table class="data-table"><thead><tr><th>Metric</th><th>Total</th><th>Average / rate</th></tr></thead><tbody>${[['Goals for',record.goals_for, (record.goals_for / Math.max(record.games_played,1)).toFixed(2)],['Goals against',record.goals_against,(record.goals_against / Math.max(record.games_played,1)).toFixed(2)],['Shots on goal',totals.shots,(totals.shots / Math.max(teamStats.length,1)).toFixed(1)],['Power-play successes',totals.pp,`${totals.ppChances ? ((totals.pp / totals.ppChances) * 100).toFixed(1) : '0.0'}%`],['Face-off wins',totals.foW,`${((totals.foW / Math.max(totals.foW + totals.foL,1)) * 100).toFixed(1)}%`]].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('')}</tbody></table></div></section>`); }
 function rosterCanManage() {
@@ -377,12 +600,19 @@ function renderTenantBranding() {
   const displayName = tenantName();
   const seasonName = tenantSeasonName();
   const mark = displayName.split(/\s+/).filter(Boolean).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'PN';
+  const logoUrl = currentWorkspace?.branding?.logo_url || currentWorkspace?.branding?.logo || '';
   const tenantMark = document.querySelector('#tenantMark');
   const tenantNameNode = document.querySelector('#tenantName');
   const tenantSeasonLabel = document.querySelector('#tenantSeasonLabel');
   const tenantFooter = document.querySelector('#tenantFooter');
   const teamStatus = document.querySelector('#teamStatus');
-  if (tenantMark) tenantMark.textContent = mark;
+  if (tenantMark) {
+    if (logoUrl) {
+      tenantMark.innerHTML = `<img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(displayName)}" class="brand-logo-img" style="height:24px; width:auto; border-radius:4px; vertical-align:middle;">`;
+    } else {
+      tenantMark.textContent = mark;
+    }
+  }
   if (tenantNameNode) tenantNameNode.textContent = displayName;
   if (tenantSeasonLabel) tenantSeasonLabel.textContent = seasonName;
   if (tenantFooter) tenantFooter.textContent = displayName;
@@ -657,7 +887,7 @@ function render(view = 'command') {
       ? shell('Team data unavailable', 'The authenticated workspace is available, but the live team data could not be read.', `<section class="card empty-view"><div class="empty-icon">!</div><h2>Unable to load synced team data</h2><p>${escapeHtml(phase1DataError)}</p><button class="btn primary" id="retryPhase1Data" type="button">Retry</button></section>`)
       : !phase1Data
         ? shell('Loading team data', 'Reading the live team roster, schedule, games, and stats…', '<section class="card empty-view"><div class="empty-icon">⌁</div><h2>Loading synced team data</h2><p>Please wait while the secure workspace reads your team data.</p></section>')
-        : view === 'command' ? command() : view === 'schedule' ? schedule() : view === 'stats' ? stats() : view === 'players' ? players() : view === 'games' ? gameCenter() : view === 'reports' ? reports() : view === 'development' ? development() : view === 'settings' ? settings() : view === 'support' ? support() : view === 'admin' ? admin() : generic(view);
+        : view === 'command' ? command() : view === 'team' ? team() : view === 'schedule' ? schedule() : view === 'stats' ? stats() : view === 'players' ? players() : view === 'games' ? gameCenter() : view === 'film' ? film() : view === 'reports' ? reports() : view === 'development' ? development() : view === 'coaching' ? coaching() : view === 'management' ? management() : view === 'settings' ? settings() : view === 'support' ? support() : view === 'admin' ? admin() : generic(view);
   app.innerHTML = page;
   document.querySelector('#viewCrumb').textContent = viewNames[view]; renderRoleSwitcher();
   renderWorkspaceIndicators();
