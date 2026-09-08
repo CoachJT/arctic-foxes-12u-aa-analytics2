@@ -42,6 +42,8 @@
       "SETUP_AUTO_UPDATES.txt",
       "VERSION_2.9_FEATURES.txt",
       "analytics.js",
+      "pucknexus-analytics.js",
+      "pucknexus-analytics-repository.js",
       "supabase-sync.js",
       "release-ui.js",
       "interface.css",
