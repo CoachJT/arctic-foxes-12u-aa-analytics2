@@ -61,9 +61,13 @@ test('the new bucket gets dedicated least-privilege insert/delete policies and n
   assert.doesNotMatch(migration, /create policy organization_branding_objects_select/i);
 });
 
-test('the dedicated Storage delete policy only allows cleanup after the delete RPC marks the asset cleanup eligible', () => {
+test('the dedicated Storage delete policy allows cleanup for both terminal cleanup-eligible outcomes (soft-deleted and aborted)', () => {
   const deletePolicy = migration.match(/create policy organization_branding_objects_delete\n[\s\S]*?\n\);/)[0];
-  assert.match(deletePolicy, /asset\.status = 'deleted'/);
+  // Must authorize BOTH the normal delete outcome (status='deleted') and the
+  // abort outcome (status='failed') -- otherwise the browser helper's
+  // post-abort storage.remove() call is always denied by this same policy
+  // and every aborted upload's blob is permanently orphaned.
+  assert.match(deletePolicy, /asset\.status in \('deleted', 'failed'\)/);
   assert.match(deletePolicy, /asset\.metadata->>'state' = 'cleanup_eligible'/);
   assert.match(deletePolicy, /public\.can_manage_organization_branding\(asset\.organization_id, asset\.team_id\)/);
 });
@@ -259,7 +263,16 @@ test('abort_organization_branding_asset requires only target_asset_id and cannot
   assert.match(migration, /public\.abort_organization_branding_asset\(\s*\n\s*target_asset_id uuid\s*\n\)/);
   const abortBody = abortFunctionBody();
   assert.match(abortBody, /if target_asset_id is null then\s*\n\s*raise exception 'A target asset id is required\.';/);
-  assert.match(abortBody, /and bucket_name = 'organization-branding'\s*\n\s*and asset_type = 'branding'\s*\n\s*and status = 'pending';/);
+  assert.match(abortBody, /and bucket_name = 'organization-branding'\s*\n\s*and asset_type = 'branding'\s*\n\s*and status = 'pending'\s*\n\s*for update;/);
+});
+
+test('finalize/delete/abort each lock their target row (select ... for update) before branching on status, closing the check-then-act race window', () => {
+  const finalizeBody = migration.match(/create or replace function public\.finalize_organization_branding_asset[\s\S]*?\n\$\$;/)[0];
+  const deleteBody = migration.match(/create or replace function public\.delete_organization_branding_asset[\s\S]*?\n\$\$;/)[0];
+  const abortBody = abortFunctionBody();
+  for (const [name, body] of [['finalize', finalizeBody], ['delete', deleteBody], ['abort', abortBody]]) {
+    assert.match(body, /for update;/, `${name} must lock its target row with FOR UPDATE`);
+  }
 });
 
 test('a previously live branding pointer is unaffected by aborting a still-pending asset (only finalize ever sets the pointer)', () => {
