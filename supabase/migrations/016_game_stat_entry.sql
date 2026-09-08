@@ -81,7 +81,13 @@ for each row execute function public.validate_team_game_season();
 -- rolls back every insert/update made earlier in this call — there is no
 -- partial-write path. Re-saving the same game upserts existing rows (keyed by
 -- team_id + source_game_id + source_player_id + player_type, or team_id +
--- source_game_id for team stats) instead of inserting duplicates.
+-- source_game_id for team stats) instead of inserting duplicates. Every
+-- skater/goalie row is validated against this team's roster (team_roster_players)
+-- before it is written, so a source_player_id cannot belong to another team or
+-- reference a player who was never rostered here. Only raw counting stats are
+-- accepted as input — derived values (PTS, SV%, GAA, faceoff %) are never read
+-- from the client payload; they are computed for display only and recomputed
+-- server-side (or by the dashboard) from these canonical columns.
 create or replace function public.save_game_stats(
   target_team_id uuid,
   target_season_id uuid,
@@ -139,6 +145,18 @@ begin
     if coalesce(skater_row ->> 'source_player_id', '') = '' then
       raise exception 'Each skater stat row requires a source_player_id.';
     end if;
+    -- Roster validation: the player must belong to this team's roster as a
+    -- skater. This blocks cross-team player IDs and stat rows for players who
+    -- were never on this roster, while still allowing edits to historical
+    -- rows for players whose roster status is now inactive.
+    if not exists (
+      select 1 from public.team_roster_players roster
+      where roster.team_id = target_team_id
+        and roster.source_player_id = skater_row ->> 'source_player_id'
+        and roster.player_type = 'skater'
+    ) then
+      raise exception 'Skater % is not on this team''s roster.', skater_row ->> 'source_player_id';
+    end if;
     insert into public.team_game_player_stats (
       team_id, season_id, source_game_id, source_player_id, player_type,
       gp, goals, assists, shots, penalty_minutes, plus_minus, blocks,
@@ -171,6 +189,14 @@ begin
   loop
     if coalesce(goalie_row ->> 'source_player_id', '') = '' then
       raise exception 'Each goalie stat row requires a source_player_id.';
+    end if;
+    if not exists (
+      select 1 from public.team_roster_players roster
+      where roster.team_id = target_team_id
+        and roster.source_player_id = goalie_row ->> 'source_player_id'
+        and roster.player_type = 'goalie'
+    ) then
+      raise exception 'Goalie % is not on this team''s roster.', goalie_row ->> 'source_player_id';
     end if;
     insert into public.team_game_player_stats (
       team_id, season_id, source_game_id, source_player_id, player_type,

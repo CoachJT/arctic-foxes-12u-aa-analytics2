@@ -2,12 +2,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 
-const migration = fs.readFileSync('supabase/migrations/015_game_stat_entry.sql', 'utf8');
+const migration = fs.readFileSync('supabase/migrations/016_game_stat_entry.sql', 'utf8');
 const foundationMigration = fs.readFileSync('supabase/migrations/003_team_data_sync.sql', 'utf8');
 
 test('Game Stat Entry migration is additive only and does not touch historical migration files', () => {
   const historicalMigrations = fs.readdirSync('supabase/migrations')
-    .filter(name => name !== '015_game_stat_entry.sql')
+    .filter(name => name !== '016_game_stat_entry.sql')
     .sort();
   assert.ok(historicalMigrations.length >= 12, 'expected prior migrations to remain untouched');
   // 003 defines the canonical player-stats schema; assert it is unmodified by
@@ -79,3 +79,15 @@ test('migration ends with runtime assertions proving anonymous execution stays r
   assert.match(migration, /has_function_privilege\('anon', 'public\.save_game_stats\(uuid,uuid,text,jsonb,jsonb,jsonb\)', 'execute'\)/);
   assert.match(migration, /raise exception 'Anonymous execution is granted for save_game_stats\.'/);
 });
+
+test('save_game_stats validates every skater/goalie row against this team\'s roster, blocking cross-team player IDs', () => {
+  assert.match(migration, /select 1 from public\.team_roster_players roster\s*\n\s*where roster\.team_id = target_team_id\s*\n\s*and roster\.source_player_id = skater_row ->> 'source_player_id'\s*\n\s*and roster\.player_type = 'skater'/);
+  assert.match(migration, /select 1 from public\.team_roster_players roster\s*\n\s*where roster\.team_id = target_team_id\s*\n\s*and roster\.source_player_id = goalie_row ->> 'source_player_id'\s*\n\s*and roster\.player_type = 'goalie'/);
+  assert.match(migration, /raise exception 'Skater % is not on this team''s roster\.'/);
+  assert.match(migration, /raise exception 'Goalie % is not on this team''s roster\.'/);
+});
+
+test('save_game_stats never trusts client-supplied derived stats: it only accepts and writes raw canonical columns', () => {
+  assert.doesNotMatch(migration, /'points'|'pts'|'save_pct'|'sv_pct'|'gaa'|'faceoff_pct'/);
+});
+

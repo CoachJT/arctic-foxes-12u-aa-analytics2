@@ -128,6 +128,21 @@ test('buildSavePayload requires an authorized workspace and a game, and derives 
   assert.equal(payload.team_stats.goals_for, 3);
 });
 
+test('buildSavePayload never sends client-computed derived stats (PTS/SV%/GAA/faceoff%) to the RPC', () => {
+  const api = loadModule();
+  const payload = api.buildSavePayload({
+    workspace,
+    sourceGameId: 'g1',
+    skaterRows: [{ source_player_id: 's1', goals: '2', assists: '1', points: 999, pts: 999 }],
+    goalieRows: [{ source_player_id: 'g1', saves: '10', goals_against: '2', save_pct: 0.9, sv_pct: 0.9, gaa: 1.5 }]
+  });
+  assert.equal(Object.hasOwn(payload.skater_stats[0], 'points'), false);
+  assert.equal(Object.hasOwn(payload.skater_stats[0], 'pts'), false);
+  assert.equal(Object.hasOwn(payload.goalie_stats[0], 'save_pct'), false);
+  assert.equal(Object.hasOwn(payload.goalie_stats[0], 'sv_pct'), false);
+  assert.equal(Object.hasOwn(payload.goalie_stats[0], 'gaa'), false);
+});
+
 test('buildSavePayload sends null team_stats when no team fields were touched (no fabricated zeroes)', () => {
   const api = loadModule();
   const payload = api.buildSavePayload({ workspace, sourceGameId: 'g1', teamStats: { goals_for: '', goals_against: null } });

@@ -1,7 +1,7 @@
 // Game Stat Entry v1 — coach-facing skater/goalie/team stat entry for a single game.
 // Canonical field names match supabase/migrations/003_team_data_sync.sql exactly.
 // Missing/untracked values are preserved as null end-to-end; only real zero entries
-// are stored as 0. All writes go through the save_game_stats RPC (see migration 015)
+// are stored as 0. All writes go through the save_game_stats RPC (see migration 016)
 // so skater, goalie, and team-game rows are written atomically in one transaction.
 (function attachStatsEntry(global) {
   const SKATER_FIELDS = [
