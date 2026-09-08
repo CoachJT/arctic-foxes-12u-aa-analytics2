@@ -208,6 +208,8 @@ test('context switching clears tenant-scoped roster before reloading', () => {
     const entitlements = { clear: () => calls.push('entitlements.clear') };
     const workspaceAccessManager = { clearWorkspace: () => calls.push('workspace.clear') };
     const rosterManager = { clearWorkspace: () => calls.push('roster.clear') };
+    const statsEntryManager = { clearWorkspace: () => calls.push('statsEntry.clear') };
+    const closeStatsEntry = () => calls.push('statsEntry.close');
     const teamContextManager = { clearSelection: () => calls.push('team.clear') };
     const seasonContextManager = { clear: () => calls.push('season.clear') };
     const hiddenHosts = [];
@@ -226,7 +228,7 @@ test('context switching clears tenant-scoped roster before reloading', () => {
   assert.equal(context.state.authTeam, null);
   assert.deepEqual(Array.from(context.state.authCapabilities), []);
   assert.equal(context.state.currentWorkspace, null);
-  assert.deepEqual(Array.from(context.state.calls), ['entitlements.clear', 'workspace.clear', 'roster.clear', 'team.clear', 'season.clear']);
+  assert.deepEqual(Array.from(context.state.calls), ['entitlements.clear', 'workspace.clear', 'roster.clear', 'statsEntry.clear', 'statsEntry.close', 'team.clear', 'season.clear']);
   assert.deepEqual(Array.from(context.state.hiddenHosts), ['#organizationSwitcher', '#teamSwitcher', '#seasonSwitcher']);
 });
 
