@@ -114,22 +114,40 @@ function playerStatTotals() {
   });
   return totals;
 }
+function rosterDisplayName(player) {
+  return player?.name || [player?.first_name, player?.last_name].filter(Boolean).join(' ') || 'Roster player';
+}
+function isGoalie(player) {
+  return player?.position === 'G' || player?.player_type === 'goalie' || player?.is_goalie === true || (player?.pos || '').includes('G');
+}
+function activeRosterPlayers(roster = []) {
+  return roster.filter(player => {
+    const status = typeof player?.status === 'string' ? player.status.trim().toLowerCase() : '';
+    if (!status) return true;
+    return status === 'active';
+  });
+}
 function leaders() {
   const stats = playerStatTotals();
   return (phase1Data?.roster || []).map(player => ({ player, totals: stats.get(player.source_player_id) || {} }))
     .sort((a, b) => (phase1Number(b.totals.goals) + phase1Number(b.totals.assists)) - (phase1Number(a.totals.goals) + phase1Number(a.totals.assists)))
     .slice(0, 4)
-    .map(({ player, totals }) => `<div class="leader"><span class="jersey">#${escapeHtml(player.jersey_number)}</span><div><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.position)} · ${phase1Number(totals.games)} GP</small></div><span class="leader-value">${phase1Number(totals.goals) + phase1Number(totals.assists)} P</span></div>`).join('');
+    .map(({ player, totals }) => `<div class="leader"><span class="jersey">#${escapeHtml(player.jersey_number || '–')}</span><div><strong>${escapeHtml(rosterDisplayName(player))}</strong><small>${escapeHtml(player.position || '—')} · ${phase1Number(totals.games)} GP</small></div><span class="leader-value">${phase1Number(totals.goals) + phase1Number(totals.assists)} P</span></div>`).join('');
 }
-function recent() {
+function recent(now = new Date()) {
+  const today = phase1DateKey(now);
   const statByGame = new Map((phase1Data?.teamStats || []).map(row => [row.source_game_id, row]));
-  return (phase1Data?.games || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 4).map(game => {
-    const stat = statByGame.get(game.source_game_id) || {};
-    const gf = phase1Number(stat.goals_for);
-    const ga = phase1Number(stat.goals_against);
-    const result = gf > ga ? 'W' : gf < ga ? 'L' : 'T';
-    return `<div class="game-row"><div><strong>${escapeHtml(game.opponent)}</strong><small>${phase1Date(game.date)}</small></div><span class="score">${gf}–${ga}</span><span class="result ${result === 'W' ? 'win' : result === 'L' ? 'loss' : ''}">${result === 'W' ? 'WIN' : result === 'L' ? 'LOSS' : 'TIE'}</span><span class="arrow">›</span></div>`;
-  }).join('');
+  return (phase1Data?.games || [])
+    .filter(game => statByGame.has(game.source_game_id) && String(game?.date || '') && String(game.date) <= today)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    .slice(0, 4)
+    .map(game => {
+      const stat = statByGame.get(game.source_game_id) || {};
+      const gf = phase1Number(stat.goals_for);
+      const ga = phase1Number(stat.goals_against);
+      const result = gf > ga ? 'W' : gf < ga ? 'L' : 'T';
+      return `<div class="game-row"><div><strong>${escapeHtml(game.opponent)}</strong><small>${phase1Date(game.date)}</small></div><span class="score">${gf}–${ga}</span><span class="result ${result === 'W' ? 'win' : result === 'L' ? 'loss' : ''}">${result === 'W' ? 'WIN' : result === 'L' ? 'LOSS' : 'TIE'}</span><span class="arrow">›</span></div>`;
+    }).join('');
 }
 
 function command() {
@@ -137,9 +155,9 @@ function command() {
   const nextGame = phase1NextScheduledGame();
   const latestCompleted = phase1LatestCompletedGame();
   const totalGames = record.games_played;
-  const roster = phase1Data?.roster || [];
+  const roster = activeRosterPlayers(phase1Data?.roster || []);
   const playersCount = roster.length;
-  const goaliesCount = roster.filter(p => p.position === 'G' || p.is_goalie || (p.pos && p.pos.includes('G'))).length;
+  const goaliesCount = roster.filter(isGoalie).length;
   
   const orgName = tenantName();
   const teamNameStr = authTeam?.team_name || authTeam?.name || 'Selected Team';
@@ -179,7 +197,7 @@ function command() {
       <article class="metric-card">
         <span class="metric-label">Roster Size</span>
         <strong class="metric-value">${playersCount}</strong>
-        <span class="metric-meta">${goaliesCount > 0 ? goaliesCount + ' Goalies' : 'Active Players'}</span>
+        <span class="metric-meta">${playersCount ? (goaliesCount > 0 ? `${goaliesCount} Goalie${goaliesCount === 1 ? '' : 's'}` : 'Active Players') : 'No players synced'}</span>
       </article>
     </section>
 
@@ -209,6 +227,26 @@ function command() {
         ` : `<p class="empty-text" style="padding:16px 0; color:var(--text-muted);">No recent game results logged.</p>`}
         <div style="margin-top:16px;">
           <button class="btn secondary" type="button" onclick="render('games')">Open Game Center &rarr;</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>Top Players</h3>
+        <div style="margin-top:8px;">
+          ${leaders() || '<p class="empty-text" style="padding:16px 0; color:var(--text-muted);">No roster performers are synced yet.</p>'}
+        </div>
+        <div style="margin-top:16px;">
+          <button class="btn secondary" type="button" onclick="render('stats')">View Stats &rarr;</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>Recent Games</h3>
+        <div class="recent" style="margin-top:8px;">
+          ${recent() || '<p class="empty-text" style="padding:16px 0; color:var(--text-muted);">No completed games are synced yet.</p>'}
+        </div>
+        <div style="margin-top:16px;">
+          <button class="btn secondary" type="button" onclick="render('games')">All Games &rarr;</button>
         </div>
       </section>
 
@@ -262,7 +300,7 @@ function team() {
       <article class="metric-card">
         <span class="metric-label">Active Roster</span>
         <strong class="metric-value">${roster.length}</strong>
-        <span class="metric-meta">Players Enrolled</span>
+        <span class="metric-meta">${roster.length ? 'Players Enrolled' : 'No players synced'}</span>
       </article>
     </section>
 
@@ -570,14 +608,23 @@ function bindAdminControls() {
 }
 function generic(view) { const titles = { games:['Game Center','One place for game-day details and post-game review.'], reports:['Coach Reports','Turn team observations into clear, shareable reports.'], settings:['Settings','Configure the team hub experience and future integrations.'] }; const [title, sub] = titles[view]; return shell(title, sub, `<section class="card empty-view"><div class="empty-icon">${view === 'settings' ? '⚙' : '✦'}</div><h2>Your next workspace layer</h2><p>This team workspace reserves the workflow for ${title.toLowerCase()}. This surface is ready to connect to synced analytics, schedules, reports, and player information.</p></section>`); }
 
+function switcherMarkup(kind, labelText, selectId, ariaLabel, options, selectedValue, singleValue) {
+  if (singleValue != null) {
+    return `<span class="${kind}-label">${labelText}</span><span class="switcher-value" title="${escapeHtml(singleValue)}">${escapeHtml(singleValue)}</span>`;
+  }
+  return `<label class="switcher-field"><span class="${kind}-label">${labelText}</span><span class="switcher-select"><select id="${selectId}" aria-label="${ariaLabel}">${options.map(option => `<option value="${escapeHtml(option.value)}" ${option.value === selectedValue ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}</select><span class="switcher-chevron" aria-hidden="true">▾</span></span></label>`;
+}
+
 function renderOrganizationSwitcher() {
   const host = document.querySelector('#organizationSwitcher');
   const organizations = organizationContextManager.context.organizations;
   if (!host || !organizations.length) return;
   if (organizations.length === 1) {
-    host.innerHTML = `<span class="organization-switcher-label">Org</span><strong>${escapeHtml(organizations[0].name)}</strong>`;
+    host.innerHTML = switcherMarkup('organization-switcher', 'Organization', null, '', [], '', organizations[0].name);
   } else {
-    host.innerHTML = `<label><span class="organization-switcher-label">Org</span><select id="organizationSelect" aria-label="Selected organization">${organizations.map(organization => `<option value="${escapeHtml(organization.id)}" ${organization.id === organizationContextManager.context.selectedOrganizationId ? 'selected' : ''}>${escapeHtml(organization.name)}</option>`).join('')}</select></label>`;
+    host.innerHTML = switcherMarkup('organization-switcher', 'Organization', 'organizationSelect', 'Selected organization',
+      organizations.map(organization => ({ value: organization.id, label: organization.name })),
+      organizationContextManager.context.selectedOrganizationId);
     host.querySelector('#organizationSelect').addEventListener('change', event => selectOrganization(event.target.value));
   }
   host.hidden = false;
@@ -588,9 +635,11 @@ function renderTeamSwitcher() {
   const teams = organizationContextManager.teamsForSelectedOrganization(workspaceAccessManager.context.workspaces);
   if (!host || !teams.length) return;
   if (teams.length === 1) {
-    host.innerHTML = `<span class="team-switcher-label">Team</span><strong>${escapeHtml(teamContext.selectedMembership?.teams?.name || 'Selected team')}</strong>`;
+    host.innerHTML = switcherMarkup('team-switcher', 'Team', null, '', [], '', teamContext.selectedMembership?.teams?.name || 'Selected team');
   } else {
-    host.innerHTML = `<label><span class="team-switcher-label">Team</span><select id="teamSelect" aria-label="Selected team">${teams.map(workspace => `<option value="${escapeHtml(workspace.team_id)}" ${workspace.team_id === teamContext.selectedTeamId ? 'selected' : ''}>${escapeHtml(workspace.team_name || workspace.team_id)}</option>`).join('')}</select></label>`;
+    host.innerHTML = switcherMarkup('team-switcher', 'Team', 'teamSelect', 'Selected team',
+      teams.map(workspace => ({ value: workspace.team_id, label: workspace.team_name || workspace.team_id })),
+      teamContext.selectedTeamId);
     host.querySelector('#teamSelect').addEventListener('change', event => selectTeam(event.target.value));
   }
   host.hidden = false;
@@ -608,7 +657,7 @@ function renderTenantBranding() {
   const teamStatus = document.querySelector('#teamStatus');
   if (tenantMark) {
     if (logoUrl) {
-      tenantMark.innerHTML = `<img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(displayName)}" class="brand-logo-img" style="height:24px; width:auto; border-radius:4px; vertical-align:middle;">`;
+      tenantMark.innerHTML = `<img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(displayName)}" class="brand-logo-img">`;
     } else {
       tenantMark.textContent = mark;
     }
@@ -643,9 +692,11 @@ function renderSeasonSwitcher() {
   const host = document.querySelector('#seasonSwitcher');
   if (!host || !seasonContext.seasons.length) return;
   if (seasonContext.seasons.length === 1) {
-    host.innerHTML = `<span class="season-switcher-label">Season</span><strong>${escapeHtml(seasonContext.selectedSeason?.name || seasonContext.selectedSeason?.season_key || 'Selected season')}</strong>`;
+    host.innerHTML = switcherMarkup('season-switcher', 'Season', null, '', [], '', seasonContext.selectedSeason?.name || seasonContext.selectedSeason?.season_key || 'Selected season');
   } else {
-    host.innerHTML = `<label><span class="season-switcher-label">Season</span><select id="seasonSelect" aria-label="Selected season">${seasonContext.seasons.map(season => `<option value="${escapeHtml(season.id)}" ${season.id === seasonContext.selectedSeasonId ? 'selected' : ''}>${escapeHtml(season.name || season.season_key)}</option>`).join('')}</select></label>`;
+    host.innerHTML = switcherMarkup('season-switcher', 'Season', 'seasonSelect', 'Selected season',
+      seasonContext.seasons.map(season => ({ value: season.id, label: season.name || season.season_key })),
+      seasonContext.selectedSeasonId);
     host.querySelector('#seasonSelect').addEventListener('change', event => selectSeason(event.target.value));
   }
   host.hidden = false;
@@ -737,6 +788,35 @@ function workspaceAuthorizedForView(view) {
   return Boolean(currentWorkspace?.authorized)
     && can(roleViews[view], activeStaff)
     && entitlements.isFeatureEnabled(viewFeatures[view]);
+}
+
+const NAV_SECTIONS = [
+  { id: 'overview', views: ['command', 'team', 'schedule', 'games'] },
+  { id: 'analytics', views: ['players', 'stats', 'film', 'scouting', 'reports'] },
+  { id: 'coaching', views: ['development', 'coaching', 'management'] },
+  { id: 'system', views: ['support', 'admin', 'settings'] }
+];
+
+function navigationModel(authorizedForView, sections = NAV_SECTIONS) {
+  return sections.map(section => {
+    const items = section.views.map(view => ({ view, allowed: Boolean(authorizedForView(view)) }));
+    return { id: section.id, items, visible: items.some(item => item.allowed) };
+  });
+}
+
+function syncNavigation(view) {
+  const model = navigationModel(workspaceAuthorizedForView);
+  const visibleViews = new Set(model.flatMap(section => section.items.filter(item => item.allowed).map(item => item.view)));
+  nav.forEach(item => {
+    const allowed = visibleViews.has(item.dataset.view);
+    item.hidden = !allowed;
+    item.classList.toggle('active', item.dataset.view === view);
+    item.toggleAttribute('aria-current', item.dataset.view === view);
+  });
+  model.forEach(section => {
+    document.querySelectorAll(`.nav-label[data-section="${section.id}"]`).forEach(label => { label.hidden = !section.visible; });
+  });
+  return model;
 }
 
 function noWorkspacePage() {
@@ -888,7 +968,10 @@ function render(view = 'command') {
       : !phase1Data
         ? shell('Loading team data', 'Reading the live team roster, schedule, games, and stats…', '<section class="card empty-view"><div class="empty-icon">⌁</div><h2>Loading synced team data</h2><p>Please wait while the secure workspace reads your team data.</p></section>')
         : view === 'command' ? command() : view === 'team' ? team() : view === 'schedule' ? schedule() : view === 'stats' ? stats() : view === 'players' ? players() : view === 'games' ? gameCenter() : view === 'film' ? film() : view === 'reports' ? reports() : view === 'development' ? development() : view === 'coaching' ? coaching() : view === 'management' ? management() : view === 'settings' ? settings() : view === 'support' ? support() : view === 'admin' ? admin() : generic(view);
-  app.innerHTML = page;
+  const planNotice = currentWorkspace?.authorized && !currentWorkspace?.plan_id
+    ? notice('This workspace does not have an active plan entitlement yet, so plan-gated modules and data stay hidden. Contact your organization administrator to provision the workspace plan.')
+    : '';
+  app.innerHTML = planNotice + page;
   document.querySelector('#viewCrumb').textContent = viewNames[view]; renderRoleSwitcher();
   renderWorkspaceIndicators();
   renderOrganizationSwitcher();
@@ -902,7 +985,7 @@ function render(view = 'command') {
   if (view === 'admin') bindAdminControls();
   if (view === 'players') bindRosterControls();
   if (view === 'support') bindSupportControls();
-  nav.forEach(item => { const allowed = workspaceAuthorizedForView(item.dataset.view); item.hidden = !allowed; item.classList.toggle('active', item.dataset.view === view); item.toggleAttribute('aria-current', item.dataset.view === view); });
+  syncNavigation(view);
   document.querySelector('#sidebar').classList.remove('open'); document.querySelector('#scrim').classList.remove('show'); window.scrollTo(0, 0);
 }
 nav.forEach(item => item.addEventListener('click', () => render(item.dataset.view)));
