@@ -27,10 +27,14 @@ const supportReporting = window.FoxesSupportReporting.createSupportReporting({
 window.addEventListener('error', event => window.FoxesSupportReporting.recordError(event.error || event.message, { route: location.pathname }));
 window.addEventListener('unhandledrejection', event => window.FoxesSupportReporting.recordError(event.reason, { route: location.pathname }));
 const INVITE_FUNCTION = 'invite-staff';
+const WORKSPACE_INVITE_ACCEPT_FUNCTION = 'accept-workspace-invite';
 let activeStaff = null;
 let authUser = null;
 let authTeam = null;
 let authCapabilities = [];
+let platformAdminAuthorized = false;
+let betaOnboardingSummary = null;
+let inviteAcceptanceAttempted = false;
 let currentWorkspace = null;
 let recoveryMode = false;
 let workspaceTransitioning = false;
@@ -53,6 +57,7 @@ const seasonContext = seasonContextManager.context;
 applyDocumentBrand();
 const hashParams = new URLSearchParams(location.hash.replace(/^#/, ''));
 const queryParams = new URLSearchParams(location.search);
+const workspaceInviteToken = hashParams.get('invite_token');
 const authCallbackPresent = ['access_token', 'refresh_token', 'type', 'code', 'error', 'error_code']
   .some(key => hashParams.has(key) || queryParams.has(key));
 const recoveryCallbackPresent = hashParams.get('type') === 'recovery'
@@ -439,14 +444,40 @@ function management() {
 }
 
 function platformAdmin() {
+  const planOptions = ['CORE', 'COACH', 'ELITE', 'FOUNDING', 'ORGANIZATION']
+    .map(plan => `<option value="${plan}">${plan}${plan === 'FOUNDING' ? ' · Founding recognition' : ''}</option>`)
+    .join('');
+  const summary = betaOnboardingSummary
+    ? `<section class="callout onboarding-summary" aria-live="polite"><strong>Workspace ready</strong><br>${escapeHtml(betaOnboardingSummary.organizationName)} · ${escapeHtml(betaOnboardingSummary.teamName)} · ${escapeHtml(betaOnboardingSummary.seasonName)}<br>Plan: ${escapeHtml(betaOnboardingSummary.planId)} · ${escapeHtml(betaOnboardingSummary.recognitionLabel)}<br>First coach invitation: <strong>${escapeHtml(betaOnboardingSummary.inviteStatus)}</strong> for ${escapeHtml(betaOnboardingSummary.coachEmail)}.<br><a href="${escapeHtml(betaOnboardingSummary.inviteUrl)}">One-time acceptance link</a> — copy it to the first coach only through an approved channel. No email was sent.</section>`
+    : '';
   return shell(
     'Platform Admin',
-    'Platform-level access is separate from team coaching and management.',
-    `<section class="card empty-view">
-      <div class="empty-icon">Platform</div>
-      <h2>Platform administration is authorized</h2>
-      <p>This protected platform surface does not grant or expose team-management actions. Team access remains governed by the selected workspace.</p>
-      <span class="badge">Platform authorization required</span>
+    'Controlled Beta workspace provisioning is separate from team coaching and management.',
+    `<section class="card onboarding-card">
+      <div class="card-title"><div><span class="eyebrow">Controlled Beta</span><h2>Create a new workspace</h2></div><span class="tag">Platform Admin only</span></div>
+      <p class="settings-copy">Creates an organization, team, active season, entitlement, basic branding, and a pending first-coach invitation in one secure operation. No email is sent from this screen.</p>
+      ${summary}<form id="betaOnboardingForm" class="player-form onboarding-form">
+        <label>Organization name<input id="onboardingOrganizationName" maxlength="120" required placeholder="Organization name" /></label>
+        <label>Organization slug<input id="onboardingOrganizationSlug" maxlength="120" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="organization-name" /></label>
+        <label>Team name<input id="onboardingTeamName" maxlength="120" required placeholder="Team name" /></label>
+        <label>Team slug<input id="onboardingTeamSlug" maxlength="120" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="team-name" /></label>
+        <label>Season name<input id="onboardingSeasonName" maxlength="120" required placeholder="2026–2027 Season" /></label>
+        <label>Season key<input id="onboardingSeasonKey" maxlength="80" required placeholder="2026-2027" /></label>
+        <label>Season starts<input id="onboardingSeasonStartsOn" type="date" required /></label>
+        <label>Season ends<input id="onboardingSeasonEndsOn" type="date" required /></label>
+        <label>Beta plan<select id="onboardingPlanId" required>${planOptions}</select></label>
+        <label>Brand display name<input id="onboardingBrandDisplayName" maxlength="120" required placeholder="Team display name" /></label>
+        <label>Brand short name<input id="onboardingBrandShortName" maxlength="32" required placeholder="Team initials" /></label>
+        <label>Stable logo URL<input id="onboardingBrandLogoUrl" type="url" maxlength="2048" required placeholder="https://example.org/logo.png" /></label>
+        <label>Primary color<input id="onboardingBrandPrimaryColor" maxlength="7" required pattern="#[0-9A-Fa-f]{6}" value="#173B58" /></label>
+        <label>Secondary color<input id="onboardingBrandSecondaryColor" maxlength="7" required pattern="#[0-9A-Fa-f]{6}" value="#FFFFFF" /></label>
+        <label>Accent color<input id="onboardingBrandAccentColor" maxlength="7" required pattern="#[0-9A-Fa-f]{6}" value="#61D4F5" /></label>
+        <label>First coach name<input id="onboardingCoachName" maxlength="120" autocomplete="name" required /></label>
+        <label>First coach email<input id="onboardingCoachEmail" type="email" maxlength="320" autocomplete="email" required /></label>
+        <label>First coach role<select id="onboardingCoachRoleId" required><option value="owner">Owner</option><option value="head_coach">Head Coach</option><option value="assistant">Assistant Coach</option><option value="team_manager">Team Manager</option><option value="video_coach">Video Coach</option></select></label>
+        <div class="player-form-actions"><button class="btn primary" type="submit">Create Beta workspace</button></div>
+        <div id="betaOnboardingStatus" class="invite-status player-form-wide" role="status">No workspace has been created.</div>
+      </form>
     </section>`
   );
 }
@@ -964,6 +995,89 @@ function clearTenantState() {
   if (app) app.innerHTML = '';
 }
 
+function betaOnboardingValue(form, id) {
+  return form.querySelector(`#${id}`).value.trim();
+}
+
+function betaOnboardingToken() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function betaOnboardingInviteUrl(token) {
+  const url = new URL(location.href);
+  url.hash = `invite_token=${encodeURIComponent(token)}`;
+  return url.toString();
+}
+
+async function betaOnboardingTokenHash(token) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function submitBetaOnboarding(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector('button[type="submit"]');
+  const status = form.querySelector('#betaOnboardingStatus');
+  button.disabled = true;
+  button.textContent = 'Creating workspace…';
+  status.className = 'invite-status';
+  status.textContent = 'Validating Platform Admin authorization and creating the controlled Beta workspace…';
+  try {
+    const inviteToken = betaOnboardingToken();
+    const tokenHash = await betaOnboardingTokenHash(inviteToken);
+    const { data, error } = await supabaseClient.rpc('beta_onboard_workspace', {
+      target_organization_name: betaOnboardingValue(form, 'onboardingOrganizationName'),
+      target_organization_slug: betaOnboardingValue(form, 'onboardingOrganizationSlug'),
+      target_team_name: betaOnboardingValue(form, 'onboardingTeamName'),
+      target_team_slug: betaOnboardingValue(form, 'onboardingTeamSlug'),
+      target_season_name: betaOnboardingValue(form, 'onboardingSeasonName'),
+      target_season_key: betaOnboardingValue(form, 'onboardingSeasonKey'),
+      target_season_starts_on: betaOnboardingValue(form, 'onboardingSeasonStartsOn'),
+      target_season_ends_on: betaOnboardingValue(form, 'onboardingSeasonEndsOn'),
+      target_plan_id: betaOnboardingValue(form, 'onboardingPlanId'),
+      target_branding_display_name: betaOnboardingValue(form, 'onboardingBrandDisplayName'),
+      target_branding_short_name: betaOnboardingValue(form, 'onboardingBrandShortName'),
+      target_branding_logo_url: betaOnboardingValue(form, 'onboardingBrandLogoUrl'),
+      target_branding_primary_color: betaOnboardingValue(form, 'onboardingBrandPrimaryColor'),
+      target_branding_secondary_color: betaOnboardingValue(form, 'onboardingBrandSecondaryColor'),
+      target_branding_accent_color: betaOnboardingValue(form, 'onboardingBrandAccentColor'),
+      target_coach_email: betaOnboardingValue(form, 'onboardingCoachEmail'),
+      target_coach_name: betaOnboardingValue(form, 'onboardingCoachName'),
+      target_coach_role_id: betaOnboardingValue(form, 'onboardingCoachRoleId'),
+      target_token_hash: tokenHash
+    });
+    if (error) throw error;
+    const result = Array.isArray(data) ? data[0] : data;
+    if (!result?.organization_id || !result?.team_id || !result?.season_id || !result?.invite_id) {
+      throw new Error('The onboarding request did not return a complete workspace.');
+    }
+    betaOnboardingSummary = {
+      organizationName: betaOnboardingValue(form, 'onboardingOrganizationName'),
+      teamName: betaOnboardingValue(form, 'onboardingTeamName'),
+      seasonName: betaOnboardingValue(form, 'onboardingSeasonName'),
+      planId: result.plan_id,
+      recognitionLabel: result.recognition_label,
+      inviteStatus: result.invite_status,
+      coachEmail: betaOnboardingValue(form, 'onboardingCoachEmail'),
+      inviteUrl: betaOnboardingInviteUrl(inviteToken)
+    };
+    render('platform-admin');
+  } catch (error) {
+    status.className = 'invite-status error';
+    status.textContent = error.message || 'The Beta workspace could not be created. No partial workspace was saved.';
+    button.disabled = false;
+    button.textContent = 'Create Beta workspace';
+  }
+}
+
+function bindBetaOnboardingControls() {
+  const form = document.querySelector('#betaOnboardingForm');
+  if (form) form.addEventListener('submit', submitBetaOnboarding);
+}
+
 async function activateWorkspace(organizationId, teamId, seasonId = null) {
   if (workspaceTransitioning) return;
   workspaceTransitioning = true;
@@ -978,6 +1092,7 @@ async function activateWorkspace(organizationId, teamId, seasonId = null) {
     teamContextManager.selectWorkspace(workspace);
     authTeam = teamContext.selectedMembership;
     authCapabilities = workspace.effective_capabilities.slice();
+    if (platformAdminAuthorized) authCapabilities.push('platform.admin');
     entitlements.setWorkspace(workspace);
     activeStaff = {
       ...activeStaff,
@@ -1034,8 +1149,9 @@ const NAV_SECTIONS = [
 ];
 
 function hasPlatformAdminAuthorization() {
-  return Boolean(currentWorkspace?.authorized)
-    && authCapabilities.includes('platform.admin');
+  return (typeof platformAdminAuthorized === 'boolean' && platformAdminAuthorized)
+    || (Boolean(currentWorkspace?.authorized)
+      && authCapabilities.includes('platform.admin'));
 }
 
 function navigationModel(authorizedForView, sections = NAV_SECTIONS) {
@@ -1198,21 +1314,24 @@ function renderRoleSwitcher() {
   }
 }
 function render(view = 'command') {
-  if (!currentWorkspace) {
+  if (!currentWorkspace && !hasPlatformAdminAuthorization()) {
     app.innerHTML = workspaceTransitioning
       ? workspaceLoadingPage()
       : (authUser ? workspaceUnavailablePage() : noWorkspacePage());
     renderWorkspaceIndicators();
     return;
   }
+  if (!currentWorkspace) view = 'platform-admin';
   if (!workspaceAuthorizedForView(view)) view = 'command';
-  const page = view === 'scouting'
-    ? scouting()
+  const page = view === 'platform-admin'
+    ? platformAdmin()
+    : view === 'scouting'
+      ? scouting()
     : phase1DataError
       ? shell('Team data unavailable', 'The authenticated workspace is available, but the live team data could not be read.', `<section class="card empty-view"><div class="empty-icon">!</div><h2>Unable to load synced team data</h2><p>${escapeHtml(phase1DataError)}</p><button class="btn primary" id="retryPhase1Data" type="button">Retry</button></section>`)
       : !phase1Data
         ? shell('Loading team data', 'Reading the live team roster, schedule, games, and stats…', '<section class="card empty-view"><div class="empty-icon">⌁</div><h2>Loading synced team data</h2><p>Please wait while the secure workspace reads your team data.</p></section>')
-        : view === 'command' ? command() : view === 'team' ? team() : view === 'schedule' ? schedule() : view === 'stats' ? stats() : view === 'players' ? players() : view === 'games' ? gameCenter() : view === 'film' ? film() : view === 'reports' ? reports() : view === 'development' ? development() : view === 'coaching' ? coaching() : view === 'management' ? management() : view === 'settings' ? settings() : view === 'support' ? support() : view === 'platform-admin' ? platformAdmin() : generic(view);
+        : view === 'command' ? command() : view === 'team' ? team() : view === 'schedule' ? schedule() : view === 'stats' ? stats() : view === 'players' ? players() : view === 'games' ? gameCenter() : view === 'film' ? film() : view === 'reports' ? reports() : view === 'development' ? development() : view === 'coaching' ? coaching() : view === 'management' ? management() : view === 'settings' ? settings() : view === 'support' ? support() : generic(view);
   const planNotice = currentWorkspace?.authorized && !currentWorkspace?.plan_id
     ? notice('This workspace does not have an active plan entitlement yet, so plan-gated modules and data stay hidden. Contact your organization administrator to provision the workspace plan.')
     : '';
@@ -1239,6 +1358,7 @@ function render(view = 'command') {
     }));
   }
   if (view === 'management') bindAdminControls();
+  if (view === 'platform-admin') bindBetaOnboardingControls();
   if (view === 'players') bindRosterControls();
   if (view === 'support') bindSupportControls();
   syncNavigation(view);
@@ -1388,6 +1508,17 @@ async function loadPhase2AData(teamId) {
   render('scouting');
 }
 
+async function acceptWorkspaceInviteForSignedInUser() {
+  if (!workspaceInviteToken || inviteAcceptanceAttempted) return false;
+  inviteAcceptanceAttempted = true;
+  const { error } = await supabaseClient.functions.invoke(WORKSPACE_INVITE_ACCEPT_FUNCTION, {
+    body: { token: workspaceInviteToken }
+  });
+  if (error) throw new Error(error.message || 'The workspace invitation could not be accepted.');
+  window.history.replaceState({}, document.title, `${location.pathname}${location.search}`);
+  return true;
+}
+
 async function loadAuthenticatedWorkspace(sessionUser = null) {
   if (activeStaff && currentWorkspace) return;
   if (workspaceTransitioning) return;
@@ -1398,6 +1529,7 @@ async function loadAuthenticatedWorkspace(sessionUser = null) {
       showLogin();
       return;
     }
+    await acceptWorkspaceInviteForSignedInUser();
     const { data: profile, error: profileError } = await supabaseClient.from('profiles').select('id,display_name').eq('id', user.id).single();
     let workspaces = [];
     let workspaceError = null;
@@ -1420,11 +1552,18 @@ async function loadAuthenticatedWorkspace(sessionUser = null) {
       role: 'Authenticated user',
       capabilities: []
     };
+    const { data: platformAuthorization, error: platformAuthorizationError } = await supabaseClient
+      .rpc('get_platform_authorization');
+    platformAdminAuthorized = !platformAuthorizationError
+      && (Array.isArray(platformAuthorization) ? platformAuthorization[0]?.platform_admin : platformAuthorization?.platform_admin) === true;
+    if (platformAuthorizationError) {
+      console.warn('Platform authorization could not be loaded:', platformAuthorizationError);
+    }
     organizationContextManager.load(workspaces);
     teamContextManager.setAuthorizedWorkspaces(workspaces);
     if (!workspaces.length) {
       clearTenantState();
-      render();
+      render(platformAdminAuthorized ? 'platform-admin' : 'command');
       appShell.hidden = false;
       appShell.removeAttribute('aria-hidden');
       authScreen.hidden = true;
@@ -1441,6 +1580,7 @@ async function loadAuthenticatedWorkspace(sessionUser = null) {
   } catch (error) {
     authUser = null;
     activeStaff = null;
+    platformAdminAuthorized = false;
     clearTenantState();
     console.error('Could not load the authenticated workspace:', error);
     showLogin('Unable to load your secure team workspace.');
@@ -1457,6 +1597,8 @@ async function signOut() {
   }
   authUser = null;
   activeStaff = null;
+  platformAdminAuthorized = false;
+  betaOnboardingSummary = null;
   organizationContextManager.clear();
   teamContextManager.clearSelection();
   clearTenantState();
@@ -1476,6 +1618,8 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
   if (!session && activeStaff) {
     authUser = null;
     activeStaff = null;
+    platformAdminAuthorized = false;
+    betaOnboardingSummary = null;
     organizationContextManager.clear();
     teamContextManager.clearSelection();
     clearTenantState();
