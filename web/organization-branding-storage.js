@@ -94,6 +94,42 @@
       };
     }
 
+    async function abortPreparedAsset(asset, finalizeError) {
+      // Best-effort cleanup for a prepared-and-uploaded-but-not-finalized
+      // asset. The ORIGINAL finalize error is always what gets thrown; this
+      // function only ever annotates it with orphan details for later
+      // reconciliation if any cleanup step itself fails.
+      try {
+        const aborted = await client.rpc('abort_organization_branding_asset', { target_asset_id: asset.asset_id });
+        if (aborted.error) {
+          finalizeError.orphanedBrandingAsset = {
+            assetId: asset.asset_id, bucketName: asset.bucket_name, objectPath: asset.object_path, reason: 'abort_rpc_failed'
+          };
+          return;
+        }
+        const target = Array.isArray(aborted.data) ? aborted.data[0] : aborted.data;
+        const bucketName = target?.bucket_name;
+        const objectPath = target?.object_path;
+        if (!bucketName || !objectPath) {
+          finalizeError.orphanedBrandingAsset = {
+            assetId: asset.asset_id, bucketName: asset.bucket_name, objectPath: asset.object_path, reason: 'missing_cleanup_path'
+          };
+          return;
+        }
+        // Remove ONLY the single, server-authorized object path returned by
+        // the abort RPC -- never a client-guessed or batch path.
+        const removal = await client.storage.from(bucketName).remove([objectPath]);
+        if (removal?.error) {
+          finalizeError.orphanedBrandingAsset = { assetId: asset.asset_id, bucketName, objectPath, reason: 'storage_remove_failed' };
+        }
+      } catch (cleanupError) {
+        finalizeError.orphanedBrandingAsset = {
+          assetId: asset.asset_id, bucketName: asset.bucket_name, objectPath: asset.object_path,
+          reason: cleanupError?.message || 'cleanup_threw'
+        };
+      }
+    }
+
     async function uploadAsset({ file, assetKey }) {
       const current = workspace();
       const validated = validateImageFile(file);
@@ -112,8 +148,17 @@
       if (upload.error) throw new Error(upload.error.message || 'Branding upload failed.');
       const publicUrl = stablePublicUrl(client, asset.object_path);
       if (!publicUrl) throw new Error('A stable public branding URL could not be generated.');
-      const finalized = await client.rpc('finalize_organization_branding_asset', { target_asset_id: asset.asset_id, public_url: publicUrl });
-      if (finalized.error) throw new Error(finalized.error.message || 'Branding upload could not be finalized.');
+      // The server derives and persists its own public URL from the
+      // server-generated path; it never accepts one from the client.
+      const finalized = await client.rpc('finalize_organization_branding_asset', { target_asset_id: asset.asset_id });
+      if (finalized.error) {
+        // prepare succeeded, upload succeeded, finalize failed: abort and
+        // clean up ONLY this newly prepared asset, then re-throw the
+        // ORIGINAL finalize error (never masked by a cleanup-step error).
+        const finalizeError = new Error(finalized.error.message || 'Branding upload could not be finalized.');
+        await abortPreparedAsset(asset, finalizeError);
+        throw finalizeError;
+      }
       return { ...asset, publicUrl };
     }
 
