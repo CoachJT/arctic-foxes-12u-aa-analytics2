@@ -41,6 +41,8 @@ let phase1Data = null;
 let phase1DataError = '';
 let phase2AData = null;
 let phase2ADataError = '';
+let statsSortKey = 'pts';
+let statsSortDir = 'desc';
 const teamContextManager = window.FoxesTeamContext.createTeamContext({ client: supabaseClient });
 const seasonContextManager = window.FoxesSeasonContext.createSeasonContext({ client: supabaseClient });
 const teamContext = teamContextManager.context;
@@ -435,7 +437,136 @@ function platformAdmin() {
 }
 
 function schedule() { return shell('Schedule','Live schedule synced from the team Windows app.',`<section class="card">${cardTitle(`Team schedule · ${phase1Data?.schedule?.length || 0} entries`,'Supabase read-only')}<div class="schedule-list">${(phase1Data?.schedule || []).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).map(game=>`<div class="schedule-item"><div class="schedule-date"><strong>${escapeHtml(new Date(`${game.date}T00:00:00`).toLocaleDateString(undefined,{month:'short',day:'2-digit'}).toUpperCase())}</strong>${escapeHtml(String(game.date).slice(0,4))}</div><div><h3>${escapeHtml(game.opponent)}</h3><p>${escapeHtml(game.home_away)} · ${escapeHtml(game.location || 'Location unavailable')}${game.time ? ` · ${escapeHtml(game.time)}` : ''}</p></div><span class="tag">${escapeHtml(game.game_type)}</span></div>`).join('') || '<div class="empty-view"><h2>No schedule entries</h2><p>No synced schedule entries are available for this team.</p></div>'}</div></section>`); }
-function stats() { const edit = can(PERMISSIONS.STATS_EDIT_OFFICIAL, activeStaff); const record = phase1Record(); const teamStats = phase1Data?.teamStats || []; const totals = teamStats.reduce((sum, row) => ({ shots: sum.shots + phase1Number(row.shots_for), pp: sum.pp + phase1Number(row.power_play_success), ppChances: sum.ppChances + phase1Number(row.power_play_chances), foW: sum.foW + phase1Number(row.faceoff_wins), foL: sum.foL + phase1Number(row.faceoff_losses) }), { shots: 0, pp: 0, ppChances: 0, foW: 0, foL: 0 }); return shell('Team Stats','Read-only statistics from the synced team game data.',`<div class="grid stat-grid">${[['RECORD',`${record.wins}–${record.losses}–${record.ties}`,`${record.games_played} games`],['SHOTS / GAME',(totals.shots / Math.max(teamStats.length,1)).toFixed(1),'From team game stats'],['FACE-OFFS',`${((totals.foW / Math.max(totals.foW + totals.foL,1)) * 100).toFixed(1)}%`,'From team game stats'],['PLAYER-STAT ROWS',String(phase1Data?.playerStats?.length || 0),'Synced player-stat rows']].map(x=>`<div class="card stat-card"><small>${x[0]}</small><strong>${x[1]}</strong><span>${x[2]}</span></div>`).join('')}</div><section class="card">${cardTitle('Season overview','Supabase read-only')}${edit ? '<span class="permission-lock">Official stat editing remains disabled in this web read-only phase.</span>' : '<span class="permission-lock">Statistics are read-only for this phase.</span>'}<div class="table-wrap"><table class="data-table"><thead><tr><th>Metric</th><th>Total</th><th>Average / rate</th></tr></thead><tbody>${[['Goals for',record.goals_for, (record.goals_for / Math.max(record.games_played,1)).toFixed(2)],['Goals against',record.goals_against,(record.goals_against / Math.max(record.games_played,1)).toFixed(2)],['Shots on goal',totals.shots,(totals.shots / Math.max(teamStats.length,1)).toFixed(1)],['Power-play successes',totals.pp,`${totals.ppChances ? ((totals.pp / totals.ppChances) * 100).toFixed(1) : '0.0'}%`],['Face-off wins',totals.foW,`${((totals.foW / Math.max(totals.foW + totals.foL,1)) * 100).toFixed(1)}%`]].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('')}</tbody></table></div></section>`); }
+function statsNumber(value) { const number = Number(value); return Number.isFinite(number) ? number : 0; }
+function statsValue(value) { const number = Number(value); return Number.isFinite(number) ? number : null; }
+function statsAccumulate(total, value) { const number = statsValue(value); return number === null ? total : (total === null ? number : total + number); }
+function statsPercent(value, total) { const denominator = statsNumber(total); return denominator > 0 ? statsNumber(value) / denominator * 100 : null; }
+function statsFormat(value, digits = 1) { return value === null || value === undefined || !Number.isFinite(Number(value)) ? '—' : Number.isInteger(Number(value)) ? String(value) : Number(value).toFixed(digits).replace(/0+$/, '').replace(/\.$/, ''); }
+function statsCompare(left, right) {
+  if (left === null || left === undefined) return right === null || right === undefined ? 0 : 1;
+  if (right === null || right === undefined) return -1;
+  const leftNumber = Number(left);
+  const rightNumber = Number(right);
+  if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) return leftNumber - rightNumber;
+  return String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: 'base' });
+}
+function statsDescendingCompare(left, right) { return statsCompare(right, left); }
+function statsRankedRows(rows, key) {
+  return rows.slice().sort((left, right) => statsDescendingCompare(left[key], right[key])
+    || statsDescendingCompare(left.pts, right.pts)
+    || statsDescendingCompare(left.g, right.g)
+    || String(left.name || '').localeCompare(String(right.name || ''), undefined, { sensitivity: 'base' })
+    || String(left.jersey_number || '').localeCompare(String(right.jersey_number || ''), undefined, { numeric: true, sensitivity: 'base' }));
+}
+function statsRows() {
+  const roster = new Map((phase1Data?.roster || []).map(player => [String(player.source_player_id), { ...player, gp: 0, g: null, a: null, sog: null, pim: null, pm: null, blocks: null, fow: null, fol: null, ppg: null, ppp: null, shg: null, shp: null }]));
+  (phase1Data?.playerStats || []).forEach(source => {
+    const key = String(source.source_player_id || '');
+    if (!key) return;
+    const row = roster.get(key) || { source_player_id: source.source_player_id, name: source.player_name || 'Player', jersey_number: source.jersey_number || '#', position: source.position || 'F', player_type: source.player_type || 'skater', gp: 0, g: null, a: null, sog: null, pim: null, pm: null, blocks: null, fow: null, fol: null, ppg: null, ppp: null, shg: null, shp: null };
+    row.gp += statsNumber(source.gp);
+    row.g = statsAccumulate(row.g, source.goals);
+    row.a = statsAccumulate(row.a, source.assists);
+    row.sog = statsAccumulate(row.sog, source.shots);
+    row.pim = statsAccumulate(row.pim, source.penalty_minutes);
+    row.pm = statsAccumulate(row.pm, source.plus_minus);
+    row.blocks = statsAccumulate(row.blocks, source.blocks);
+    row.fow = statsAccumulate(row.fow, source.faceoff_wins);
+    row.fol = statsAccumulate(row.fol, source.faceoff_losses);
+    row.ppg = statsAccumulate(row.ppg, source.power_play_goals);
+    row.ppp = statsAccumulate(row.ppp, source.power_play_points);
+    row.shg = statsAccumulate(row.shg, source.short_handed_goals);
+    row.shp = statsAccumulate(row.shp, source.short_handed_points);
+    roster.set(key, row);
+  });
+  return [...roster.values()]
+    .filter(row => !isGoalie(row))
+    .map(row => {
+      const faceoffAttempts = row.fow !== null && row.fol !== null ? row.fow + row.fol : null;
+      const pts = row.g !== null && row.a !== null ? row.g + row.a : null;
+      return {
+        ...row,
+        pts,
+        shootingPct: row.g !== null && row.sog !== null ? statsPercent(row.g, row.sog) : null,
+        faceoffPct: faceoffAttempts !== null ? statsPercent(row.fow, faceoffAttempts) : null,
+        faceoffAttempts
+      };
+    });
+}
+function goalieRows() {
+  const roster = new Map((phase1Data?.roster || []).map(player => [String(player.source_player_id), player]));
+  const totals = new Map();
+  (phase1Data?.playerStats || []).forEach(source => {
+    const key = String(source.source_player_id || '');
+    if (!key) return;
+    const player = roster.get(key) || {};
+    if (!isGoalie({ ...player, position: player.position || source.position, player_type: player.player_type || source.player_type, is_goalie: player.is_goalie || source.is_goalie })) return;
+    const row = totals.get(key) || { source_player_id: source.source_player_id, name: source.player_name || player.name || 'Goalie', jersey_number: player.jersey_number || source.jersey_number || '#', gp: 0, wins: 0, losses: 0, ties: 0, saves: null, goalsAgainst: null, shotsAgainst: null, minutes: null };
+    row.gp += statsNumber(source.gp);
+    row.wins += statsNumber(source.wins);
+    row.losses += statsNumber(source.losses);
+    row.ties += statsNumber(source.ties);
+    row.saves = statsAccumulate(row.saves, source.saves);
+    row.goalsAgainst = statsAccumulate(row.goalsAgainst, source.goals_against);
+    row.shotsAgainst = statsAccumulate(row.shotsAgainst, source.shots_against);
+    row.minutes = statsAccumulate(row.minutes, statsValue(source.minutes) ?? statsValue(source.toi_minutes));
+    totals.set(key, row);
+  });
+  return [...totals.values()].map(row => {
+    const shotsAgainst = row.shotsAgainst !== null ? row.shotsAgainst : (row.saves !== null && row.goalsAgainst !== null ? row.saves + row.goalsAgainst : null);
+    const savePct = row.saves !== null && shotsAgainst !== null && shotsAgainst > 0 ? row.saves / shotsAgainst : null;
+    const gaa = row.goalsAgainst !== null && row.minutes !== null && row.minutes > 0 ? row.goalsAgainst / (row.minutes / 60) : null;
+    return { ...row, shotsAgainst, savePct, gaa };
+  }).sort((left, right) => statsDescendingCompare(left.savePct, right.savePct)
+    || statsDescendingCompare(left.saves, right.saves)
+    || String(left.name || '').localeCompare(String(right.name || ''), undefined, { sensitivity: 'base' }));
+}
+function stats() {
+  const record = phase1Record(); const teamStats = phase1Data?.teamStats || []; const skaters = statsRows(); const goalies = goalieRows(); const activePlayers = activeRosterPlayers(phase1Data?.roster || []); const gp = statsNumber(record.games_played); const gf = statsNumber(record.goals_for); const ga = statsNumber(record.goals_against); const branding = seasonContext.branding || {}; const teamName = tenantName(); const mark = String(branding.short_name || branding.display_name || teamName || 'PN').replace(/\s+/g, '').slice(0, 2).toUpperCase();
+  const formatLeaderValue = (row, key, suffix) => `${statsFormat(key.endsWith('Pct') ? row[key] : row[key], key.endsWith('Pct') ? 1 : 0)}${suffix}`;
+  const renderSkaterHead = row => `<div class="leader-head"><span class="leader-jersey">#${escapeHtml(row.jersey_number || '#')}</span><div><strong>${escapeHtml(row.name || 'Player')}</strong><small>${escapeHtml(row.position || 'F')} · ${row.gp} GP</small></div></div>`;
+  const leader = (label, key, suffix, secondary) => {
+    const rows = statsRankedRows(skaters.filter(item => item[key] !== null), key);
+    if (!rows.length) return `<article class="leader-card empty"><span class="leader-type">${label}</span><div class="leader-empty">Unavailable — not tracked</div></article>`;
+    const leaders = rows.filter(row => row[key] === rows[0][key]);
+    return `<article class="leader-card${leaders.length > 1 ? ' tied' : ''}"><span class="leader-type">${label}</span>${leaders.map(renderSkaterHead).join('')}<div class="leader-stat"><strong>${formatLeaderValue(rows[0], key, suffix)}</strong><span>${leaders.length > 1 ? `Tied leader${leaders.length > 2 ? ` · ${leaders.length} players` : ''}` : secondary(rows[0])}</span></div></article>`;
+  };
+  const leaderCards = [leader('POINTS LEADER', 'pts', ' PTS', row => `${statsFormat(row.g, 0)} G • ${statsFormat(row.a, 0)} A`), leader('GOALS LEADER', 'g', ' G', row => `${statsFormat(row.sog, 0)} SOG`), leader('ASSISTS LEADER', 'a', ' A', row => `${statsFormat(row.pts, 0)} PTS`), leader('SHOTS LEADER', 'sog', ' S', row => `${statsFormat(row.shootingPct)}% SHOOTING`), leader('FACEOFF LEADER', 'faceoffPct', '%', row => `${statsFormat(row.fow, 0)} FOW`)];
+  const goalieLeaders = statsRankedRows(goalies.filter(row => row.savePct !== null), 'savePct');
+  const goalieLeaderValue = goalieLeaders[0];
+  leaderCards.push(goalieLeaderValue
+    ? `<article class="leader-card${goalieLeaders.filter(row => row.savePct === goalieLeaderValue.savePct).length > 1 ? ' tied' : ''}"><span class="leader-type">GOALIE SAVE % LEADER</span>${goalieLeaders.filter(row => row.savePct === goalieLeaderValue.savePct).map(row => `<div class="leader-head"><span class="leader-jersey">#${escapeHtml(row.jersey_number)}</span><div><strong>${escapeHtml(row.name)}</strong><small>G · ${row.gp} GP</small></div></div>`).join('')}<div class="leader-stat"><strong>${statsFormat(goalieLeaderValue.savePct * 100)}%</strong><span>${goalieLeaders.filter(row => row.savePct === goalieLeaderValue.savePct).length > 1 ? 'Tied leader' : `${statsFormat(goalieLeaderValue.saves, 0)} SV • ${statsFormat(goalieLeaderValue.goalsAgainst, 0)} GA`}</span></div></article>`
+    : '<article class="leader-card empty"><span class="leader-type">GOALIE SAVE % LEADER</span><div class="leader-empty">Unavailable — not tracked</div></article>');
+  const categories = [['Points', 'pts'], ['Goals', 'g'], ['Assists', 'a'], ['Shots', 'sog'], ['Shooting %', 'shootingPct'], ['PIM', 'pim'], ['Plus/Minus', 'pm'], ['Blocks', 'blocks'], ['Faceoff %', 'faceoffPct'], ['Power Play Points', 'ppp'], ['Short-Handed Points', 'shp']];
+  const topFive = categories.map(([label, key]) => {
+    const rows = statsRankedRows(skaters.filter(row => row[key] !== null), key).slice(0, 5);
+    let previousValue = null;
+    let displayedRank = 0;
+    return `<section class="card leaderboard-panel"><div class="card-title"><h2>${label}</h2><span class="tag">${rows.length ? 'Top 5' : 'Unavailable'}</span></div><ol class="leaderboard-list">${rows.length ? rows.map((row, index) => {
+      if (index === 0 || row[key] !== previousValue) displayedRank = index + 1;
+      previousValue = row[key];
+      return `<li class="leaderboard-item"><span class="leaderboard-rank rank-${Math.min(displayedRank, 3)}">${displayedRank}</span><span class="leaderboard-number">#${escapeHtml(row.jersey_number || '#')}</span><div class="leaderboard-meta"><strong>${escapeHtml(row.name || 'Player')}</strong><small>${escapeHtml(row.position || 'F')} · ${row.gp} GP</small></div><span class="leaderboard-stat">${key.endsWith('Pct') ? `${statsFormat(row[key])}%` : statsFormat(row[key], 0)}</span></li>`;
+    }).join('') : '<li class="leaderboard-empty">Unavailable — not tracked</li>'}</ol></section>`;
+  }).join('');
+  const columns = [['#', 'jersey_number'], ['Player', 'name'], ['Pos', 'position'], ['GP', 'gp'], ['G', 'g'], ['A', 'a'], ['PTS', 'pts'], ['SOG', 'sog'], ['S%', 'shootingPct'], ['PIM', 'pim'], ['+/-', 'pm'], ['Blocks', 'blocks'], ['FO', 'faceoffAttempts'], ['FOW', 'fow'], ['FO%', 'faceoffPct'], ['PPG', 'ppg'], ['PPP', 'ppp'], ['SHG', 'shg'], ['SHP', 'shp']];
+  const sorted = skaters.slice().sort((left, right) => {
+    const result = statsCompare(left[statsSortKey], right[statsSortKey])
+      || String(left.name || '').localeCompare(String(right.name || ''), undefined, { sensitivity: 'base' })
+      || String(left.jersey_number || '').localeCompare(String(right.jersey_number || ''), undefined, { numeric: true, sensitivity: 'base' });
+    return statsSortDir === 'asc' ? result : -result;
+  });
+  const skaterTable = sorted.map(row => `<tr><td class="team-number">#${escapeHtml(row.jersey_number || '#')}</td><td><div class="player-cell"><span class="player-photo">${escapeHtml(String(row.jersey_number || '#').slice(0, 2))}</span><strong>${escapeHtml(row.name || 'Player')}</strong></div></td><td>${escapeHtml(row.position || 'F')}</td><td>${row.gp}</td><td>${statsFormat(row.g, 0)}</td><td>${statsFormat(row.a, 0)}</td><td>${statsFormat(row.pts, 0)}</td><td>${statsFormat(row.sog, 0)}</td><td>${statsFormat(row.shootingPct)}${row.shootingPct === null ? '' : '%'}</td><td>${statsFormat(row.pim, 0)}</td><td>${statsFormat(row.pm, 0)}</td><td>${statsFormat(row.blocks, 0)}</td><td>${statsFormat(row.faceoffAttempts, 0)}</td><td>${statsFormat(row.fow, 0)}</td><td>${statsFormat(row.faceoffPct)}${row.faceoffPct === null ? '' : '%'}</td><td>${statsFormat(row.ppg, 0)}</td><td>${statsFormat(row.ppp, 0)}</td><td>${statsFormat(row.shg, 0)}</td><td>${statsFormat(row.shp, 0)}</td></tr>`).join('') || '<tr><td colspan="19" class="empty-state">No skater statistics are available.</td></tr>';
+  const goalieTable = goalies.map(row => `<tr><td class="team-number">#${escapeHtml(row.jersey_number)}</td><td><div class="player-cell"><span class="player-photo">G</span><strong>${escapeHtml(row.name)}</strong></div></td><td>${row.gp}</td><td>${row.wins}</td><td>${row.losses}</td><td>${row.ties}</td><td>${statsFormat(row.shotsAgainst, 0)}</td><td>${statsFormat(row.saves, 0)}</td><td>${statsFormat(row.goalsAgainst, 0)}</td><td>${row.savePct === null ? '—' : `${statsFormat(row.savePct * 100)}%`}</td><td>${row.gaa === null ? '—' : statsFormat(row.gaa)}</td></tr>`).join('') || '<tr><td colspan="11" class="empty-state">No legitimate goalie data exists.</td></tr>';
+  const teamStatsByGame = new Map(teamStats.map(row => [row.source_game_id, row]));
+  const today = phase1DateKey(new Date());
+  const trendRows = (phase1Data?.games || [])
+    .map((game, index) => ({ game, stats: teamStatsByGame.get(game.source_game_id) || null, index }))
+    .filter(({ game, stats }) => stats && String(game?.date || '') && String(game.date) <= today && statsValue(stats.goals_for) !== null && statsValue(stats.goals_against) !== null)
+    .sort((left, right) => String(left.game.date || '').localeCompare(String(right.game.date || '')) || left.index - right.index);
+  const trend = trendRows.map(({ game, stats }) => `<div class="trend-bar"><span style="height:${Math.max(12, statsNumber(stats.goals_for) * 18)}%"></span><small>${escapeHtml(String(game.date || '').slice(5) || 'Game')}</small></div>`).join('');
+  const trendAgainst = trendRows.map(({ game, stats }) => `<div class="trend-bar"><span class="trend-against" style="height:${Math.max(12, statsNumber(stats.goals_against) * 18)}%"></span><small>${escapeHtml(String(game.date || '').slice(5) || 'Game')}</small></div>`).join('');
+  return shell('TEAM ANALYTICS', 'Season Performance Dashboard', `<div class="stats-dashboard"><section class="stats-hero card"><div class="stats-hero-top"><div class="brand-cluster"><div class="org-mark">${escapeHtml(mark || 'PN')}</div><div><div class="eyebrow">${escapeHtml(branding.display_name || teamName)}</div><strong>${escapeHtml(teamName)}</strong></div></div><div class="stats-record-wrap"><span>Season record</span><strong>${record.wins}–${record.losses}–${record.ties}</strong></div></div><div class="stats-hero-meta"><div><div class="subtle-label">Team</div><strong>${escapeHtml(teamName)}</strong></div><div><div class="subtle-label">Season</div><strong>${escapeHtml(tenantSeasonName())}</strong></div><div><div class="subtle-label">Games</div><strong>${gp}</strong></div></div></section><section class="stats-metrics-grid">${[['Games Played', gp], ['Record', `${record.wins}–${record.losses}–${record.ties}`], ['Goals For', gf], ['Goals Against', ga], ['Goal Differential', gf - ga], ['Goals Per Game', statsFormat(gp ? gf / gp : null)], ['Goals Against Per Game', statsFormat(gp ? ga / gp : null)], ['Active Players', activePlayers.length]].map(([label, value]) => `<article class="card stats-metric"><div class="stat-legend">${label}</div><strong>${value}</strong><span>Synced season data</span></article>`).join('')}</section><section class="stats-section-header"><h2>Season Leaders</h2></section><section class="leader-card-grid">${leaderCards.join('')}</section><section class="stats-section-header"><h2>Top 5 Leaderboards</h2></section><section class="top5-grid">${topFive}</section><section class="stats-section-header"><h2>Skater Stat Table</h2></section><section class="card skater-table-shell"><div class="table-wrap"><table class="data-table compact-table"><thead><tr>${columns.map(([label, key]) => `<th><button class="table-sort" type="button" data-sort-key="${key}">${label}${statsSortKey === key ? (statsSortDir === 'asc' ? ' ↑' : ' ↓') : ''}</button></th>`).join('')}</tr></thead><tbody>${skaterTable}</tbody></table></div></section><section class="stats-section-header"><h2>Goalie Analytics</h2></section><section class="card goalie-shell"><div class="table-wrap"><table class="data-table compact-table"><thead><tr><th>#</th><th>Player</th><th>GP</th><th>W</th><th>L</th><th>T</th><th>SA</th><th>Saves</th><th>GA</th><th>Save %</th><th>GAA</th></tr></thead><tbody>${goalieTable}</tbody></table></div></section><section class="stats-section-header"><h2>Team Trends</h2></section><section class="card trend-shell"><div class="trend-pair"><div class="trend-chart">${trend || '<div class="trend-empty">No completed team trend data</div>'}</div><div class="trend-chart">${trendAgainst || '<div class="trend-empty">No completed team trend data</div>'}</div></div><div class="trend-label">Goals For / Goals Against by completed game</div></section></div>`);
+}
 function rosterCanManage() {
   return Boolean(currentWorkspace?.authorized)
     && can(PERMISSIONS.PLAYERS_EVALUATE, activeStaff)
@@ -1081,6 +1212,17 @@ function render(view = 'command') {
   if (seasonPill) seasonPill.firstChild.textContent = tenantSeasonName();
   document.querySelector('#retryPhase1Data')?.addEventListener('click', () => loadPhase1Data(authTeam.team_id));
   document.querySelector('#retryPhase2AData')?.addEventListener('click', () => loadPhase2AData(authTeam.team_id));
+  if (view === 'stats') {
+    app.querySelectorAll('[data-sort-key]').forEach(button => button.addEventListener('click', () => {
+      const key = button.dataset.sortKey;
+      if (statsSortKey === key) statsSortDir = statsSortDir === 'asc' ? 'desc' : 'asc';
+      else {
+        statsSortKey = key;
+        statsSortDir = key === 'name' || key === 'position' || key === 'jersey_number' ? 'asc' : 'desc';
+      }
+      render('stats');
+    }));
+  }
   if (view === 'management') bindAdminControls();
   if (view === 'players') bindRosterControls();
   if (view === 'support') bindSupportControls();
@@ -1183,7 +1325,7 @@ async function loadPhase1Data(teamId) {
   read('roster', 'team_roster_players', 'id,team_id,season_id,source_player_id,jersey_number,name,first_name,last_name,position,player_type,shoots,notes,status', PERMISSIONS.PLAYERS_VIEW);
   read('schedule', 'team_schedule_games', 'source_schedule_id,date,time,opponent,home_away,game_type,location,notes,linked_game_source_id', PERMISSIONS.SCHEDULE_VIEW);
   read('games', 'team_games', 'source_game_id,date,opponent,period_length_min', PERMISSIONS.GAMES_VIEW);
-  read('playerStats', 'team_game_player_stats', 'source_game_id,source_player_id,player_type,gp,goals,assists,shots,penalty_minutes,plus_minus,blocks,faceoff_wins,faceoff_losses,faceoff_attempts,power_play_goals,power_play_assists,power_play_points,short_handed_goals,short_handed_assists,short_handed_points,game_winning_goals,game_tying_goals,takeaways,giveaways,chances,toi_minutes,minutes,saves,goals_against,wins,losses,ties,shutouts', PERMISSIONS.STATS_VIEW);
+  read('playerStats', 'team_game_player_stats', 'source_game_id,source_player_id,player_type,gp,goals,assists,shots,penalty_minutes,plus_minus,blocks,faceoff_wins,faceoff_losses,faceoff_attempts,power_play_goals,power_play_assists,power_play_points,short_handed_goals,short_handed_assists,short_handed_points,game_winning_goals,game_tying_goals,takeaways,giveaways,chances,toi_minutes,minutes,saves,shots_against,goals_against,wins,losses,ties,shutouts', PERMISSIONS.STATS_VIEW);
   read('teamStats', 'team_game_team_stats', 'source_game_id,goals_for,goals_against,shots_for,shots_against,power_play_chances,power_play_success,penalty_kill_chances,penalty_kill_success,faceoff_wins,faceoff_losses', PERMISSIONS.STATS_VIEW);
   const seasonRequest = can(PERMISSIONS.REPORTS_VIEW, activeStaff)
     ? supabaseClient.from('team_season_records').select('season_key,games_played,wins,losses,ties,goals_for,goals_against,source_game_count').eq('team_id', teamId).order('computed_at', { ascending: false }).limit(1).maybeSingle().then(({ data, error }) => { if (error) throw new Error(`season record: ${error.message}`); return ['seasonRecord', data]; })
