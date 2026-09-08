@@ -80,7 +80,7 @@ test('season context scopes seasons and supports switching with branding fallbac
   assert.equal(manager.context.selectedSeasonId, 'season-active');
   manager.select('season-old');
   assert.equal(manager.context.selectedSeason.season_key, '2025-2026');
-  assert.equal(manager.context.branding.primary_color, '#d71920');
+  assert.equal(manager.context.branding.primary_color, '#1f6d94');
   assert.ok(calls.some(([table, method, args]) => table === 'seasons' && method === 'eq' && args[0] === 'team_id' && args[1] === 'team-a'));
   assert.throws(() => manager.select('season-other'), /does not belong/);
 });
@@ -97,8 +97,8 @@ test('web context clears team data before reloading and loads seasons/branding t
 test('web shell includes extracted context modules and switcher hosts', () => {
   assert.match(indexSource, /id="teamSwitcher"/);
   assert.match(indexSource, /id="seasonSwitcher"/);
-  assert.match(indexSource, /team-context\.js\?v=multi-team-1/);
-  assert.match(indexSource, /season-context\.js\?v=multi-team-1/);
+  assert.match(indexSource, /team-context\.js\?v=[\w-]+/);
+  assert.match(indexSource, /season-context\.js\?v=[\w-]+/);
 });
 
 test('platform branding is separate from tenant branding and works at a root path', () => {

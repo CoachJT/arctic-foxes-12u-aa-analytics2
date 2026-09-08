@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#07111e" />
     <title>PuckNexus | The Connected Hockey Platform</title>
-    <link rel="stylesheet" href="./styles.css?v=beta-stage-1" />
+    <link rel="stylesheet" href="./styles.css?v=beta-stage-1-1" />
   </head>
   <body>
     <div class="auth-screen" id="authScreen" hidden></div>
@@ -23,28 +23,28 @@
         </div>
         <button class="mobile-close" id="closeSidebar" aria-label="Close navigation">×</button>
         <nav class="nav" aria-label="Primary navigation">
-          <p class="nav-label">Overview</p>
-          <button class="nav-item active" data-view="command" aria-current="page"><span>⌂</span> Home</button>
-          <button class="nav-item" data-view="team"><span>🛡</span> Team</button>
-          <button class="nav-item" data-view="schedule"><span>◷</span> Schedule</button>
-          <button class="nav-item" data-view="games"><span>▣</span> Games</button>
+          <p class="nav-label" data-section="overview">Overview</p>
+          <button class="nav-item active" data-section="overview" data-view="command" aria-current="page"><span>⌂</span> Home</button>
+          <button class="nav-item" data-section="overview" data-view="team"><span>🛡</span> Team</button>
+          <button class="nav-item" data-section="overview" data-view="schedule"><span>◷</span> Schedule</button>
+          <button class="nav-item" data-section="overview" data-view="games"><span>▣</span> Games</button>
 
-          <p class="nav-label">Analytics & Roster</p>
-          <button class="nav-item" data-view="players"><span>♙</span> Players</button>
-          <button class="nav-item" data-view="stats"><span>↗</span> Stats</button>
-          <button class="nav-item" data-view="film"><span>🎬</span> Film Room</button>
-          <button class="nav-item" data-view="scouting"><span>⌁</span> Scouting</button>
-          <button class="nav-item" data-view="reports"><span>▤</span> Reports</button>
+          <p class="nav-label" data-section="analytics">Analytics & Roster</p>
+          <button class="nav-item" data-section="analytics" data-view="players"><span>♙</span> Players</button>
+          <button class="nav-item" data-section="analytics" data-view="stats"><span>↗</span> Stats</button>
+          <button class="nav-item" data-section="analytics" data-view="film"><span>🎬</span> Film Room</button>
+          <button class="nav-item" data-section="analytics" data-view="scouting"><span>⌁</span> Scouting</button>
+          <button class="nav-item" data-section="analytics" data-view="reports"><span>▤</span> Reports</button>
 
-          <p class="nav-label">Coaching & Dev</p>
-          <button class="nav-item" data-view="development"><span>📈</span> Player Development</button>
-          <button class="nav-item" data-view="coaching"><span>📋</span> Coaching Tools</button>
-          <button class="nav-item" data-view="management"><span>⚙</span> Team Management</button>
+          <p class="nav-label" data-section="coaching">Coaching & Dev</p>
+          <button class="nav-item" data-section="coaching" data-view="development"><span>📈</span> Player Development</button>
+          <button class="nav-item" data-section="coaching" data-view="coaching"><span>📋</span> Coaching Tools</button>
+          <button class="nav-item" data-section="coaching" data-view="management"><span>⚙</span> Team Management</button>
 
-          <p class="nav-label">System</p>
-          <button class="nav-item" data-view="support"><span>?</span> Support</button>
-          <button class="nav-item" data-view="admin"><span>♙</span> Admin</button>
-          <button class="nav-item" data-view="settings"><span>⚙</span> Settings</button>
+          <p class="nav-label" data-section="system">System</p>
+          <button class="nav-item" data-section="system" data-view="support"><span>?</span> Support</button>
+          <button class="nav-item" data-section="system" data-view="admin"><span>♙</span> Admin</button>
+          <button class="nav-item" data-section="system" data-view="settings"><span>⚙</span> Settings</button>
         </nav>
         <div class="sidebar-foot">
           <div class="sample-badge"><span class="pulse"></span> PuckNexus Beta Workspace</div>
@@ -78,13 +78,13 @@
     <script src="./permissions.js?v=live-auth"></script>
     <script src="./platform-branding.js?v=pucknexus-1"></script>
     <script src="./team-context.js?v=multi-team-1"></script>
-    <script src="./season-context.js?v=multi-team-1"></script>
+    <script src="./season-context.js?v=beta-stage-1-1"></script>
     <script src="./organization-context.js?v=login-fix-2"></script>
     <script src="./workspace-access.js?v=stage-e-1"></script>
     <script src="./entitlements.js?v=login-fix-2"></script>
     <script src="./roster-management.js?v=stage-f-1"></script>
     <script src="./media-storage.js?v=stage-f-2"></script>
     <script src="./support-reporting.js?v=stage-f-2"></script>
-    <script src="./app.js?v=beta-stage-1"></script>
+    <script src="./app.js?v=beta-stage-1-1"></script>
   </body>
 </html>

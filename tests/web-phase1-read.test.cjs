@@ -74,6 +74,11 @@ function renderStage1(phase1Data, now = '2026-09-08T12:00:00') {
     ${extractFunction(app, 'phase1ScheduleSort')}
     ${extractFunction(app, 'phase1NextScheduledGame')}
     ${extractFunction(app, 'phase1LatestCompletedGame')}
+    ${extractFunction(app, 'playerStatTotals')}
+    ${extractFunction(app, 'rosterDisplayName')}
+    ${extractFunction(app, 'isGoalie')}
+    ${extractFunction(app, 'leaders')}
+    ${extractFunction(app, 'recent')}
     ${extractFunction(app, 'escapeHtml')}
     ${extractFunction(app, 'command')}
     ${extractFunction(app, 'team')}
