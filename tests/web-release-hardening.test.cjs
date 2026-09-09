@@ -45,7 +45,8 @@ test('coach-facing errors are translated, not raw database or RPC payloads', () 
 });
 
 test('admin invite actions and beta toggles always round-trip through guarded RPCs', () => {
-  assert.match(adminSource, /admin_resend_invitation/);
+  assert.match(adminSource, /functions\.invoke\('invite-staff'/);
+  assert.match(adminSource, /action: 'resend_setup'/);
   assert.match(adminSource, /admin_revoke_invitation/);
   assert.match(adminSource, /admin_set_beta_status/);
   assert.doesNotMatch(adminSource, /\.from\('platform_roles'\)|\.from\('organizations'\)\.(insert|update|delete)/);
@@ -70,7 +71,7 @@ test('release documentation exists and covers the acceptance areas', () => {
     assert.match(checklist, new RegExp(`## ${section}`), section);
   }
   const deferred = fs.readFileSync('docs/PUCKNEXUS-2.0-DEFERRED.md', 'utf8');
-  assert.match(deferred, /platform_roles/);
+  assert.match(deferred, /platform_admins/);
   assert.match(deferred, /logo upload/i);
   assert.match(deferred, /Electron/i);
 });

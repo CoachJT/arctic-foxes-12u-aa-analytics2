@@ -52,7 +52,14 @@
 
     function context() {
       const ctx = getContext?.() || {};
-      return { teamId: ctx.teamId || '', seasonKey: ctx.seasonKey || '', capabilities: ctx.capabilities || [], schedule: ctx.schedule || [], roster: ctx.roster || [] };
+      return {
+        teamId: ctx.teamId || '',
+        seasonId: ctx.seasonId || '',
+        seasonKey: ctx.seasonKey || '',
+        capabilities: ctx.capabilities || [],
+        schedule: ctx.schedule || [],
+        roster: ctx.roster || []
+      };
     }
 
     function canWrite(capability) {
@@ -79,8 +86,9 @@
 
     async function addGame(fields) {
       if (pendingAction === 'add-game') throw new Error('This game is already being added.');
-      const { teamId } = context();
+      const { teamId, seasonId } = context();
       if (!teamId) throw new Error('No team is selected.');
+      if (!seasonId) throw new Error('No season is selected.');
       if (!canWrite('schedule.edit')) throw new Error('You do not have schedule editing access.');
       const date = String(fields.date || '').trim();
       const opponent = String(fields.opponent || '').trim();
@@ -108,8 +116,9 @@
     }
 
     async function editGame(scheduleId, fields) {
-      const { teamId } = context();
+      const { teamId, seasonId } = context();
       if (!teamId) throw new Error('No team is selected.');
+      if (!seasonId) throw new Error('No season is selected.');
       if (!canWrite('schedule.edit')) throw new Error('You do not have schedule editing access.');
       const date = String(fields.date || '').trim();
       const opponent = String(fields.opponent || '').trim();
@@ -236,47 +245,48 @@
     }
 
     async function saveStats() {
-      const { teamId } = context();
+      const { teamId, seasonId } = context();
       if (!teamId) throw new Error('No team is selected.');
+      if (!seasonId) throw new Error('No season is selected.');
       if (!canWrite('stats.edit')) throw new Error('You do not have stats editing access.');
       if (!draft.gameId) throw new Error('Open a game before saving stats.');
       if (saveState === SAVE_STATES.SAVING) throw new Error('Stats are already being saved.');
       saveState = SAVE_STATES.SAVING;
       try {
         const skaters = Object.entries(draft.skaters).map(([playerId, row]) => ({
-          player_id: playerId,
+          source_player_id: playerId,
           gp: numeric(row.gp ?? 1, 'GP'),
-          g: numeric(row.goals, 'Goals'),
-          a: numeric(row.assists, 'Assists'),
+          goals: numeric(row.goals, 'Goals'),
+          assists: numeric(row.assists, 'Assists'),
           shots: numeric(row.shots, 'Shots'),
-          pim: numeric(row.penalty_minutes, 'PIM'),
+          penalty_minutes: numeric(row.penalty_minutes, 'PIM'),
           plus_minus: Number(row.plus_minus || 0),
           blocks: numeric(row.blocks, 'Blocks'),
-          fow: numeric(row.faceoff_wins, 'Faceoffs won'),
-          fol: numeric(row.faceoff_losses, 'Faceoffs lost'),
-          ppg: numeric(row.power_play_goals, 'PPG'),
-          ppp: numeric(row.power_play_points, 'PPP'),
-          shg: numeric(row.short_handed_goals, 'SHG'),
-          shp: numeric(row.short_handed_points, 'SHP'),
-          gwg: numeric(row.game_winning_goals, 'GWG'),
-          gtg: numeric(row.game_tying_goals, 'GTG')
+          faceoff_wins: numeric(row.faceoff_wins, 'Faceoffs won'),
+          faceoff_losses: numeric(row.faceoff_losses, 'Faceoffs lost'),
+          power_play_goals: numeric(row.power_play_goals, 'PPG'),
+          power_play_points: numeric(row.power_play_points, 'PPP'),
+          short_handed_goals: numeric(row.short_handed_goals, 'SHG'),
+          short_handed_points: numeric(row.short_handed_points, 'SHP')
         }));
         const goalies = Object.entries(draft.goalies).map(([playerId, row]) => ({
-          player_id: playerId,
+          source_player_id: playerId,
           gp: numeric(row.gp ?? 1, 'GP'),
           minutes: numeric(row.minutes ?? 0, 'Minutes'),
           saves: numeric(row.saves, 'Saves'),
-          ga: numeric(row.goals_against, 'Goals against'),
-          w: numeric(row.wins, 'Wins'),
-          l: numeric(row.losses, 'Losses'),
-          t: numeric(row.ties, 'Ties'),
-          so: numeric(row.shutouts, 'Shutouts')
+          goals_against: numeric(row.goals_against, 'Goals against'),
+          wins: numeric(row.wins, 'Wins'),
+          losses: numeric(row.losses, 'Losses'),
+          ties: numeric(row.ties, 'Ties'),
+          shutouts: numeric(row.shutouts, 'Shutouts')
         }));
-        const { error } = await client.rpc('coach_save_game_stats', {
+        const { error } = await client.rpc('save_game_stats', {
           target_team_id: teamId,
-          target_game_source_id: draft.gameId,
-          skater_rows: skaters,
-          goalie_rows: goalies
+          target_season_id: seasonId,
+          target_source_game_id: draft.gameId,
+          skater_stats: skaters,
+          goalie_stats: goalies,
+          team_stats: null
         });
         if (error) throw new Error(error.message);
         saveState = SAVE_STATES.SAVED;
@@ -334,23 +344,30 @@
     // ---------- Roster ----------
 
     async function addPlayer(fields) {
-      const { teamId } = context();
+      const { teamId, seasonId } = context();
       if (!teamId) throw new Error('No team is selected.');
       if (!canWrite('players.evaluate')) throw new Error('You do not have roster editing access.');
       const jersey = String(fields.jerseyNumber || '').trim();
       const name = String(fields.name || '').trim();
       const position = String(fields.position || 'F').trim().toUpperCase();
+      const nameParts = name.split(/\s+/).filter(Boolean);
       if (!jersey) throw new Error('Enter a jersey number.');
       if (!name) throw new Error('Enter the player name.');
+      if (nameParts.length < 2) throw new Error('Enter the player first and last name.');
       if (!['F', 'D', 'G'].includes(position)) throw new Error('Position must be F, D, or G.');
       const existing = (context().roster || []).find(p => String(p.jersey_number) === jersey);
       if (existing) throw new Error(`Jersey #${jersey} is already assigned to ${existing.name}.`);
       const { data, error } = await client.from('team_roster_players').insert({
         team_id: teamId,
+        season_id: seasonId || null,
         source_player_id: `web-${crypto.randomUUID()}`,
         jersey_number: jersey,
         name,
-        position
+        first_name: nameParts.shift(),
+        last_name: nameParts.join(' '),
+        position,
+        player_type: position === 'G' ? 'goalie' : 'skater',
+        status: 'active'
       }).select().single();
       if (error) throw new Error(error.message);
       onChanged?.('roster');
@@ -363,14 +380,19 @@
       if (!canWrite('players.evaluate')) throw new Error('You do not have roster editing access.');
       const name = String(fields.name || '').trim();
       const position = String(fields.position || 'F').trim().toUpperCase();
+      const nameParts = name.split(/\s+/).filter(Boolean);
       if (!name) throw new Error('Enter the player name.');
+      if (nameParts.length < 2) throw new Error('Enter the player first and last name.');
       if (!['F', 'D', 'G'].includes(position)) throw new Error('Position must be F, D, or G.');
       const clash = (context().roster || []).find(p => p.id !== playerId && String(p.jersey_number) === String(fields.jerseyNumber).trim());
       if (clash) throw new Error(`Jersey #${String(fields.jerseyNumber).trim()} is already assigned to ${clash.name}.`);
       const { data, error } = await client.from('team_roster_players').update({
         jersey_number: String(fields.jerseyNumber || '').trim(),
         name,
+        first_name: nameParts.shift(),
+        last_name: nameParts.join(' '),
         position,
+        player_type: position === 'G' ? 'goalie' : 'skater',
         updated_at: new Date().toISOString()
       }).eq('id', playerId).eq('team_id', teamId).select();
       if (error) throw new Error(error.message);
@@ -383,8 +405,13 @@
       const { teamId } = context();
       if (!teamId) throw new Error('No team is selected.');
       if (!canWrite('players.evaluate')) throw new Error('You do not have roster editing access.');
-      const { error } = await client.from('team_roster_players').delete().eq('id', playerId).eq('team_id', teamId);
+      const { data, error } = await client.from('team_roster_players')
+        .update({ status: 'inactive', updated_at: new Date().toISOString() })
+        .eq('id', playerId)
+        .eq('team_id', teamId)
+        .select();
       if (error) throw new Error(error.message);
+      if (!data || !data.length) throw new Error('That player was not found on this team.');
       onChanged?.('roster');
       return true;
     }

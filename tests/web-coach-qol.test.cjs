@@ -7,7 +7,7 @@ const coachSource = fs.readFileSync('web/coach-qol.js', 'utf8');
 const appSource = fs.readFileSync('web/app.js', 'utf8');
 const indexSource = fs.readFileSync('web/index.html', 'utf8');
 const stylesSource = fs.readFileSync('web/styles.css', 'utf8');
-const migrationSource = fs.readFileSync('supabase/migrations/010_coach_qol_writes.sql', 'utf8');
+const migrationSource = fs.readFileSync('supabase/migrations/20260908073105_016_game_stat_entry.sql', 'utf8');
 
 function makeClient({ insertError = null, rpcError = null, onInsert } = {}) {
   const calls = { insert: [], update: [], delete: [], rpc: [] };
@@ -39,6 +39,7 @@ function loadCoach(clientOptions, contextValues = {}) {
     client: makeClient(clientOptions),
     getContext: () => ({
       teamId: 'team-1',
+      seasonId: 'season-1',
       seasonKey: '2026-2027',
       capabilities: ['schedule.edit', 'stats.edit', 'players.evaluate'],
       schedule: [],
@@ -124,7 +125,7 @@ test('bulk save is one atomic RPC keyed by game — saving twice upserts, never 
   const client = coach;
   assert.ok(client);
   assert.equal(coach.saveState, 'saved');
-  assert.match(migrationSource, /on conflict \(team_id, source_game_id, source_player_id, player_type\) do update/);
+  assert.match(migrationSource, /on conflict \(team_id, source_game_id, source_player_id, player_type\)\s+do update/);
 });
 
 test('failed save keeps the dirty draft on screen and marks the error state', async () => {
@@ -159,14 +160,14 @@ test('quick add validates, blocks duplicate jerseys, and stays on the form', asy
   const coach = loadCoach({}, { roster: [{ id: 'r1', source_player_id: 'p7', jersey_number: '7', name: 'Jane Smith', position: 'F' }] });
   const added = await coach.addPlayer({ jerseyNumber: '9', name: 'Alex Doe', position: 'D' });
   assert.equal(added.jersey_number, '9');
-  await assert.rejects(coach.addPlayer({ jerseyNumber: '7', name: 'Other', position: 'F' }), /already assigned to Jane Smith/);
+  await assert.rejects(coach.addPlayer({ jerseyNumber: '7', name: 'Other Player', position: 'F' }), /already assigned to Jane Smith/);
   await assert.rejects(coach.addPlayer({ jerseyNumber: '10', name: '', position: 'F' }), /player name/);
-  await assert.rejects(coach.addPlayer({ jerseyNumber: '10', name: 'X', position: 'C' }), /F, D, or G/);
+  await assert.rejects(coach.addPlayer({ jerseyNumber: '10', name: 'X Player', position: 'C' }), /F, D, or G/);
 });
 
 test('roster edits and removals are scoped to the current team', async () => {
-  const coach = loadCoach({}, { roster: [{ id: 'r1', source_player_id: 'p7', jersey_number: '7', name: 'Jane', position: 'F' }] });
-  await assert.rejects(coach.editPlayer('r1', { jerseyNumber: '7', name: 'Jane', position: 'X' }), /F, D, or G/);
+  const coach = loadCoach({}, { roster: [{ id: 'r1', source_player_id: 'p7', jersey_number: '7', name: 'Jane Smith', position: 'F' }] });
+  await assert.rejects(coach.editPlayer('r1', { jerseyNumber: '7', name: 'Jane Smith', position: 'X' }), /F, D, or G/);
   const updated = await coach.editPlayer('r1', { jerseyNumber: '8', name: 'Jane Smith', position: 'D' });
   assert.equal(updated.id, 'row-1');
   assert.ok(await coach.removePlayer('r1'));
@@ -235,15 +236,17 @@ test('all web coach writes live in coach-qol.js; app.js makes no direct mutation
   assert.doesNotMatch(appSource, /\.(insert|update|upsert|delete)\(/);
   assert.match(coachSource, /from\('team_schedule_games'\)/);
   assert.match(coachSource, /from\('team_roster_players'\)/);
-  assert.match(coachSource, /rpc\('coach_save_game_stats'/);
+  assert.match(coachSource, /rpc\('save_game_stats'/);
 });
 
 test('bulk save RPC is guarded, atomic, and team-scoped server-side', () => {
-  assert.match(migrationSource, /function public\.coach_save_game_stats\(/);
-  assert.match(migrationSource, /if not public\.has_team_capability\(target_team_id, 'stats\.edit'\) then/);
+  assert.match(migrationSource, /function public\.save_game_stats\(/);
+  assert.match(migrationSource, /has_workspace_feature_access\(target_team_id, target_season_id, 'stats\.edit', 'stats'\)/);
+  assert.match(migrationSource, /parse_finite_stat/);
+  assert.match(migrationSource, /source_player_id/);
   assert.match(migrationSource, /security definer/);
-  assert.match(migrationSource, /revoke all on function public\.coach_save_game_stats/);
-  assert.match(migrationSource, /grant execute on function public\.coach_save_game_stats\(uuid, text, jsonb, jsonb\) to authenticated/);
+  assert.match(migrationSource, /revoke all on function public\.save_game_stats/);
+  assert.match(migrationSource, /grant execute on function public\.save_game_stats\(uuid, uuid, text, jsonb, jsonb, jsonb\) to authenticated/);
   assert.doesNotMatch(migrationSource, /\bdelete from\b/i);
   assert.doesNotMatch(migrationSource, /\bdrop table\b/i);
 });

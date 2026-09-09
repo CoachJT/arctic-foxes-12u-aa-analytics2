@@ -7,8 +7,8 @@ const adminSource = fs.readFileSync('web/platform-admin.js', 'utf8');
 const appSource = fs.readFileSync('web/app.js', 'utf8');
 const indexSource = fs.readFileSync('web/index.html', 'utf8');
 const stylesSource = fs.readFileSync('web/styles.css', 'utf8');
-const migrationSource = fs.readFileSync('supabase/migrations/008_platform_admin_dashboard.sql', 'utf8');
-const stage2Migration = fs.readFileSync('supabase/migrations/007_platform_identity_and_roles.sql', 'utf8');
+const migrationSource = fs.readFileSync('supabase/migrations/20260909000100_020_reconciled_platform_admin_dashboard.sql', 'utf8');
+const deliveryMigration = fs.readFileSync('supabase/migrations/20260909000300_022_reconciled_workspace_invite_delivery.sql', 'utf8');
 
 function elementStub() {
   return { innerHTML: '', classList: { add() {} }, querySelector: () => null, querySelectorAll: () => [] };
@@ -193,7 +193,8 @@ test('invitation statuses render distinctly and actions only appear for actionab
 });
 
 test('admin invite actions call only the server-authorized RPCs', () => {
-  assert.match(adminSource, /admin_resend_invitation/);
+  assert.match(adminSource, /functions\.invoke\('invite-staff'/);
+  assert.match(adminSource, /action: 'resend_setup'/);
   assert.match(adminSource, /admin_revoke_invitation/);
   assert.doesNotMatch(adminSource, /\.from\('team_invitations'\)/);
   assert.doesNotMatch(adminSource, /\.(insert|update|delete)\(/);
@@ -202,7 +203,7 @@ test('admin invite actions call only the server-authorized RPCs', () => {
 test('beta state is database-backed through a guarded RPC', () => {
   assert.match(adminSource, /admin_set_beta_status/);
   assert.match(migrationSource, /beta_status text not null default 'none'/);
-  assert.match(migrationSource, /function public\.admin_set_beta_status\(target_kind text, target_id uuid, new_status text\)/);
+  assert.match(migrationSource, /function public\.admin_set_beta_status\(\s*target_kind text,\s*target_id uuid,\s*new_status text\s*\)/);
   assert.match(migrationSource, /if not public\.is_platform_admin\(\) then[\s\S]{0,200}raise exception 'Platform Admin access is required\.'/);
 });
 
@@ -221,7 +222,7 @@ test('every admin read RPC is guarded by is_platform_admin server-side', () => {
     assert.match(migrationSource, new RegExp(`function public\\.${name}\\(`), name);
   }
   const guarded = migrationSource.match(/public\.is_platform_admin\(\)/g) || [];
-  assert.ok(guarded.length >= 10, 'every read filter and write guard must reference is_platform_admin()');
+  assert.ok(guarded.length >= 8, 'every read filter and write guard must reference is_platform_admin() directly or through a guarded RPC');
   assert.match(migrationSource, /security definer/);
   assert.match(migrationSource, /revoke all on function public\.admin_list_users\(\) from public/);
 });
@@ -231,16 +232,16 @@ test('admin dashboard migration is additive and contains no founder management',
   assert.doesNotMatch(migrationSource, /\bdrop table\b/i);
   assert.doesNotMatch(migrationSource, /insert into public\.platform_roles/);
   assert.doesNotMatch(migrationSource, /make_founder|grant_founder/);
-  assert.match(stage2Migration, /role = 'platform_admin' or public\.is_platform_founder\(\)/);
+  assert.match(migrationSource, /platform_admins_role_check/);
+  assert.match(migrationSource, /create or replace function public\.is_platform_founder\(\)/);
 });
 
 test('invitation lifecycle is first-class and expires pending rows safely', () => {
-  assert.match(migrationSource, /create table public\.team_invitations/);
-  assert.match(migrationSource, /status in \('pending', 'accepted', 'expired', 'revoked'\)/);
-  assert.match(migrationSource, /expires_at timestamptz not null default \(now\(\) \+ interval '14 days'\)/);
-  assert.match(migrationSource, /when i\.status = 'pending' and i\.expires_at < now\(\) then 'expired'/);
-  assert.match(migrationSource, /Only pending invitations can be resent\./);
-  assert.match(migrationSource, /Only pending or expired invitations can be revoked\./);
+  assert.match(migrationSource, /from public\.workspace_invites invite/);
+  assert.match(migrationSource, /when invite\.status = 'pending'[\s\S]*then 'expired'/);
+  assert.match(migrationSource, /Only pending invitations can be revoked\./);
+  assert.match(deliveryMigration, /create or replace function public\.claim_workspace_invite_delivery/);
+  assert.match(deliveryMigration, /create or replace function public\.rotate_workspace_invite_delivery_token/);
 });
 
 test('app routes the platform admin destination to the dashboard and unmounts on clear', () => {

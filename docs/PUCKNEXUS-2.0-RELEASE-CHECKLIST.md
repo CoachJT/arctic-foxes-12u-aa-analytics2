@@ -52,5 +52,6 @@ Run through this before every major release. Do not skip the security section.
 
 ## Data
 - [ ] `npm test` passes with zero failures
-- [ ] A clean database applies migrations 001→010 without error
-- [ ] An existing pre-2.0 database upgrades without data loss
+- [ ] A PostgreSQL 16 validation database applies authoritative migrations 001–019 plus reconciliation migrations 020–022 without error
+- [ ] Production migration history reports 001–019 as applied and only reviewed post-019 migrations as pending
+- [ ] Existing Arctic Foxes users, roster, games, stats, memberships, branding, storage, and analytics remain intact

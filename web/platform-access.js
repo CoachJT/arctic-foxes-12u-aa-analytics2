@@ -1,7 +1,6 @@
 (function attachPlatformAccess(global) {
-  // Platform access is resolved exclusively from the database: the caller's own
-  // platform_roles rows plus the authoritative is_platform_admin() RPC. Browser
-  // storage, URL parameters, and editable client state are never consulted.
+  // Platform access is resolved exclusively by the production authorization
+  // function backed by platform_admins. Browser state is never authoritative.
   // A platform admin is valid with zero team memberships.
   function createPlatformAccess({ client }) {
     const context = {
@@ -12,35 +11,34 @@
       error: ''
     };
 
-    function apply(roles, adminFlag) {
-      context.roles = roles;
-      context.isFounder = roles.includes('founder');
+    function apply(adminFlag, founderFlag = false) {
+      context.roles = founderFlag === true
+        ? ['founder']
+        : adminFlag === true ? ['platform_admin'] : [];
+      context.isFounder = founderFlag === true;
       context.isPlatformAdmin = adminFlag === true;
     }
 
     async function load() {
       context.loading = true;
       context.error = '';
-      apply([], false);
-      const [{ data: rows, error: rolesError }, { data: adminFlag, error: adminError }] = await Promise.all([
-        client.from('platform_roles').select('role,status'),
-        client.rpc('is_platform_admin')
+      apply(false);
+      const [{ data: adminFlag, error: adminError }, { data: founderFlag, error: founderError }] = await Promise.all([
+        client.rpc('is_platform_admin'),
+        client.rpc('is_platform_founder')
       ]);
-      if (rolesError || adminError) {
+      if (adminError || founderError) {
         context.loading = false;
-        context.error = rolesError?.message || adminError?.message || 'Platform access could not be resolved.';
+        context.error = adminError?.message || founderError?.message || 'Platform access could not be resolved.';
         return context;
       }
-      const roles = (rows || [])
-        .filter(row => row.status === 'active')
-        .map(row => row.role);
-      apply(roles, adminFlag);
+      apply(adminFlag, founderFlag);
       context.loading = false;
       return context;
     }
 
     function clear() {
-      apply([], false);
+      apply(false);
       context.loading = false;
       context.error = '';
     }

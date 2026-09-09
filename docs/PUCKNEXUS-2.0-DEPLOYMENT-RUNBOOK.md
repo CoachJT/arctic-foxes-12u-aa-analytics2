@@ -1,6 +1,6 @@
 # PuckNexus 2.0 — Production Deployment Runbook
 
-Release commit: see the release PR (branch `coachjt-fix-analytics-task`).
+Release commit: use the reviewed reconciliation release commit.
 Pre-deployment verification: `docs/PUCKNEXUS-2.0-RELEASE-CHECKLIST.md`.
 
 > STOP conditions: if any step errors, shows a migration-history mismatch, or
@@ -17,8 +17,9 @@ production release commit.
 
 ## 1. Confirm the production Supabase project
 
-The web app is configured for project ref `yshbvrumzusmwlprfcnr`.
-Confirm this is the intended **production** project before proceeding.
+The verified production project is **CoachJT's Project**, ref
+`yshbvrumzusmwlprfcnr`. Confirm the authenticated CLI account still resolves
+that exact project before proceeding.
 
 ```bash
 supabase login            # opens browser auth
@@ -33,18 +34,24 @@ Do NOT run `db reset`. See what production already has:
 supabase migration list
 ```
 
-Expected already-applied: `001`, `002`, `003` (and any pre-2.0 migrations).
-Expected to apply now: `006`, `007`, `008`, `009`, `010`.
+Expected already-applied: the authoritative production lineage `001`, `002`,
+`003`, `006`–`015`, and timestamped `016`–`019`.
+Expected to apply for this reconciliation release only:
+
+- `20260909000100_020_reconciled_platform_admin_dashboard.sql`
+- `20260909000200_021_reconciled_self_service_onboarding.sql`
+- `20260909000300_022_reconciled_workspace_invite_delivery.sql`
 
 If `migration list` shows a migration number colliding with a different
 filename than the one in this repo, STOP — that is a history mismatch.
 
 ## 3. Confirm Arctic Foxes data will be preserved
 
-All of 006–010 are **additive** (new tables/columns; `on conflict` backfills).
-No `drop`, no `delete from`, no `truncate`. The only data writes are the
-Arctic Foxes organization/season/branding backfill keyed to slug
-`arctic-foxes-12u-aa` and season `2026-2027`, which are upserts.
+Migrations `006`–`019` are immutable production history and must not be
+reapplied or repaired. Migrations `020`–`022` are forward-only: they add the
+Admin Dashboard compatibility layer, Founder specialization on
+`platform_admins`, and locked self-service onboarding. They do not replace
+production roster, invitation, stat, storage, or analytics tables.
 
 Before applying, snapshot for safety (optional but recommended):
 
@@ -59,20 +66,22 @@ supabase migration up
 ```
 
 This applies pending migrations in order and skips already-applied ones.
-If it tries to re-run 001/002/003, STOP and report.
+If it tries to re-run any migration through `019`, STOP and report.
 
 ## 5. Deploy the generalized invite-staff Edge Function
 
-The function is now team-agnostic (derives team from the validated request,
-no Arctic Foxes hardcoding):
+The function is team-agnostic and preserves the production
+`workspace_invites` lifecycle. It generates raw tokens only server-side,
+stores hashes, and uses the delivery controls added in migration `018`:
 
 ```bash
 supabase functions deploy invite-staff
 ```
 
 Confirm required env vars are set on the project: `SUPABASE_URL`,
-`SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and optionally
-`INVITE_REDIRECT_URL`.
+`SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and
+`INVITE_REDIRECT_URL`. The redirect must be an HTTPS URL for the production
+web app; invitation delivery fails closed if it is absent or invalid.
 
 ## 6. Deploy the web app to app.pucknexus.com
 
@@ -85,18 +94,20 @@ sufficient. No build step is required.
 
 Do NOT hardcode this into app code. First create the founder's auth account
 (sign up through the app or the Supabase dashboard), note its `auth.users.id`,
-then grant the roles with the service role (SQL Editor or `db execute`):
+then grant the role with the service role (SQL Editor or another audited
+server-side administrative path):
 
 ```sql
 -- Replace <auth-user-id> with the founder's real auth.users id.
-insert into public.platform_roles (user_id, role, status)
-values ('<auth-user-id>', 'founder', 'active')
-on conflict (user_id, role) do nothing;
+insert into public.platform_admins (user_id, role, granted_by)
+values ('<auth-user-id>', 'founder', '<auth-user-id>')
+on conflict (user_id) do update
+set role = 'founder';
 ```
 
-The founder can then grant `platform_admin` to others via the same table
-(`role = 'platform_admin'`). Only a founder can grant/revoke `founder`
-(enforced by RLS in migration 007).
+Additional platform administrators use the same authoritative table with
+`role = 'platform_admin'`. Browser roles have no insert, update, or delete
+privileges on this table.
 
 ## 8. Post-deployment smoke tests
 
@@ -105,7 +116,7 @@ The founder can then grant `platform_admin` to others via the same table
 - Arctic Foxes coach sign-in lands on its Team Dashboard with existing data intact
 - Add Game creates exactly one game (double-click safe)
 - Edit Game updates the same game
-- Roster add/edit/remove works; duplicate jersey rejected
+- Roster add/edit/deactivate works; duplicate active jersey rejected
 - Stat entry saves; saving twice does not double totals; dashboard reflects it
 - Invitations send and appear in the admin Invitations view
 - A normal coach cannot open the Admin Dashboard or another team's data
@@ -115,6 +126,6 @@ The founder can then grant `platform_admin` to others via the same table
 ## Rollback
 
 If a post-deploy smoke test fails on data integrity or access control, stop.
-Migrations 006–010 are additive, so the pre-2.0 app continues to work against
-the upgraded schema; to fully roll back, redeploy the previous web build.
-Do not drop the new tables unless you have confirmed they hold no new data.
+The reconciliation migrations are additive, so rollback is a previous web and
+Edge Function deploy. Do not rewrite migration history or drop reconciliation
+objects after they contain production data.
