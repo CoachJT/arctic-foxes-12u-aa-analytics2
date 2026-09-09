@@ -54,3 +54,11 @@ test('admin UI is cache-busted to the invite-flow build', () => {
   assert.match(app, /id="inviteForm"/);
   assert.match(app, /id="inviteList"/);
 });
+
+test('invite-staff edge function is team-agnostic and never hardcodes Arctic Foxes', () => {
+  const fn = fs.readFileSync('supabase/functions/invite-staff/index.ts', 'utf8');
+  assert.doesNotMatch(fn, /arctic-foxes/i);
+  assert.match(fn, /payload\?\.teamSlug/);
+  assert.match(fn, /has_team_capability/);
+  assert.match(fn, /\.eq\('slug', teamSlug\)/);
+});

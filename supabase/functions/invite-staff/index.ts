@@ -36,7 +36,7 @@ async function findAuthUserByEmail(adminClient: ReturnType<typeof createClient>,
   return null;
 }
 
-async function getOwnerContext(request: Request) {
+async function getOwnerContext(request: Request, requestedTeamSlug?: unknown) {
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -51,12 +51,19 @@ async function getOwnerContext(request: Request) {
   const { data: userData, error: userError } = await callerClient.auth.getUser();
   if (userError || !userData.user) throw new Error('Authentication is required.');
 
+  // Team scope comes from the caller's request but is always validated against
+  // the caller's actual ownership — never trusted blindly.
+  const teamSlug = typeof requestedTeamSlug === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(requestedTeamSlug.trim())
+    ? requestedTeamSlug.trim()
+    : '';
+  if (!teamSlug) throw new Error('A valid team is required.');
+
   const { data: team, error: teamError } = await callerClient
     .from('teams')
     .select('id,name,slug')
-    .eq('slug', 'arctic-foxes-12u-aa')
+    .eq('slug', teamSlug)
     .single();
-  if (teamError || !team) throw new Error('The Arctic Foxes team could not be found.');
+  if (teamError || !team) throw new Error('That team could not be found.');
 
   const { data: hasCapability, error: capabilityError } = await callerClient.rpc(
     'has_team_capability',
@@ -221,8 +228,8 @@ Deno.serve(async request => {
   if (request.method !== 'POST') return json({ error: 'POST is required.' }, 405);
 
   try {
-    const context = await getOwnerContext(request);
     const payload = await request.json();
+    const context = await getOwnerContext(request, payload?.teamSlug);
     if (payload?.action === 'list') return json({ invites: await listInvites(context) });
     if (payload?.action === 'invite') return json(await inviteStaff(context, payload));
     if (payload?.action === 'resend_setup') return json(await resendSetupLink(context, payload));

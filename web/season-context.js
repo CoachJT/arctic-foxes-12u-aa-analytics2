@@ -78,7 +78,16 @@
       applyBranding(null);
     }
 
-    return { context, load, select, applyFallbackBranding, FALLBACK_BRANDING };
+    function clear() {
+      context.seasons = [];
+      context.selectedSeasonId = '';
+      context.selectedSeason = null;
+      context.error = '';
+      storage?.removeItem('foxes-selected-season-id');
+      applyBranding(null);
+    }
+
+    return { context, load, select, applyFallbackBranding, clear, FALLBACK_BRANDING };
   }
 
   global.FoxesSeasonContext = { createSeasonContext, FALLBACK_BRANDING };
