@@ -9,20 +9,19 @@ Provision it once against the production database with the service role:
 
 ```sql
 -- Run with the service role / as a superuser. Use the real auth user id.
-insert into public.platform_roles (user_id, role, status)
-values ('<auth-user-id>', 'founder', 'active')
-on conflict (user_id, role) do nothing;
+insert into public.platform_admins (user_id, role, granted_by)
+values ('<auth-user-id>', 'founder', '<auth-user-id>')
+on conflict (user_id) do update set role = 'founder';
 ```
 
-Grant additional platform admins as the founder through the same table with
-`role = 'platform_admin'`. Only a founder can grant or remove `founder`
-(enforced by RLS in migration 007).
+Grant additional platform admins through the same authoritative table with
+`role = 'platform_admin'`. Browser roles cannot mutate platform assignments.
 
-## Organization / team logo upload
-Deferred. Requires Supabase Storage infrastructure (bucket, RLS-scoped upload
-policies, file-type and size validation, preview). Not present in the current
-schema. Next step: create a private `branding-logos` bucket with
-team/org-scoped policies before adding UI.
+## Organization / team logo upload UI
+The production Storage and branding lifecycle exists in migrations `012`–`014`
+and `017`, including scoped policies and upload/finalize helpers. A general
+logo-management UI outside onboarding remains deferred; it must use those
+helpers rather than directly writing arbitrary logo URLs.
 
 ## Admin "Reset Onboarding"
 Deferred. The `onboarding_progress` model supports it (platform admins can
@@ -39,11 +38,10 @@ overwriting authoritative web records. Note: web-authored roster rows use
 them as authoritative and avoid conflicts with Windows-originated rows.
 
 ## Invite email delivery from the onboarding wizard
-The `invite-staff` Edge Function is now team-agnostic (no hardcoded team) and
-derives scope from the caller's request validated against ownership. Onboarding
-creates the first-class `team_invitations` record; wiring the wizard to trigger
-the actual email send through the function is the remaining step. Requires a
-function deployment to take effect (not deployed in Stage 8).
+The onboarding wizard now invokes the team-agnostic `invite-staff` Edge
+Function. Production deployment remains deferred. The function must keep
+`workspace_invites` authoritative, store only token hashes, and preserve the
+delivery controls from migration `018`.
 
 ## Full league-wide benchmarks
 Dashboard trends compare a team to its **own** season average. League-wide

@@ -7,7 +7,7 @@ const onboardingSource = fs.readFileSync('web/onboarding.js', 'utf8');
 const appSource = fs.readFileSync('web/app.js', 'utf8');
 const indexSource = fs.readFileSync('web/index.html', 'utf8');
 const stylesSource = fs.readFileSync('web/styles.css', 'utf8');
-const migrationSource = fs.readFileSync('supabase/migrations/009_onboarding.sql', 'utf8');
+const migrationSource = fs.readFileSync('supabase/migrations/20260909000200_021_reconciled_self_service_onboarding.sql', 'utf8');
 const resolverSource = fs.readFileSync('web/destination-resolver.js', 'utf8');
 
 function elementStub() {
@@ -25,7 +25,6 @@ function makeClient({ progress, rosterRows = [], inviteRows = [], brandingRow = 
   const rpcCalls = [];
   const tables = {
     team_roster_players: rosterRows,
-    team_invitations: inviteRows,
     team_branding: brandingRow,
     organizations: orgRow,
     teams: teamRow
@@ -35,6 +34,7 @@ function makeClient({ progress, rosterRows = [], inviteRows = [], brandingRow = 
     rpc: (name, args) => {
       rpcCalls.push([name, args || {}]);
       if (name === 'onboarding_ensure') return Promise.resolve({ data: typeof progress === 'function' ? progress() : progress, error: progress instanceof Error ? progress : null });
+      if (name === 'onboarding_list_invites') return Promise.resolve({ data: inviteRows, error: null });
       return Promise.resolve({ data: { ok: true }, error: null });
     },
     from: table => {
@@ -220,44 +220,44 @@ test('onboarding migration is additive, user-scoped, and RLS protected', () => {
   assert.match(migrationSource, /create table public\.onboarding_progress/);
   assert.match(migrationSource, /user_id uuid primary key references auth\.users\(id\) on delete cascade/);
   assert.match(migrationSource, /alter table public\.onboarding_progress enable row level security/);
-  assert.match(migrationSource, /onboarding_progress_select_self_or_platform_admin/);
-  assert.match(migrationSource, /onboarding_progress_insert_self[\s\S]*with check \(user_id = \(select auth\.uid\(\)\)\)/);
-  assert.match(migrationSource, /revoke all on public\.onboarding_progress from anon/);
+  assert.match(migrationSource, /onboarding_progress_select_self/);
+  assert.match(migrationSource, /grant select on public\.onboarding_progress to authenticated/);
+  assert.doesNotMatch(migrationSource, /grant [^;]*insert[^;]*on public\.onboarding_progress to authenticated/);
+  assert.match(migrationSource, /revoke all on public\.onboarding_progress from public, anon, authenticated/);
   assert.doesNotMatch(migrationSource, /\bdelete from\b/i);
   assert.doesNotMatch(migrationSource, /\bdrop table\b/i);
 });
 
 test('creation RPCs assign ownership server-side and are idempotent on retry', () => {
   assert.match(migrationSource, /function public\.onboarding_create_organization/);
-  assert.match(migrationSource, /values \(new_organization_id, \(select auth\.uid\(\)\), 'owner', 'active'\)/);
-  assert.match(migrationSource, /An organization was already created for this account\./);
+  assert.match(migrationSource, /new_organization\.id,\s*caller_id,\s*'org_owner',\s*'active'/);
+  assert.match(migrationSource, /An organization was already created for this onboarding\./);
   assert.match(migrationSource, /function public\.onboarding_create_team/);
-  assert.match(migrationSource, /values \(new_team_id, \(select auth\.uid\(\)\), 'owner', 'active'\)/);
-  assert.match(migrationSource, /A team was already created for this account\./);
+  assert.match(migrationSource, /values \(new_team\.id, caller_id, 'owner', 'active', caller_id\)/);
+  assert.match(migrationSource, /A team was already created for this onboarding\./);
   assert.match(migrationSource, /function public\.onboarding_create_season/);
   assert.match(migrationSource, /on conflict \(team_id, season_key\) do update/);
-  assert.match(migrationSource, /set default_season_id = new_season_id/);
+  assert.match(migrationSource, /set default_season_id = new_season\.id/);
   assert.match(migrationSource, /insert into public\.onboarding_progress \(user_id\)[\s\S]{0,200}on conflict \(user_id\) do nothing/);
   assert.doesNotMatch(migrationSource, /values \(organization_id, \(select auth\.uid/);
   assert.doesNotMatch(migrationSource, /values \(team_id, \(select auth\.uid/);
 });
 
 test('roster, staff, and branding RPCs validate input and scope to the onboarding team', () => {
-  assert.match(migrationSource, /Jersey number % is already assigned on this team\./);
+  assert.match(migrationSource, /Jersey number % is already assigned to an active player on this team\./);
   assert.match(migrationSource, /Position must be F, D, or G\./);
-  assert.match(migrationSource, /A pending invitation already exists for this email on this team\./);
-  assert.match(migrationSource, /insert into public\.team_invitations \(team_id, email, display_name, role_id, invited_by\)/);
+  assert.doesNotMatch(migrationSource, /onboarding_invite_staff/);
+  assert.match(migrationSource, /function public\.onboarding_list_invites\(\)/);
+  assert.match(onboardingSource, /functions\.invoke\('invite-staff'/);
   assert.match(migrationSource, /Colors must be hex values like #d71920\./);
-  assert.match(migrationSource, /insert into public\.team_branding[\s\S]*on conflict \(team_id\) do update/);
+  assert.match(migrationSource, /update public\.team_branding/);
 });
 
 test('completion validates required steps and writes completed_at exactly once', () => {
   assert.match(migrationSource, /function public\.onboarding_complete\(\)/);
-  assert.match(migrationSource, /Organization setup is incomplete\./);
-  assert.match(migrationSource, /Team setup is incomplete\./);
-  assert.match(migrationSource, /Season setup is incomplete\./);
-  assert.match(migrationSource, /Add at least one roster player before finishing setup\./);
-  assert.match(migrationSource, /where user_id = \(select auth\.uid\(\)\)\s+and completed_at is null/);
+  assert.match(migrationSource, /Organization, team, and season setup must be complete\./);
+  assert.match(migrationSource, /Add at least one active roster player before finishing setup\./);
+  assert.match(migrationSource, /where user_id = caller_id/);
   assert.match(migrationSource, /already_complete/);
 });
 
@@ -290,9 +290,9 @@ test('admin dashboard surfaces real onboarding status per team', () => {
   assert.match(adminSource, /In progress/);
   assert.match(adminSource, /existing configured teams are not in onboarding/);
   assert.match(migrationSource, /function public\.admin_list_onboarding\(\)/);
-  assert.match(migrationSource, /when op\.completed_at is not null then 'completed'/);
-  assert.match(migrationSource, /when op\.organization_id is null and op\.team_id is null then 'not_started'/);
-  assert.match(migrationSource, /where public\.is_platform_admin\(\)/);
+  assert.match(migrationSource, /when progress\.completed_at is not null then 'completed'/);
+  assert.match(migrationSource, /when progress\.organization_id is null and progress\.team_id is null then 'not_started'/);
+  assert.match(migrationSource, /and public\.is_platform_admin\(\)/);
 });
 
 test('app wiring loads the wizard, passes progress to the resolver, and completes into the team workspace', () => {

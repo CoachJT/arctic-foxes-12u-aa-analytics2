@@ -74,8 +74,8 @@
       }
       if (!progress?.team_id) return;
       const [rosterResult, inviteResult, brandingResult] = await Promise.all([
-        client.from('team_roster_players').select('jersey_number,name,position').eq('team_id', progress.team_id).order('jersey_number'),
-        client.from('team_invitations').select('id,email,display_name,role_id,status,expires_at').eq('team_id', progress.team_id).order('created_at', { ascending: false }),
+        client.from('team_roster_players').select('jersey_number,name,position,status').eq('team_id', progress.team_id).eq('status', 'active').order('jersey_number'),
+        client.rpc('onboarding_list_invites'),
         client.from('team_branding').select('display_name,short_name,primary_color,secondary_color,accent_color,logo_url').eq('team_id', progress.team_id).maybeSingle()
       ]);
       if (rosterResult.error) throw new Error(rosterResult.error.message);
@@ -322,11 +322,17 @@
         event.preventDefault();
         const form = event.target;
         run(async () => {
-          await call('onboarding_invite_staff', {
-            staff_email: form.querySelector('#obStaffEmail').value,
-            staff_name: form.querySelector('#obStaffName').value,
-            staff_role_id: form.querySelector('#obStaffRole').value
+          const { data, error: inviteError } = await client.functions.invoke('invite-staff', {
+            body: {
+              action: 'invite',
+              email: form.querySelector('#obStaffEmail').value,
+              displayName: form.querySelector('#obStaffName').value,
+              roleId: form.querySelector('#obStaffRole').value,
+              teamSlug: team?.slug || ''
+            }
           });
+          if (inviteError) throw new Error(inviteError.message || 'The invitation could not be created.');
+          if (data?.error) throw new Error(data.error);
           notice = 'Invitation created. Email delivery runs through the invite service.';
         });
       });

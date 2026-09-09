@@ -292,7 +292,7 @@
           <tr><td>${esc(item.email)}</td><td>${esc(item.display_name || '—')}</td><td>${esc(item.team_name)}</td>
           <td>${esc(item.role_id)}</td><td>${statusBadge(item.status)}</td><td>${fmtDate(item.expires_at)}</td>
           <td class="admin-row-actions">${item.status === 'pending' || item.status === 'expired'
-            ? `<button class="btn admin-action" data-resend-invite="${esc(item.id)}" type="button">Resend</button><button class="btn admin-action danger" data-revoke-invite="${esc(item.id)}" type="button">Revoke</button>`
+            ? `<button class="btn admin-action" data-resend-invite="${esc(item.id)}" data-team-id="${esc(item.team_id)}" type="button">Resend</button><button class="btn admin-action danger" data-revoke-invite="${esc(item.id)}" type="button">Revoke</button>`
             : '<span class="admin-dim">—</span>'}</td></tr>`), 'No invitations match your search.')}</section>`;
     }
 
@@ -356,6 +356,31 @@
         error = actionError.message;
         paint();
       }
+
+      async function resendInvitation(button) {
+        if (button.disabled) return;
+        button.disabled = true;
+        const original = button.textContent;
+        button.textContent = 'Working…';
+        try {
+          const { data: result, error: functionError } = await client.functions.invoke('invite-staff', {
+            body: {
+              action: 'resend_setup',
+              userId: button.dataset.resendInvite,
+              teamId: button.dataset.teamId
+            }
+          });
+          if (functionError) throw new Error(functionError.message || 'Invite resend failed.');
+          if (result?.error) throw new Error(result.error);
+          button.textContent = 'Resent';
+          await loadView();
+        } catch (actionError) {
+          button.disabled = false;
+          button.textContent = original;
+          error = actionError.message;
+          paint();
+        }
+      }
     }
 
     function bind() {
@@ -374,7 +399,7 @@
       root.querySelectorAll('[data-open-organization]').forEach(button => button.addEventListener('click', () => setView('organization', { id: button.dataset.openOrganization })));
       root.querySelectorAll('[data-open-team]').forEach(button => button.addEventListener('click', () => setView('team', { id: button.dataset.openTeam })));
       root.querySelectorAll('[data-open-user]').forEach(button => button.addEventListener('click', () => setView('user', { id: button.dataset.openUser })));
-      root.querySelectorAll('[data-resend-invite]').forEach(button => button.addEventListener('click', () => action(button, 'admin_resend_invitation', { target_invitation_id: button.dataset.resendInvite }, 'Resent')));
+      root.querySelectorAll('[data-resend-invite]').forEach(button => button.addEventListener('click', () => resendInvitation(button)));
       root.querySelectorAll('[data-revoke-invite]').forEach(button => button.addEventListener('click', () => action(button, 'admin_revoke_invitation', { target_invitation_id: button.dataset.revokeInvite }, 'Revoked')));
       root.querySelectorAll('[data-beta-kind]').forEach(button => button.addEventListener('click', () => action(button, 'admin_set_beta_status', { target_kind: button.dataset.betaKind, target_id: button.dataset.betaId, new_status: button.dataset.betaStatus }, 'Saved')));
     }

@@ -38,6 +38,15 @@ let onboardingManager = null;
 applyDocumentBrand();
 const hashParams = new URLSearchParams(location.hash.replace(/^#/, ''));
 const queryParams = new URLSearchParams(location.search);
+let pendingInviteToken = queryParams.get('invite_token') || '';
+if (pendingInviteToken) {
+  const cleanUrl = new URL(location.href);
+  const cleanParams = new URLSearchParams(
+    [...cleanUrl.searchParams].filter(([key]) => key !== 'invite_token')
+  );
+  cleanUrl.search = cleanParams.toString();
+  window.history.replaceState({}, document.title, `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);
+}
 const authCallbackPresent = ['access_token', 'refresh_token', 'type', 'code', 'error', 'error_code']
   .some(key => hashParams.has(key) || queryParams.has(key));
 const recoveryCallbackPresent = hashParams.get('type') === 'recovery'
@@ -77,6 +86,7 @@ const coachQol = window.FoxesCoachQol.createCoachQol({
   client: supabaseClient,
   getContext: () => ({
     teamId: authTeam?.team_id || '',
+    seasonId: seasonContext.selectedSeasonId || '',
     seasonKey: seasonContext.selectedSeason?.season_key || '',
     capabilities: authCapabilities,
     schedule: phase1Data?.schedule || [],
@@ -404,7 +414,7 @@ function renderInviteList(invites = []) {
     list.innerHTML = '<span class="permission-lock">No pending staff invites.</span>';
     return;
   }
-  list.innerHTML = invites.map(invite => `<div class="invite-row"><div><strong>${escapeHtml(invite.display_name || 'Pending staff member')}</strong><small>${escapeHtml(invite.email || 'Email hidden')}</small></div><span>${escapeHtml(inviteRoleLabel(invite.role_id))}</span><b class="invite-badge ${escapeHtml(invite.status)}">${escapeHtml(invite.status)}</b>${invite.status === 'invited' ? `<button class="btn resend-setup-button" type="button" data-user-id="${escapeHtml(invite.user_id)}">Resend setup link</button>` : ''}</div>`).join('');
+  list.innerHTML = invites.map(invite => `<div class="invite-row"><div><strong>${escapeHtml(invite.display_name || 'Pending staff member')}</strong><small>${escapeHtml(invite.email || 'Email hidden')}</small></div><span>${escapeHtml(inviteRoleLabel(invite.role_id))}</span><b class="invite-badge ${escapeHtml(invite.status)}">${escapeHtml(invite.status)}</b>${['pending', 'expired'].includes(invite.status) ? `<button class="btn resend-setup-button" type="button" data-user-id="${escapeHtml(invite.user_id)}">Resend setup link</button>` : ''}</div>`).join('');
 }
 
 async function loadInviteStatus() {
@@ -677,6 +687,24 @@ function showPasswordRecovery(error = '') {
 }
 
 function escapeHtml(value) { return String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character])); }
+
+async function acceptPendingWorkspaceInvite() {
+  if (!pendingInviteToken) return '';
+  if (!/^[0-9a-f]{64}$/i.test(pendingInviteToken)) {
+    pendingInviteToken = '';
+    return 'The invitation link is invalid. Ask your team owner to resend it.';
+  }
+
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pendingInviteToken));
+  const tokenHash = Array.from(new Uint8Array(digest))
+    .map(byte => byte.toString(16).padStart(2, '0'))
+    .join('');
+  pendingInviteToken = '';
+  const { error } = await supabaseClient.rpc('accept_workspace_invite', {
+    target_token_hash: tokenHash
+  });
+  return error ? (error.message || 'The invitation could not be accepted.') : '';
+}
 function formatAuthError(error) {
   if (!error) return 'Sign-in could not be completed.';
   const message = typeof error.message === 'string' && error.message.trim() ? error.message.trim() : 'Sign-in could not be completed.';
@@ -689,18 +717,21 @@ async function loadPhase1Data(teamId) {
   phase1DataError = '';
   render();
   const requests = [];
-  const read = (key, table, columns, capability, transform = rows => rows || []) => {
+  const selectedSeasonId = seasonContext.selectedSeasonId || '';
+  const read = (key, table, columns, capability, transform = rows => rows || [], seasonScoped = false) => {
     if (!can(capability, activeStaff)) return;
-    requests.push(supabaseClient.from(table).select(columns).eq('team_id', teamId).then(({ data, error }) => {
+    let query = supabaseClient.from(table).select(columns).eq('team_id', teamId);
+    if (seasonScoped && selectedSeasonId) query = query.eq('season_id', selectedSeasonId);
+    requests.push(query.then(({ data, error }) => {
       if (error) throw new Error(`${key}: ${error.message}`);
       return [key, transform(data)];
     }));
   };
-  read('roster', 'team_roster_players', 'source_player_id,jersey_number,name,position', PERMISSIONS.PLAYERS_VIEW);
+  read('roster', 'team_roster_players', 'id,source_player_id,jersey_number,name,first_name,last_name,position,player_type,status,season_id', PERMISSIONS.PLAYERS_VIEW, rows => (rows || []).filter(row => row.status === 'active'));
   read('schedule', 'team_schedule_games', 'source_schedule_id,date,time,opponent,home_away,game_type,location,notes,linked_game_source_id', PERMISSIONS.SCHEDULE_VIEW);
-  read('games', 'team_games', 'source_game_id,date,opponent,period_length_min', PERMISSIONS.GAMES_VIEW);
-  read('playerStats', 'team_game_player_stats', 'source_game_id,source_player_id,player_type,gp,goals,assists,shots,penalty_minutes,plus_minus,blocks,faceoff_wins,faceoff_losses,faceoff_attempts,power_play_goals,power_play_assists,power_play_points,short_handed_goals,short_handed_assists,short_handed_points,game_winning_goals,game_tying_goals,takeaways,giveaways,chances,toi_minutes,minutes,saves,goals_against,wins,losses,ties,shutouts', PERMISSIONS.STATS_VIEW);
-  read('teamStats', 'team_game_team_stats', 'source_game_id,goals_for,goals_against,shots_for,shots_against,power_play_chances,power_play_success,penalty_kill_chances,penalty_kill_success,faceoff_wins,faceoff_losses', PERMISSIONS.STATS_VIEW);
+  read('games', 'team_games', 'source_game_id,season_id,date,opponent,period_length_min', PERMISSIONS.GAMES_VIEW, undefined, true);
+  read('playerStats', 'team_game_player_stats', 'source_game_id,season_id,source_player_id,player_type,gp,goals,assists,shots,penalty_minutes,plus_minus,blocks,faceoff_wins,faceoff_losses,faceoff_attempts,power_play_goals,power_play_assists,power_play_points,short_handed_goals,short_handed_assists,short_handed_points,game_winning_goals,game_tying_goals,takeaways,giveaways,chances,toi_minutes,minutes,saves,goals_against,wins,losses,ties,shutouts', PERMISSIONS.STATS_VIEW, undefined, true);
+  read('teamStats', 'team_game_team_stats', 'source_game_id,season_id,goals_for,goals_against,shots_for,shots_against,power_play_chances,power_play_success,penalty_kill_chances,penalty_kill_success,faceoff_wins,faceoff_losses', PERMISSIONS.STATS_VIEW, undefined, true);
   const seasonKey = seasonContext.selectedSeason?.season_key || '';
   const seasonRequest = can(PERMISSIONS.REPORTS_VIEW, activeStaff)
     ? (seasonKey
@@ -861,6 +892,7 @@ async function loadAuthenticatedWorkspace(sessionUser = null) {
       sessionNotice = '';
       return;
     }
+    const inviteAcceptanceError = await acceptPendingWorkspaceInvite();
     // Central bootstrap: session → platform access → org/team access →
     // onboarding state → one destination decision. Protected UI renders only
     // after the resolver returns an authorized destination.
@@ -891,10 +923,14 @@ async function loadAuthenticatedWorkspace(sessionUser = null) {
     }
     if (destination.state === DESTINATIONS.ONBOARDING) {
       showOnboarding(destination);
+      if (inviteAcceptanceError) {
+        const host = authScreen.querySelector('.onboarding-head p');
+        if (host) host.textContent = inviteAcceptanceError;
+      }
       return;
     }
     if (destination.state === DESTINATIONS.NO_ACCESS) {
-      showNoAccess(membershipContext ? '' : 'Your memberships could not be verified. Sign out and try again, or contact your organization owner.');
+      showNoAccess(inviteAcceptanceError || (membershipContext ? '' : 'Your memberships could not be verified. Sign out and try again, or contact your organization owner.'));
       return;
     }
     await enterTeamWorkspace(user, displayName);
