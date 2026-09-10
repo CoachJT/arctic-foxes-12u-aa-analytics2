@@ -1,0 +1,21 @@
+-- Migration 025: grant DELETE on team_schedule_games to authenticated
+--
+-- Why this exists
+-- ---------------
+-- Migration 023 added an RLS *policy* allowing DELETE on team_schedule_games
+-- for users holding the 'schedule.edit' capability. That was necessary but not
+-- sufficient: an RLS policy only filters which rows a role may act on, it does
+-- not itself confer the table privilege. The `authenticated` role had
+-- INSERT/SELECT/UPDATE but never DELETE, so Schedule Delete continued to fail
+-- with SQLSTATE 42501 (permission denied) even with the policy in place.
+--
+-- This surfaced only during production smoke testing because the local test
+-- fixture did not model the GRANT layer.
+--
+-- Scope is deliberately narrow. DELETE is granted on team_schedule_games only.
+-- team_games and team_roster_players remain non-deletable by authenticated
+-- users: deleting those rows would destroy scored history and stat lineage.
+-- Removing a game from the schedule is a planning action; removing a played
+-- game is not, and must stay an administrative operation.
+
+grant delete on public.team_schedule_games to authenticated;
