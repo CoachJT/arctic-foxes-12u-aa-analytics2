@@ -713,3 +713,18 @@ test('the add path requires games.edit before inserting so no orphan schedule ro
   assert.ok(capIndex > -1, 'games.edit is checked on the add path');
   assert.ok(capIndex < insertIndex, 'the capability check happens before the insert');
 });
+
+test('migration 025 grants the table privilege the 023 DELETE policy depends on', () => {
+  // 023 added the DELETE *policy*, but a policy only filters rows a role is
+  // already privileged to touch. Without the table-level GRANT, Schedule
+  // Delete still failed with 42501. Both layers are required; this guards the
+  // pairing so a future refactor cannot drop one and silently re-break delete.
+  const grant = fs.readFileSync('supabase/migrations/20260910000300_025_grant_delete_team_schedule_games.sql', 'utf8');
+  assert.match(grant, /grant delete on public\.team_schedule_games to authenticated/i);
+  const linkage = fs.readFileSync('supabase/migrations/20260910000100_023_schedule_game_linkage.sql', 'utf8');
+  assert.match(linkage, /for delete using \(public\.has_team_capability\(team_id, 'schedule\.edit'\)\)/,
+    'the RLS policy still scopes DELETE to schedule.edit');
+  // Deleting games or roster rows stays disallowed: that would destroy scored history.
+  assert.doesNotMatch(grant, /grant delete on public\.team_games/i);
+  assert.doesNotMatch(grant, /grant delete on public\.team_roster_players/i);
+});
