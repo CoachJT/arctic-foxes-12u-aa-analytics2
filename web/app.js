@@ -62,7 +62,10 @@ const prototypeMode = prototypeHost
 const viewNames = { command: 'Command Center', schedule: 'Schedule', stats: 'Team Stats', players: 'Player Profiles', games: 'Game Center', scouting: 'Scouting', reports: 'Coach Reports', development: 'Player Development', admin: 'Admin', settings: 'Settings' };
 const roleViews = { command: PERMISSIONS.DASHBOARD_VIEW, schedule: PERMISSIONS.SCHEDULE_VIEW, stats: PERMISSIONS.STATS_VIEW, players: PERMISSIONS.PLAYERS_VIEW, games: PERMISSIONS.GAMES_VIEW, scouting: PERMISSIONS.SCOUTING_VIEW, reports: PERMISSIONS.REPORTS_VIEW, development: PERMISSIONS.PLAYERS_VIEW, admin: PERMISSIONS.ADMIN_USERS, settings: PERMISSIONS.DASHBOARD_VIEW };
 
-function cardTitle(title, link = '') { return `<div class="card-title"><h2>${title}</h2>${link ? `<a href="#">${link} →</a>` : ''}</div>`; }
+// The trailing text is a descriptive note, not a destination. It previously
+// rendered as an empty-hash anchor, whose default navigation jumped the page
+// to the top on every click.
+function cardTitle(title, link = '') { return `<div class="card-title"><h2>${title}</h2>${link ? `<span class="card-note">${link}</span>` : ''}</div>`; }
 function tenantName() { return seasonContext.branding?.display_name || authTeam?.teams?.name || 'Selected team'; }
 function tenantSeasonName() { return seasonContext.selectedSeason?.name || phase1Data?.seasonRecord?.season_key || 'Live season'; }
 function shell(title, subtitle, body) { return `<div class="page-head"><div><div class="eyebrow">${PLATFORM.name} · ${escapeHtml(tenantName())} workspace</div><h1>${title}</h1><p>${subtitle}</p></div></div>${body}`; }
@@ -93,12 +96,19 @@ const coachQol = window.FoxesCoachQol.createCoachQol({
     roster: phase1Data?.roster || []
   }),
   onChanged: () => {
-    if (authTeam?.team_id) loadPhase1Data(authTeam.team_id);
+    // Returned so callers can await the reload; this is what makes UI
+    // restoration deterministic instead of timer-based.
+    if (authTeam?.team_id) return loadPhase1Data(authTeam.team_id);
+    return Promise.resolve();
   }
 });
 const D = window.FoxesDashboard;
 let dashboardLeaderCategory = 'points';
 let dashboardTrendWindow = 'season';
+// Tracks the last painted view so a same-view rerender (leader tabs, trend
+// window, data refresh) keeps the reader's scroll position instead of
+// snapping the page back to the top.
+let lastRenderedView = '';
 
 function helpBubble(text) {
   return `<button class="help-bubble" type="button" aria-label="Help" data-help="${escapeHtml(text)}">?</button>`;
@@ -221,6 +231,7 @@ function schedule() {
 
 function bindCoachGameControls() {
   const host = document.querySelector('#coachGameFormHost');
+  coachQol.enhanceDateInputs(host);
   host?.querySelector('[data-game-form]')?.addEventListener('submit', event => {
     event.preventDefault();
     coachQol.submitGameForm(event.currentTarget);
@@ -229,6 +240,7 @@ function bindCoachGameControls() {
     const game = (phase1Data?.schedule || []).find(g => g.id === button.dataset.coachEditGame);
     if (!game || !host) return;
     host.innerHTML = coachQol.gameFormHtml(game);
+    coachQol.enhanceDateInputs(host);
     host.querySelector('[data-game-form]').addEventListener('submit', event => {
       event.preventDefault();
       coachQol.submitGameForm(event.currentTarget);
@@ -269,6 +281,33 @@ function bindCoachRosterControls() {
     event.preventDefault();
     coachQol.submitPlayerForm(event.currentTarget);
   });
+  // Roster edit: mount the edit form in place of the quick-add form, save
+  // through the existing editPlayer() path, then restore the workspace.
+  host?.querySelectorAll('[data-edit-player]').forEach(button => button.addEventListener('click', () => {
+    const player = (phase1Data?.roster || []).find(p => p.id === button.dataset.editPlayer);
+    if (!player || !host) return;
+    const restore = () => {
+      host.innerHTML = coachQol.rosterWorkspaceHtml(phase1Data?.roster || []);
+      bindCoachRosterControls();
+    };
+    host.innerHTML = `<div class="card-title"><h2>Edit #${escapeHtml(player.jersey_number)} ${escapeHtml(player.name)}</h2></div>${coachQol.playerEditFormHtml(player)}`;
+    host.querySelector('[data-cancel-player-edit]')?.addEventListener('click', restore);
+    host.querySelector('[data-player-edit-form]')?.addEventListener('submit', async event => {
+      event.preventDefault();
+      try {
+        // submitPlayerEditForm awaits editPlayer, which awaits onChanged, which
+        // is the reload + repaint. When this resolves the roster is genuinely
+        // fresh, so restoration is deterministic rather than timer-based.
+        await coachQol.submitPlayerEditForm(event.currentTarget);
+        // If render() already replaced this host the view is correct; only
+        // restore when the node we mounted into is still attached.
+        if (document.body.contains(host)) restore();
+      } catch (error) {
+        // The form already shows the failure and keeps the coach's edits.
+      }
+    });
+    host.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }));
   host?.querySelectorAll('[data-remove-player]').forEach(button => button.addEventListener('click', async () => {
     const player = (phase1Data?.roster || []).find(p => p.id === button.dataset.removePlayer);
     if (!player) return;
@@ -294,16 +333,24 @@ function gameCenter() {
   (phase1Data?.playerStats || []).forEach(row => playerStats.set(row.source_game_id, (playerStats.get(row.source_game_id) || 0) + 1));
   const games = (phase1Data?.games || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
   const canEditStats = can(PERMISSIONS.STATS_EDIT, activeStaff);
+  // A game counts as played only when it carries a team-stats row. Eager
+  // shells created by Schedule Add therefore appear here immediately without
+  // ever being counted as completed, and a future-dated shell is not yet
+  // eligible for stat entry (save_game_stats enforces the same date rule).
+  const today = new Date().toLocaleDateString('en-CA');
+  const isPlayed = game => teamStats.has(game.source_game_id);
+  const playedCount = games.filter(isPlayed).length;
   const cards = games.map(game => {
     const stats = teamStats.get(game.source_game_id);
     const hasScore = stats && (stats.goals_for !== null || stats.goals_against !== null);
-    const score = hasScore ? `${phase1Number(stats.goals_for)}–${phase1Number(stats.goals_against)}` : 'Score unavailable';
-    const result = hasScore ? (stats.goals_for > stats.goals_against ? 'WIN' : stats.goals_for < stats.goals_against ? 'LOSS' : 'TIE') : 'NOT SCORED';
-    return `<article class="card game-card"><div class="game-card-head"><div><span class="eyebrow">${escapeHtml(phase1Date(game.date))}</span><h2>${escapeHtml(game.opponent || 'Opponent unavailable')}</h2><p>${escapeHtml(game.period_length_min ? `${game.period_length_min}-minute periods` : 'Game details synced from Windows')}</p></div><span class="result ${result === 'WIN' ? 'win' : result === 'LOSS' ? 'loss' : ''}">${result}</span></div><div class="game-score">${escapeHtml(score)}</div><div class="game-card-meta"><span>${playerStats.get(game.source_game_id) || 0} player-stat rows</span><span>${stats ? `${phase1Number(stats.shots_for)} shots for` : 'Official team stats unavailable'}</span>${canEditStats ? `<button class="btn" type="button" data-enter-stats="${escapeHtml(game.source_game_id)}">${playerStats.get(game.source_game_id) ? 'Edit Stats' : 'Enter Stats'}</button>` : '<span class="tag">Read only</span>'}</div></article>`;
+    const eligible = String(game.date) <= today;
+    const score = hasScore ? `${phase1Number(stats.goals_for)}–${phase1Number(stats.goals_against)}` : eligible ? 'Score unavailable' : 'Not yet played';
+    const result = hasScore ? (stats.goals_for > stats.goals_against ? 'WIN' : stats.goals_for < stats.goals_against ? 'LOSS' : 'TIE') : eligible ? 'NOT SCORED' : 'SCHEDULED';
+    return `<article class="card game-card"><div class="game-card-head"><div><span class="eyebrow">${escapeHtml(phase1Date(game.date))}</span><h2>${escapeHtml(game.opponent || 'Opponent unavailable')}</h2><p>${escapeHtml(game.period_length_min ? `${game.period_length_min}-minute periods` : 'Game details synced from Windows')}</p></div><span class="result ${result === 'WIN' ? 'win' : result === 'LOSS' ? 'loss' : ''}">${result}</span></div><div class="game-score">${escapeHtml(score)}</div><div class="game-card-meta"><span>${playerStats.get(game.source_game_id) || 0} player-stat rows</span><span>${stats ? `${phase1Number(stats.shots_for)} shots for` : 'Official team stats unavailable'}</span>${canEditStats && eligible ? `<button class="btn" type="button" data-enter-stats="${escapeHtml(game.source_game_id)}">${playerStats.get(game.source_game_id) ? 'Edit Stats' : 'Enter Stats'}</button>` : `<span class="tag">${canEditStats ? 'Not yet playable' : 'Read only'}</span>`}</div></article>`;
   }).join('');
   return shell('Game Center', canEditStats ? 'Enter and correct game stats from one workspace.' : 'Read-only game summaries from the selected team and season.', `
     ${canEditStats ? '<section class="card" id="coachStatsHost" hidden></section>' : ''}
-    <div class="callout"><strong>${games.length} games synced</strong><br>${canEditStats ? 'Choose Enter Stats on a game to open the roster-wide stat entry workspace. One save persists the whole game.' : 'Game Center shows official cloud-backed summaries only. Detailed video, TOI, tracking, and local game workflows remain in the Windows app.'}</div><div class="game-center-grid">${cards || `<section class="card empty-view"><div class="empty-icon">▣</div><h2>No games available</h2><p>${canEditStats ? 'Add a game from the Schedule page, then enter stats here.' : 'No completed games are synced for the selected team and season.'}</p></section>`}</div>`);
+    <div class="callout"><strong>${playedCount} of ${games.length} games played</strong><br>${canEditStats ? 'Choose Enter Stats on a game to open the roster-wide stat entry workspace. One save persists the whole game.' : 'Game Center shows official cloud-backed summaries only. Detailed video, TOI, tracking, and local game workflows remain in the Windows app.'}</div><div class="game-center-grid">${cards || `<section class="card empty-view"><div class="empty-icon">▣</div><h2>No games available</h2><p>${canEditStats ? 'Add a game from the Schedule page, then enter stats here.' : 'No completed games are synced for the selected team and season.'}</p></section>`}</div>`);
 }
 
 function bindCoachStatsControls() {
@@ -589,6 +636,8 @@ function renderRoleSwitcher() {
 }
 function render(view = 'command') {
   if (!can(roleViews[view], activeStaff)) view = 'command';
+  const sameView = view === lastRenderedView;
+  const preservedScroll = sameView ? window.scrollY : 0;
   const page = view === 'scouting'
     ? scouting()
     : phase1DataError
@@ -611,7 +660,10 @@ function render(view = 'command') {
   if (view === 'games') bindCoachStatsControls();
   if (view === 'command') bindDashboardControls();
   nav.forEach(item => { const allowed = can(roleViews[item.dataset.view], activeStaff); item.hidden = !allowed; item.classList.toggle('active', item.dataset.view === view); item.toggleAttribute('aria-current', item.dataset.view === view); });
-  document.querySelector('#sidebar').classList.remove('open'); document.querySelector('#scrim').classList.remove('show'); window.scrollTo(0, 0);
+  document.querySelector('#sidebar').classList.remove('open'); document.querySelector('#scrim').classList.remove('show');
+  lastRenderedView = view;
+  // Only a real view change resets the page to the top.
+  window.scrollTo(0, sameView ? preservedScroll : 0);
 }
 nav.forEach(item => item.addEventListener('click', () => render(item.dataset.view)));
 document.querySelector('#openSidebar').addEventListener('click', () => { document.querySelector('#sidebar').classList.add('open'); document.querySelector('#scrim').classList.add('show'); });
@@ -728,7 +780,9 @@ async function loadPhase1Data(teamId) {
     }));
   };
   read('roster', 'team_roster_players', 'id,source_player_id,jersey_number,name,first_name,last_name,position,player_type,status,season_id', PERMISSIONS.PLAYERS_VIEW, rows => (rows || []).filter(row => row.status === 'active'));
-  read('schedule', 'team_schedule_games', 'source_schedule_id,date,time,opponent,home_away,game_type,location,notes,linked_game_source_id', PERMISSIONS.SCHEDULE_VIEW);
+  // `id` is the row identity used by the Edit/Delete controls; without it every
+  // schedule action resolves to an undefined ID and silently no-ops.
+  read('schedule', 'team_schedule_games', 'id,source_schedule_id,date,time,opponent,home_away,game_type,location,notes,linked_game_source_id', PERMISSIONS.SCHEDULE_VIEW);
   read('games', 'team_games', 'source_game_id,season_id,date,opponent,period_length_min', PERMISSIONS.GAMES_VIEW, undefined, true);
   read('playerStats', 'team_game_player_stats', 'source_game_id,season_id,source_player_id,player_type,gp,goals,assists,shots,penalty_minutes,plus_minus,blocks,faceoff_wins,faceoff_losses,faceoff_attempts,power_play_goals,power_play_assists,power_play_points,short_handed_goals,short_handed_assists,short_handed_points,game_winning_goals,game_tying_goals,takeaways,giveaways,chances,toi_minutes,minutes,saves,goals_against,wins,losses,ties,shutouts', PERMISSIONS.STATS_VIEW, undefined, true);
   read('teamStats', 'team_game_team_stats', 'source_game_id,season_id,goals_for,goals_against,shots_for,shots_against,power_play_chances,power_play_success,penalty_kill_chances,penalty_kill_success,faceoff_wins,faceoff_losses', PERMISSIONS.STATS_VIEW, undefined, true);
