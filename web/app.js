@@ -464,10 +464,29 @@ function renderInviteList(invites = []) {
   list.innerHTML = invites.map(invite => `<div class="invite-row"><div><strong>${escapeHtml(invite.display_name || 'Pending staff member')}</strong><small>${escapeHtml(invite.email || 'Email hidden')}</small></div><span>${escapeHtml(inviteRoleLabel(invite.role_id))}</span><b class="invite-badge ${escapeHtml(invite.status)}">${escapeHtml(invite.status)}</b>${['pending', 'expired'].includes(invite.status) ? `<button class="btn resend-setup-button" type="button" data-user-id="${escapeHtml(invite.user_id)}">Resend setup link</button>` : ''}</div>`).join('');
 }
 
+// Every invite-staff action is team-scoped: the Edge Function rejects any
+// request that does not identify a team. Both the list and invite paths must
+// therefore send the active team context. Sending the id as well as the slug
+// lets the function resolve the team even if the slug is missing from the
+// membership row.
+function inviteTeamContext() {
+  return {
+    teamSlug: authTeam?.teams?.slug || '',
+    teamId: authTeam?.team_id || ''
+  };
+}
+
 async function loadInviteStatus() {
   const list = document.querySelector('#inviteList');
   if (list) list.innerHTML = '<span class="permission-lock">Loading invite status…</span>';
-  const { data, error } = await supabaseClient.functions.invoke(INVITE_FUNCTION, { body: { action: 'list' } });
+  const teamContext = inviteTeamContext();
+  if (!teamContext.teamSlug && !teamContext.teamId) {
+    if (list) list.innerHTML = '<span class="permission-lock">Select a team to view invite status.</span>';
+    return;
+  }
+  const { data, error } = await supabaseClient.functions.invoke(INVITE_FUNCTION, {
+    body: { action: 'list', ...teamContext }
+  });
   if (error) {
     console.warn('Could not load invite status:', error);
     if (list) list.innerHTML = `<span class="auth-error">${escapeHtml(error.message || 'Invite status is unavailable.')}</span>`;
@@ -488,7 +507,7 @@ async function submitStaffInvite(event) {
     displayName: form.querySelector('#inviteName').value.trim(),
     email: form.querySelector('#inviteEmail').value.trim(),
     roleId: form.querySelector('#inviteRole').value,
-    teamSlug: authTeam?.teams?.slug || ''
+    ...inviteTeamContext()
   };
   const { data, error } = await supabaseClient.functions.invoke(INVITE_FUNCTION, { body });
   button.disabled = false;
@@ -511,7 +530,7 @@ async function resendSetupLink(event) {
   button.textContent = 'Sending…';
   inviteStatusMessage('Verifying the invited membership and sending a new setup link…');
   const { data, error } = await supabaseClient.functions.invoke(INVITE_FUNCTION, {
-    body: { action: 'resend_setup', userId }
+    body: { action: 'resend_setup', userId, ...inviteTeamContext() }
   });
   if (error) {
     console.warn('Setup link resend rejected:', error);
