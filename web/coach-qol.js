@@ -90,6 +90,11 @@
       if (!teamId) throw new Error('No team is selected.');
       if (!seasonId) throw new Error('No season is selected.');
       if (!canWrite('schedule.edit')) throw new Error('You do not have schedule editing access.');
+      // Eager shells mean adding a schedule game also creates a canonical game
+      // row, so games.edit is genuinely required. Checked BEFORE the insert so
+      // an unauthorized add cannot leave an orphaned schedule row behind. The
+      // database enforces this again inside ensure_schedule_game_shell.
+      if (!canWrite('games.edit')) throw new Error('You do not have game creation access for this team.');
       const date = String(fields.date || '').trim();
       const opponent = String(fields.opponent || '').trim();
       if (!date) throw new Error('Choose the game date.');
@@ -99,6 +104,7 @@
         const record = {
           team_id: teamId,
           source_schedule_id: crypto.randomUUID(),
+          season_id: seasonId,
           date,
           time: fields.time || null,
           opponent,
@@ -108,11 +114,25 @@
         };
         const { data, error } = await client.from('team_schedule_games').insert(record).select().single();
         if (error) throw new Error(error.message);
-        onChanged?.('schedule');
-        return data;
+        // Eager canonical shell: Game Center reads team_games, so the game must
+        // exist there immediately. The RPC is idempotent and row-locked, so a
+        // double-click or retry can never produce a second game.
+        const linked = await ensureGameShell(data.id);
+        await onChanged?.('schedule');
+        return { ...data, linked_game_source_id: linked };
       } finally {
         pendingAction = null;
       }
+    }
+
+    // Resolves the one canonical team_games row for a schedule entry. All
+    // duplicate prevention, authorization, and doubleheader handling live in
+    // the database function; this is a thin, honest passthrough.
+    async function ensureGameShell(scheduleId) {
+      if (!scheduleId) throw new Error('The game to link could not be identified.');
+      const { data, error } = await client.rpc('ensure_schedule_game_shell', { target_schedule_id: scheduleId });
+      if (error) throw new Error(error.message);
+      return data;
     }
 
     async function editGame(scheduleId, fields) {
@@ -126,22 +146,29 @@
       if (!date) throw new Error('Choose the game date.');
       if (!opponent) throw new Error('Enter the opponent.');
       const patch = {
-        date,
-        time: fields.time || null,
-        opponent,
-        home_away: fields.homeAway === 'Away' ? 'Away' : 'Home',
-        game_type: fields.gameType || 'League',
-        location: String(fields.location || '').trim(),
-        notes: String(fields.notes || '').trim(),
-        updated_at: new Date().toISOString()
+        target_schedule_id: scheduleId,
+        new_date: date,
+        new_opponent: opponent,
+        new_time: fields.time || null,
+        new_home_away: fields.homeAway === 'Away' ? 'Away' : 'Home',
+        new_game_type: fields.gameType || 'League',
+        new_location: String(fields.location || '').trim(),
+        new_notes: String(fields.notes || '').trim(),
+        // Omitting a season means "leave it as-is". Only an explicit season
+        // correction is sent, and the server proves it belongs to this team.
+        new_season_id: fields.seasonId || null
       };
-      // Identity is the existing row ID; the team filter is a second guard so a
-      // crafted ID from another team can never match.
-      const { data, error } = await client.from('team_schedule_games').update(patch).eq('id', scheduleId).eq('team_id', teamId).select();
+      // One transactional RPC updates the schedule row and its linked canonical
+      // game together. Doing this as two client writes could leave the rows
+      // divergent, and would let a schedule-only editor mutate a game row they
+      // lack games.edit on. The function re-checks both capabilities server-side
+      // and never rewrites source_game_id, so existing stats stay attached.
+      const { data, error } = await client.rpc('save_schedule_game', patch);
       if (error) throw new Error(error.message);
-      if (!data || !data.length) throw new Error('That game was not found on this team.');
-      onChanged?.('schedule');
-      return data[0];
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) throw new Error('That game was not found on this team.');
+      await onChanged?.('schedule');
+      return row;
     }
 
     async function deleteGame(scheduleId) {
@@ -151,23 +178,49 @@
       if (!scheduleId) throw new Error('The game to delete could not be identified.');
       const { error } = await client.from('team_schedule_games').delete().eq('id', scheduleId).eq('team_id', teamId);
       if (error) throw new Error(error.message);
-      onChanged?.('schedule');
+      await onChanged?.('schedule');
       return true;
     }
 
     function gameFormHtml(existing = null) {
       const g = existing || {};
+      // Each help bubble sits OUTSIDE the <label>. A <button> nested inside a
+      // label re-forwards activation to the control, which toggled the native
+      // date picker open-then-closed. Explicit for/id association keeps the
+      // label clickable without wrapping the input.
       return `<form class="coach-form" data-game-form>
         <input type="hidden" name="scheduleId" value="${esc(g.id || '')}" />
-        <label>Date ${help(HELP.season)}<input name="date" type="date" required value="${esc(g.date || '')}" /></label>
+        <div class="coach-field"><span class="coach-field-label"><label for="coachGameDate">Date</label>${help(HELP.season)}</span><input id="coachGameDate" name="date" type="date" required value="${esc(g.date || '')}" /></div>
         <label>Opponent<input name="opponent" type="text" maxlength="120" required placeholder="Opponent name" value="${esc(g.opponent || '')}" /></label>
         <label>Time<input name="time" type="time" value="${esc(g.time || '')}" /></label>
-        <label>Home / Away ${help(HELP.homeAway)}<select name="homeAway"><option${g.home_away !== 'Away' ? ' selected' : ''}>Home</option><option${g.home_away === 'Away' ? ' selected' : ''}>Away</option></select></label>
-        <label>Type ${help(HELP.gameType)}<select name="gameType">${['League', 'Exhibition', 'Tournament', 'Playoff'].map(t => `<option${(g.game_type || 'League') === t ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+        <div class="coach-field"><span class="coach-field-label"><label for="coachGameHomeAway">Home / Away</label>${help(HELP.homeAway)}</span><select id="coachGameHomeAway" name="homeAway"><option${g.home_away !== 'Away' ? ' selected' : ''}>Home</option><option${g.home_away === 'Away' ? ' selected' : ''}>Away</option></select></div>
+        <div class="coach-field"><span class="coach-field-label"><label for="coachGameType">Type</label>${help(HELP.gameType)}</span><select id="coachGameType" name="gameType">${['League', 'Exhibition', 'Tournament', 'Playoff'].map(t => `<option${(g.game_type || 'League') === t ? ' selected' : ''}>${t}</option>`).join('')}</select></div>
         <label>Location<input name="location" type="text" maxlength="160" placeholder="Arena (optional)" value="${esc(g.location || '')}" /></label>
         <button class="btn primary" type="submit" data-save-button>${existing ? SAVE_LABELS.idle : 'Add Game'}</button>
         <div class="coach-form-status" role="status" aria-live="polite"></div>
       </form>`;
+    }
+
+    // Chromium only opens the native calendar from the small indicator icon.
+    // showPicker() makes a normal click/tap on the field open it, and degrades
+    // silently where the API is unavailable or refuses the gesture.
+    function enhanceDateInputs(scope) {
+      if (!scope || typeof scope.querySelectorAll !== 'function') return 0;
+      let bound = 0;
+      scope.querySelectorAll('input[type="date"], input[type="time"]').forEach(input => {
+        if (input.dataset.pickerBound === 'true') return;
+        input.dataset.pickerBound = 'true';
+        bound += 1;
+        input.addEventListener('click', () => {
+          if (typeof input.showPicker !== 'function') return;
+          try {
+            input.showPicker();
+          } catch (error) {
+            // Unsupported or blocked gesture — the native indicator still works.
+          }
+        });
+      });
+      return bound;
     }
 
     async function submitGameForm(form) {
@@ -291,7 +344,7 @@
         if (error) throw new Error(error.message);
         saveState = SAVE_STATES.SAVED;
         dirty = false;
-        onChanged?.('stats');
+        await onChanged?.('stats');
         return true;
       } catch (error) {
         saveState = SAVE_STATES.ERROR;
@@ -370,7 +423,7 @@
         status: 'active'
       }).select().single();
       if (error) throw new Error(error.message);
-      onChanged?.('roster');
+      await onChanged?.('roster');
       return data;
     }
 
@@ -397,7 +450,7 @@
       }).eq('id', playerId).eq('team_id', teamId).select();
       if (error) throw new Error(error.message);
       if (!data || !data.length) throw new Error('That player was not found on this team.');
-      onChanged?.('roster');
+      await onChanged?.('roster');
       return data[0];
     }
 
@@ -412,8 +465,51 @@
         .select();
       if (error) throw new Error(error.message);
       if (!data || !data.length) throw new Error('That player was not found on this team.');
-      onChanged?.('roster');
+      await onChanged?.('roster');
       return true;
+    }
+
+    // Roster edit form. Mirrors the schedule edit pattern: the player's row ID
+    // is carried in a hidden field so the save updates that exact roster row.
+    function playerEditFormHtml(player) {
+      const p = player || {};
+      const position = String(p.position || 'F').toUpperCase();
+      return `<form class="coach-form quick-add" data-player-edit-form>
+        <input type="hidden" name="playerId" value="${esc(p.id || '')}" />
+        <input name="jerseyNumber" type="text" inputmode="numeric" maxlength="4" placeholder="#" aria-label="Jersey number" required value="${esc(p.jersey_number || '')}" />
+        <input name="name" type="text" maxlength="120" placeholder="Player name" aria-label="Player name" required value="${esc(p.name || '')}" />
+        <select name="position" aria-label="Position">${[['F', 'Forward'], ['D', 'Defense'], ['G', 'Goalie']].map(([value, label]) => `<option value="${value}"${position === value ? ' selected' : ''}>${label}</option>`).join('')}</select>
+        <button class="btn primary" type="submit" data-save-button>${SAVE_LABELS.idle}</button>
+        <button class="btn" type="button" data-cancel-player-edit>Cancel</button>
+        <div class="coach-form-status" role="status" aria-live="polite"></div>
+      </form>`;
+    }
+
+    async function submitPlayerEditForm(form) {
+      const button = form.querySelector('[data-save-button]');
+      const status = form.querySelector('.coach-form-status');
+      if (button.disabled) return;
+      button.disabled = true;
+      button.textContent = SAVE_LABELS.saving;
+      status.textContent = '';
+      status.className = 'coach-form-status';
+      try {
+        const player = await editPlayer(form.playerId.value, {
+          jerseyNumber: form.jerseyNumber.value,
+          name: form.name.value,
+          position: form.position.value
+        });
+        button.textContent = SAVE_LABELS.saved;
+        status.textContent = `Player #${player.jersey_number} updated.`;
+        status.classList.add('ok');
+        return player;
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = SAVE_LABELS.error;
+        status.textContent = error.message || 'The player could not be saved.';
+        status.classList.add('err');
+        throw error;
+      }
     }
 
     function rosterWorkspaceHtml(roster) {
@@ -470,6 +566,8 @@
       context,
       findDuplicateGames,
       gameFormHtml,
+      enhanceDateInputs,
+      ensureGameShell,
       submitGameForm,
       addGame,
       editGame,
@@ -481,6 +579,8 @@
       derivedGoalie,
       statsWorkspaceHtml,
       rosterWorkspaceHtml,
+      playerEditFormHtml,
+      submitPlayerEditForm,
       submitPlayerForm,
       addPlayer,
       editPlayer,
