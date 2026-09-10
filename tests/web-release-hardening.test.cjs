@@ -78,10 +78,15 @@ test('release documentation exists and covers the acceptance areas', () => {
 
 test('invite edge function is generalized and validates team ownership server-side', () => {
   const fn = fs.readFileSync('supabase/functions/invite-staff/index.ts', 'utf8');
+  const resolver = fs.readFileSync('supabase/migrations/20260911000100_026_resolve_invite_team.sql', 'utf8');
   assert.doesNotMatch(fn, /arctic-foxes/i);
-  assert.match(fn, /has_team_capability/);
   assert.match(fn, /SUPABASE_SERVICE_ROLE_KEY/);
-  // Team slug is requested by the caller but always validated against the
-  // caller's ownership via has_team_capability before any admin action.
-  assert.match(fn, /\.eq\('slug', teamSlug\)/);
+  // The team slug is still requested by the caller, but lookup and ownership
+  // validation now happen together inside the guarded resolve_invite_team RPC
+  // (migration 026) rather than a service-role read of public.teams, which
+  // service_role has no privilege to perform.
+  assert.match(fn, /callerClient\.rpc\('resolve_invite_team'/);
+  assert.match(fn, /target_team_slug: teamSlug \|\| null/);
+  assert.doesNotMatch(fn, /adminClient[\s\S]{0,40}\.from\('teams'\)/);
+  assert.match(resolver, /has_team_capability\(found_team\.id, 'admin\.users'\)/);
 });

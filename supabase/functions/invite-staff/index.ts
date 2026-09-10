@@ -128,30 +128,33 @@ async function getOwnerContext(request: Request, requestedTeamSlug?: unknown, re
     : '';
   if (!teamSlug && !teamId) throw new Error('A valid team is required.');
 
-  let teamQuery = adminClient
-    .from('teams')
-    .select('id,name,slug,organization_id');
-  teamQuery = teamId ? teamQuery.eq('id', teamId) : teamQuery.eq('slug', teamSlug);
-  const { data: team, error: teamError } = await teamQuery.single();
-  if (teamError || !team) throw new Error('That team could not be found or managed.');
+  // Resolve the team through a guarded SECURITY DEFINER RPC using the caller's
+  // own JWT. This deliberately avoids a service-role read of public.teams:
+  // service_role has no SELECT privilege on that table (migration 002 granted
+  // only profiles and team_memberships), and widening that grant would give the
+  // invite path unrestricted read access to every team on the platform.
+  // resolve_invite_team performs the lookup and the authorization together and
+  // returns zero rows for both unknown and unauthorized teams, so a caller
+  // cannot enumerate teams or probe slugs. See migration 026.
+  const { data: resolvedRows, error: teamError } = await callerClient.rpc('resolve_invite_team', {
+    target_team_slug: teamSlug || null,
+    target_team_id: teamId || null
+  });
+  const resolved = Array.isArray(resolvedRows) ? resolvedRows[0] : resolvedRows;
+  if (teamError || !resolved?.team_id) throw new Error('That team could not be found or managed.');
 
-  const [capabilityResult, platformResult] = await Promise.all([
-    callerClient.rpc('has_team_capability', {
-      target_team_id: team.id,
-      requested_capability: 'admin.users'
-    }),
-    callerClient.rpc('is_platform_admin')
-  ]);
-  if ((capabilityResult.error || capabilityResult.data !== true)
-      && (platformResult.error || platformResult.data !== true)) {
-    throw new Error('That team could not be found or managed.');
-  }
+  const team = {
+    id: resolved.team_id,
+    name: resolved.team_name,
+    slug: resolved.team_slug,
+    organization_id: resolved.organization_id
+  };
 
   return {
     caller: userData.user,
     team,
-    canManageTeam: !capabilityResult.error && capabilityResult.data === true,
-    isPlatformAdmin: !platformResult.error && platformResult.data === true,
+    canManageTeam: resolved.can_manage_team === true,
+    isPlatformAdmin: resolved.is_platform_admin === true,
     // callerClient carries the caller's own JWT so security-definer RPCs that
     // gate on auth.uid() (create_workspace_invite, list_workspace_invites,
     // resolve_workspace_plan, revoke_workspace_invite) authorize correctly.
