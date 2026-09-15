@@ -45,6 +45,18 @@
       return data;
     }
 
+    function isV2() {
+      return Boolean(progress?.onboarding_v2_step);
+    }
+
+    function stepRpc() {
+      return isV2() ? 'onboarding2_mark_step' : 'onboarding_mark_step';
+    }
+
+    function visibleSteps() {
+      return isV2() ? STEPS : STEPS.filter(item => item.id !== 'first_game' && item.id !== 'first_stats');
+    }
+
     function completion(id) {
       if (!progress) return false;
       if (id === 'account') return true;
@@ -70,6 +82,7 @@
 
     function currentStepFromProgress() {
       if (!progress || progress.completed_at) return 'review';
+      if (progress.onboarding_v2_step) return progress.onboarding_v2_step;
       if (progress.current_step === 'review') return 'review';
       if (EDITABLE_STEPS.includes(progress.current_step)) return progress.current_step;
       return 'organization';
@@ -122,7 +135,7 @@
       error = '';
       paint();
       try {
-        progress = await call('onboarding_ensure');
+        progress = await call('onboarding2_ensure');
         step = currentStepFromProgress();
         await refreshState();
       } catch (loadError) {
@@ -133,7 +146,7 @@
     }
 
     function progressBar() {
-      return `<ol class="onboarding-progress">${STEPS.map(item => {
+      return `<ol class="onboarding-progress">${visibleSteps().map(item => {
         const done = completion(item.id);
         const current = item.id === step;
         return `<li class="${done ? 'done' : ''}${current ? ' current' : ''}"><span>${done ? '✓' : ''}</span>${esc(item.label)}</li>`;
@@ -278,12 +291,15 @@
     }
 
     function reviewBody() {
-      const rows = STEPS.filter(item => item.id !== 'review').map(item => {
+      const rows = visibleSteps().filter(item => item.id !== 'review').map(item => {
         const status = stepStatus(item.id);
         return `<tr><td>${esc(item.label)}</td><td><span class="admin-badge admin-badge-${status === 'Complete' ? 'active' : status === 'Optional' ? 'standard' : 'pending'}">${status}</span></td>
           <td>${status !== 'Complete' && EDITABLE_STEPS.includes(item.id) ? `<button class="btn admin-action" data-goto="${item.id}" type="button">Go to ${esc(item.label)}</button>` : ''}</td></tr>`;
       }).join('');
-      const requiredReady = ['organization', 'team', 'season', 'roster', 'first_game'].every(completion);
+      const requiredSteps = isV2()
+        ? ['organization', 'team', 'season', 'roster', 'first_game']
+        : ['organization', 'team', 'season', 'roster'];
+      const requiredReady = requiredSteps.every(completion);
       return `<section class="onboarding-card"><h2>Review your setup</h2>
         <div class="admin-stat-grid">
           <div class="admin-stat"><small>Organization</small><strong>${esc(organization?.name || '—')}</strong></div>
@@ -396,13 +412,14 @@
       root.querySelector('[data-back]')?.addEventListener('click', () => { step = previousStep(); paint(); });
       root.querySelectorAll('[data-goto]').forEach(button => button.addEventListener('click', () => { step = button.dataset.goto; paint(); }));
       root.querySelectorAll('[data-mark-step]').forEach(button => button.addEventListener('click', () => run(async () => {
-        const result = await call('onboarding_mark_step', { step: button.dataset.markStep });
+        const result = await call(stepRpc(), { step: button.dataset.markStep });
         step = result.next === 'review' ? 'review' : result.next;
       })));
       root.querySelector('#obOrganization')?.addEventListener('submit', event => {
         event.preventDefault();
         run(async () => {
           await call('onboarding_create_organization', { org_name: event.target.querySelector('#obOrgName').value });
+          if (isV2()) await call('onboarding2_mark_step', { step: 'organization' });
           step = 'team';
         });
       });
@@ -410,6 +427,7 @@
         event.preventDefault();
         run(async () => {
           await call('onboarding_create_team', { team_name: event.target.querySelector('#obTeamName').value });
+          if (isV2()) await call('onboarding2_mark_step', { step: 'team' });
           step = 'season';
         });
       });
@@ -417,6 +435,7 @@
         event.preventDefault();
         run(async () => {
           await call('onboarding_create_season', { season_label: event.target.querySelector('#obSeasonKey').value });
+          if (isV2()) await call('onboarding2_mark_step', { step: 'season' });
           step = 'roster';
         });
       });
@@ -488,7 +507,7 @@
         const form = event.target;
         run(async () => {
           await uploadLogo(form.querySelector('#obLogoFile').files?.[0]);
-          await call('onboarding_save_branding', {
+          await call(isV2() ? 'onboarding2_save_branding' : 'onboarding_save_branding', {
             primary_color_input: form.querySelector('#obPrimary').value,
             secondary_color_input: form.querySelector('#obSecondary').value,
             accent_color_input: form.querySelector('#obAccent').value,
@@ -501,7 +520,7 @@
         event.preventDefault();
         const form = event.target;
         run(async () => {
-          await call('onboarding_add_first_game', {
+          await call('onboarding2_add_first_game', {
             game_date: form.querySelector('#obGameDate').value,
             opponent_name: form.querySelector('#obGameOpponent').value,
             game_time: form.querySelector('#obGameTime').value || null,
@@ -523,13 +542,13 @@
             target_goals_for: parseScore(form.querySelector('#obGoalsFor').value, 'Our score'),
             target_goals_against: parseScore(form.querySelector('#obGoalsAgainst').value, 'Opponent score')
           });
-          await call('onboarding_mark_step', { step: 'first_stats' });
+          await call(stepRpc(), { step: 'first_stats' });
           step = 'review';
           notice = 'First result saved. Your dashboard record is ready.';
         });
       });
       root.querySelector('#obFinish')?.addEventListener('click', () => run(async () => {
-        await call('onboarding_complete');
+        await call(isV2() ? 'onboarding2_complete' : 'onboarding_complete');
         onComplete?.(progress?.team_id);
       }));
     }
