@@ -36,7 +36,7 @@ function makeClient({ progress, rosterRows = [], inviteRows = [], brandingRow = 
     rpcCalls,
     rpc: (name, args) => {
       rpcCalls.push([name, args || {}]);
-      if (name === 'onboarding_ensure') return Promise.resolve({ data: typeof progress === 'function' ? progress() : progress, error: progress instanceof Error ? progress : null });
+      if (name === 'onboarding_ensure' || name === 'onboarding2_ensure') return Promise.resolve({ data: typeof progress === 'function' ? progress() : progress, error: progress instanceof Error ? progress : null });
       if (name === 'onboarding_list_invites') return Promise.resolve({ data: inviteRows, error: null });
       return Promise.resolve({ data: { ok: true }, error: null });
     },
@@ -227,7 +227,7 @@ test('onboarding RPC failures render actionable errors without losing progress',
   const context = { window: {} };
   vm.runInNewContext(onboardingSource, context);
   const client = makeClient({ progress: failing });
-  client.rpc = name => name === 'onboarding_ensure'
+  client.rpc = name => name === 'onboarding2_ensure'
     ? Promise.resolve({ data: failing, error: null })
     : Promise.resolve({ data: null, error: { message: 'Jersey number 7 is already assigned on this team.' } });
   const manager = context.window.FoxesOnboarding.createOnboarding({
@@ -284,18 +284,18 @@ test('roster, staff, and branding RPCs validate input and scope to the onboardin
   assert.match(migrationSource, /update public\.team_branding/);
 });
 
-test('completion validates required steps and writes completed_at exactly once', () => {
-  assert.match(handoffMigrationSource, /function public\.onboarding_complete\(\)/);
-  assert.match(handoffMigrationSource, /Organization, team, and season setup must be complete\./);
-  assert.match(handoffMigrationSource, /Add at least one active roster player before finishing setup\./);
+test('V2 completion validates the first-game gate without replacing legacy completion', () => {
+  assert.match(handoffMigrationSource, /function public\.onboarding2_complete\(\)/);
+  assert.match(handoffMigrationSource, /Organization, team, season, and roster setup must be complete\./);
+  assert.match(handoffMigrationSource, /not progress\.roster_complete/);
   assert.match(handoffMigrationSource, /Add your first game before finishing setup\./);
-  assert.match(handoffMigrationSource, /where user_id = caller_id/);
+  assert.match(handoffMigrationSource, /where user_id = progress\.user_id/);
   assert.match(handoffMigrationSource, /already_complete/);
 });
 
 test('onboarding continues through first game and first stats before review', async () => {
   const firstGame = loadOnboarding({
-    progress: { ...freshProgress, current_step: 'first_game', team_id: 'team-1', season_id: 'season-1', organization_complete: true, team_complete: true, season_complete: true, roster_complete: true },
+    progress: { ...freshProgress, onboarding_v2_step: 'first_game', team_id: 'team-1', season_id: 'season-1', organization_complete: true, team_complete: true, season_complete: true, roster_complete: true },
     rosterRows: [{ jersey_number: '7', name: 'Jane Smith', position: 'F' }],
     teamRow: { id: 'team-1', name: 'Foxes 12U AA' }
   });
@@ -307,7 +307,7 @@ test('onboarding continues through first game and first stats before review', as
   assert.match(root.innerHTML, /id="obFirstGame"/);
 
   const firstStats = loadOnboarding({
-    progress: { ...freshProgress, current_step: 'first_stats', team_id: 'team-1', season_id: 'season-1', organization_complete: true, team_complete: true, season_complete: true, roster_complete: true, first_game_complete: true },
+    progress: { ...freshProgress, onboarding_v2_step: 'first_stats', team_id: 'team-1', season_id: 'season-1', organization_complete: true, team_complete: true, season_complete: true, roster_complete: true, first_game_complete: true },
     rosterRows: [{ jersey_number: '7', name: 'Jane Smith', position: 'F' }],
     teamRow: { id: 'team-1', name: 'Foxes 12U AA' },
     gameRow: { id: 'schedule-1', date: '2026-09-15', opponent: 'Riverside', home_away: 'Home', linked_game_source_id: 'game-1' }
@@ -322,7 +322,7 @@ test('onboarding continues through first game and first stats before review', as
 
 test('future first games do not accept premature stats and can continue to review', async () => {
   const manager = loadOnboarding({
-    progress: { ...freshProgress, current_step: 'first_stats', team_id: 'team-1', season_id: 'season-1', organization_complete: true, team_complete: true, season_complete: true, roster_complete: true, first_game_complete: true },
+    progress: { ...freshProgress, onboarding_v2_step: 'first_stats', team_id: 'team-1', season_id: 'season-1', organization_complete: true, team_complete: true, season_complete: true, roster_complete: true, first_game_complete: true },
     gameRow: { id: 'schedule-1', date: '2099-09-15', opponent: 'Riverside', home_away: 'Away', linked_game_source_id: 'game-1' }
   });
   const root = elementStub();
@@ -333,14 +333,35 @@ test('future first games do not accept premature stats and can continue to revie
   assert.doesNotMatch(root.innerHTML, /id="obFirstStats"/);
 });
 
-test('first-game handoff is server-scoped, retry-safe, and not callable anonymously', () => {
-  assert.match(handoffMigrationSource, /function public\.onboarding_add_first_game/);
+test('V2 first-game handoff is server-scoped, retry-safe, and not callable anonymously', () => {
+  assert.match(handoffMigrationSource, /function public\.onboarding2_add_first_game/);
   assert.match(handoffMigrationSource, /on conflict \(team_id, source_schedule_id\) do update/);
-  assert.match(handoffMigrationSource, /public\.ensure_schedule_game_shell\(schedule_row\.id\)/);
-  assert.match(handoffMigrationSource, /membership\.user_id = caller_id/);
-  assert.match(handoffMigrationSource, /revoke all on function public\.onboarding_add_first_game[^;]+from public, anon/);
+  assert.match(handoffMigrationSource, /public\.ensure_schedule_game_shell\(schedule_id\)/);
+  assert.match(handoffMigrationSource, /progress\.onboarding_v2_step is null/);
+  assert.match(handoffMigrationSource, /revoke all on function public\.onboarding2_add_first_game[^;]+from public, anon/);
   assert.match(handoffMigrationSource, /first_game_complete = true/);
-  assert.match(handoffMigrationSource, /current_step = 'first_stats'/);
+  assert.match(handoffMigrationSource, /onboarding_v2_step = 'first_stats'/);
+});
+
+test('028 preserves the deployed legacy review flow while adding the V2 track', async () => {
+  assert.match(handoffMigrationSource, /add column if not exists onboarding_v2_step/);
+  assert.doesNotMatch(handoffMigrationSource, /create or replace function public\.onboarding_(?!v2)/);
+  assert.doesNotMatch(handoffMigrationSource, /update public\.onboarding_progress\s+set current_step/i);
+  assert.doesNotMatch(handoffMigrationSource, /current_step = 'first_game'/);
+  assert.match(handoffMigrationSource, /Legacy onboarding_complete remains\s+-- unchanged/i);
+
+  const legacy = loadOnboarding({
+    progress: { ...freshProgress, current_step: 'review', team_id: 'team-1', season_id: 'season-1', organization_complete: true, team_complete: true, season_complete: true, roster_complete: true },
+    rosterRows: [{ jersey_number: '7', name: 'Jane Smith', position: 'F' }],
+    orgRow: { id: 'org-1', name: 'Arctic Foxes' },
+    teamRow: { id: 'team-1', name: 'Foxes 12U AA' }
+  });
+  const root = elementStub();
+  legacy.mount(root);
+  await flush();
+  assert.equal(legacy.step, 'review');
+  assert.doesNotMatch(root.innerHTML, /First Game/);
+  assert.doesNotMatch(root.innerHTML, /id="obFinish"[^>]*disabled/);
 });
 
 test('existing configured users have no progress row and bypass onboarding', () => {
