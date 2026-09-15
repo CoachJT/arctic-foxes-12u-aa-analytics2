@@ -182,6 +182,50 @@
       return true;
     }
 
+    async function saveScore(gameId, goalsFor, goalsAgainst) {
+      const { teamId, seasonId } = context();
+      if (!teamId) throw new Error('No team is selected.');
+      if (!seasonId) throw new Error('No season is selected.');
+      if (!canWrite('stats.edit')) throw new Error('You do not have score editing access.');
+      if (!gameId) throw new Error('The game to score could not be identified.');
+      const parseScore = (value, label) => {
+        const score = numeric(value, label);
+        if (!Number.isInteger(score)) throw new Error(`${label} must be a whole number.`);
+        return score;
+      };
+      const { data, error } = await client.rpc('save_game_score', {
+        target_team_id: teamId,
+        target_season_id: seasonId,
+        target_source_game_id: gameId,
+        target_goals_for: parseScore(goalsFor, 'Our score'),
+        target_goals_against: parseScore(goalsAgainst, 'Opponent score')
+      });
+      if (error) throw new Error(error.message);
+      await onChanged?.('score');
+      return data;
+    }
+
+    async function submitScoreForm(form) {
+      const button = form.querySelector('[data-score-save]');
+      const status = form.querySelector('[data-score-status]');
+      if (button.disabled) return;
+      button.disabled = true;
+      button.textContent = 'Saving…';
+      status.textContent = '';
+      status.className = 'coach-form-status';
+      try {
+        await saveScore(form.gameId.value, form.goalsFor.value, form.goalsAgainst.value);
+        button.textContent = '✓ Score Saved';
+        status.textContent = 'Score saved. Team record updated.';
+        status.classList.add('ok');
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = 'Save Score';
+        status.textContent = error.message || 'The score could not be saved.';
+        status.classList.add('err');
+      }
+    }
+
     function gameFormHtml(existing = null) {
       const g = existing || {};
       // Each help bubble sits OUTSIDE the <label>. A <button> nested inside a
@@ -572,6 +616,8 @@
       addGame,
       editGame,
       deleteGame,
+      saveScore,
+      submitScoreForm,
       openGame,
       setStat,
       saveStats,

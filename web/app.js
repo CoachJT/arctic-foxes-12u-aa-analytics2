@@ -217,11 +217,25 @@ function bindDashboardControls() {
 }
 function schedule() {
   const canEdit = can(PERMISSIONS.SCHEDULE_EDIT, activeStaff);
+  const canEditScore = can(PERMISSIONS.STATS_EDIT, activeStaff);
   const today = new Date().toISOString().slice(0, 10);
   const games = (phase1Data?.schedule || []).slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const teamStats = new Map((phase1Data?.teamStats || []).map(stats => [stats.source_game_id, stats]));
   const upcoming = games.filter(g => String(g.date) >= today);
   const past = games.filter(g => String(g.date) < today);
-  const row = game => `<div class="schedule-item${String(game.date) < today ? ' past' : ''}"><div class="schedule-date"><strong>${escapeHtml(new Date(`${game.date}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: '2-digit' }).toUpperCase())}</strong>${escapeHtml(String(game.date).slice(0, 4))}</div><div><h3>${escapeHtml(game.opponent)}</h3><p>${escapeHtml(game.home_away)} · ${escapeHtml(game.location || 'Location unavailable')}${game.time ? ` · ${escapeHtml(game.time)}` : ''}</p></div><span class="tag">${escapeHtml(game.game_type)}</span>${canEdit ? `<span class="schedule-actions"><button class="btn admin-action" type="button" data-coach-edit-game="${escapeHtml(game.id)}">Edit</button><button class="btn admin-action danger" type="button" data-coach-delete-game="${escapeHtml(game.id)}">Delete</button></span>` : ''}</div>`;
+  const row = game => {
+    const stats = teamStats.get(game.linked_game_source_id);
+    const scored = stats?.goals_for !== null && stats?.goals_for !== undefined && stats?.goals_against !== null && stats?.goals_against !== undefined;
+    const scoreForm = canEditScore && String(game.date) <= today && game.linked_game_source_id ? `<form class="score-entry" data-score-form>
+      <input type="hidden" name="gameId" value="${escapeHtml(game.linked_game_source_id)}" />
+      <label>Us<input name="goalsFor" type="number" min="0" step="1" inputmode="numeric" required value="${scored ? escapeHtml(stats.goals_for) : ''}" /></label>
+      <span>–</span>
+      <label>Them<input name="goalsAgainst" type="number" min="0" step="1" inputmode="numeric" required value="${scored ? escapeHtml(stats.goals_against) : ''}" /></label>
+      <button class="btn primary" type="submit" data-score-save>${scored ? 'Update Score' : 'Save Score'}</button>
+      <span class="coach-form-status" data-score-status role="status" aria-live="polite"></span>
+    </form>` : scored ? `<strong class="schedule-score">${escapeHtml(stats.goals_for)}–${escapeHtml(stats.goals_against)}</strong>` : '';
+    return `<div class="schedule-item${String(game.date) < today ? ' past' : ''}"><div class="schedule-date"><strong>${escapeHtml(new Date(`${game.date}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: '2-digit' }).toUpperCase())}</strong>${escapeHtml(String(game.date).slice(0, 4))}</div><div><h3>${escapeHtml(game.opponent)}</h3><p>${escapeHtml(game.home_away)} · ${escapeHtml(game.location || 'Location unavailable')}${game.time ? ` · ${escapeHtml(game.time)}` : ''}</p>${scoreForm}</div><span class="tag">${escapeHtml(game.game_type)}</span>${canEdit ? `<span class="schedule-actions"><button class="btn admin-action" type="button" data-coach-edit-game="${escapeHtml(game.id)}">Edit</button><button class="btn admin-action danger" type="button" data-coach-delete-game="${escapeHtml(game.id)}">Delete</button></span>` : ''}</div>`;
+  };
   return shell('Schedule', canEdit ? 'Add and manage games. Changes save to the team immediately.' : 'Live schedule synced from the team Windows app.', `
     ${canEdit ? `<section class="card"><div class="card-title"><h2>${phase1Data?.schedule?.some(() => true) ? 'Add game' : 'Add your first game'}</h2><span class="admin-security-note">Team-scoped · RLS enforced</span></div><div id="coachGameFormHost">${coachQol.gameFormHtml()}</div></section>` : ''}
     ${games.length ? `<section class="card">${cardTitle(`Upcoming · ${upcoming.length}`, 'Newest changes save instantly')}<div class="schedule-list">${upcoming.map(row).join('') || '<div class="empty-view"><p>No upcoming games.</p></div>'}</div></section>
@@ -236,6 +250,10 @@ function bindCoachGameControls() {
     event.preventDefault();
     coachQol.submitGameForm(event.currentTarget);
   });
+  document.querySelectorAll('[data-score-form]').forEach(form => form.addEventListener('submit', event => {
+    event.preventDefault();
+    coachQol.submitScoreForm(event.currentTarget);
+  }));
   document.querySelectorAll('[data-coach-edit-game]').forEach(button => button.addEventListener('click', () => {
     const game = (phase1Data?.schedule || []).find(g => g.id === button.dataset.coachEditGame);
     if (!game || !host) return;

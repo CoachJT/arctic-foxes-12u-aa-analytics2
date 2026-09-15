@@ -99,7 +99,7 @@ test('invite-staff only exposes assistant roles', () => {
 });
 
 test('admin UI is cache-busted to the invite-flow build', () => {
-  assert.match(index, /app\.js\?v=schedule-linkage-2/);
+  assert.match(index, /app\.js\?v=game-score-1/);
   assert.match(app, /id="inviteForm"/);
   assert.match(app, /id="inviteList"/);
 });
@@ -246,4 +246,3 @@ test('the invite hotfix preserves the workspace_invites lifecycle protections', 
   assert.match(functionSource, /target_team_id: context\.team\.id/);
   assert.match(functionSource, /target_organization_id: context\.team\.organization_id/);
 });
-
