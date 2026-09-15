@@ -8,6 +8,7 @@ const appSource = fs.readFileSync('web/app.js', 'utf8');
 const indexSource = fs.readFileSync('web/index.html', 'utf8');
 const stylesSource = fs.readFileSync('web/styles.css', 'utf8');
 const migrationSource = fs.readFileSync('supabase/migrations/20260908073105_016_game_stat_entry.sql', 'utf8');
+const scoreMigrationSource = fs.readFileSync('supabase/migrations/20260915000100_027_game_score_entry.sql', 'utf8');
 
 function makeClient({ insertError = null, rpcError = null, onInsert } = {}) {
   const calls = { insert: [], update: [], delete: [], rpc: [] };
@@ -148,6 +149,34 @@ test('stats save is rejected without a game open or without stats.edit', async (
   await assert.rejects(limited.saveStats(), /stats editing access/);
 });
 
+test('quick score uses the narrow score RPC and requires whole non-negative values', async () => {
+  const coach = loadCoach();
+  const result = await coach.saveScore('game-1', '4', '2');
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), { ok: true });
+  await assert.rejects(coach.saveScore('', '4', '2'), /could not be identified/);
+  await assert.rejects(coach.saveScore('game-1', '1.5', '2'), /whole number/);
+  await assert.rejects(coach.saveScore('game-1', '-1', '2'), /cannot be negative/);
+  const limited = loadCoach({}, { capabilities: ['schedule.edit'] });
+  await assert.rejects(limited.saveScore('game-1', '4', '2'), /score editing access/);
+});
+
+test('quick score migration preserves other team stats and refreshes the season record', () => {
+  assert.match(scoreMigrationSource, /create or replace function public\.save_game_score/);
+  assert.match(scoreMigrationSource, /on conflict \(team_id, source_game_id\) do update set/);
+  assert.doesNotMatch(scoreMigrationSource, /shots_for = excluded\.shots_for/);
+  assert.match(scoreMigrationSource, /insert into public\.team_season_records/);
+  assert.match(scoreMigrationSource, /has_workspace_feature_access\(target_team_id, target_season_id, 'stats\.edit', 'stats'\)/);
+  assert.match(scoreMigrationSource, /game\.date <= current_date/);
+  assert.match(scoreMigrationSource, /grant execute on function public\.save_game_score\(uuid, uuid, text, integer, integer\) to authenticated/);
+});
+
+test('Schedule renders mobile score entry against the canonical linked game', () => {
+  assert.match(appSource, /data-score-form/);
+  assert.match(appSource, /game\.linked_game_source_id/);
+  assert.match(appSource, /coachQol\.submitScoreForm/);
+  assert.match(stylesSource, /\.score-entry/);
+});
+
 test('goalie saves and shots-against stay derived, never double-entered', () => {
   const coach = loadCoach();
   const derived = coach.derivedGoalie({ saves: 18, goals_against: 3 });
@@ -224,7 +253,7 @@ test('empty states tell the coach the next action', () => {
 });
 
 test('app wires coach controls behind capabilities and the module loads before app.js', () => {
-  assert.match(indexSource, /coach-qol\.js\?v=schedule-linkage-2/);
+  assert.match(indexSource, /coach-qol\.js\?v=game-score-1/);
   assert.ok(indexSource.indexOf('coach-qol.js') < indexSource.indexOf('app.js'));
   assert.match(appSource, /FoxesCoachQol\.createCoachQol/);
   assert.match(appSource, /bindCoachGameControls/);
@@ -343,7 +372,7 @@ test('a same-view rerender preserves scroll position and no dead hash links rema
 
 test('changed web assets carry a fresh cache-busting version', () => {
   for (const asset of ['styles.css', 'coach-qol.js', 'app.js']) {
-    assert.ok(indexSource.includes(`${asset}?v=schedule-linkage-2`), `${asset} must be cache-busted`);
+    assert.ok(indexSource.includes(`${asset}?v=game-score-1`), `${asset} must be cache-busted`);
   }
 });
 

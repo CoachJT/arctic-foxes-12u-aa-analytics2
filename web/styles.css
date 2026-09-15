@@ -145,6 +145,7 @@ body{background:radial-gradient(circle at 72% -15%,#34363a 0,#0d0e10 39%)}
 .coach-form-status.err{color:#ffb8bb}
 .schedule-actions{display:flex;gap:6px}
 .schedule-item.past{opacity:.72}
+.score-entry{display:flex;align-items:end;gap:7px;flex-wrap:wrap;margin-top:10px}.score-entry label{display:grid;gap:3px;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.08em}.score-entry input{width:58px;min-height:40px;padding:8px;border:1px solid #4a4d52;border-radius:7px;background:#080f18;color:#fff;font:700 16px "Space Grotesk";text-align:center}.score-entry input:focus{outline:2px solid var(--red);outline-offset:1px}.score-entry .btn{min-height:40px}.score-entry .coach-form-status{flex-basis:100%}.schedule-score{display:block;margin-top:8px;font:700 21px "Space Grotesk";color:var(--ice)}
 .stats-workspace{display:grid;gap:14px;margin-top:14px}
 .stat-group{font:700 13px "Space Grotesk";color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:6px 0 0}
 .stat-row{border:1px solid var(--line);border-radius:10px;background:#101215;padding:14px;display:grid;gap:10px}
