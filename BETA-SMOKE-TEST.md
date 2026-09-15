@@ -2,7 +2,7 @@
 
 Run only after explicit approval to promote the queued candidate to beta.
 
-- Confirm the deployed revision and migration ledger match the approved candidate.
+- Confirm the deployed revision and migration ledger include only `20260915040422`, `20260915040423`, and `20260915040424` from PR #36.
 - Verify access-code normalization rejects an already active code for another team.
 - Submit a duplicate pending join request and confirm it is rejected.
 - Verify cross-team playlist clip links and inactive/cross-team staff shares are rejected.
