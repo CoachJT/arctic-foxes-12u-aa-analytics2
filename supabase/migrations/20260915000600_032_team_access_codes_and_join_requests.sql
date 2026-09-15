@@ -5,6 +5,15 @@
 alter table public.team_access_codes
   add column if not exists code_digest text;
 
+-- Migration 029 could not derive a deterministic digest from its salted bcrypt
+-- hashes. Invalidate those legacy live codes rather than allowing an unseen
+-- plaintext collision; owners regenerate under the digest-backed contract.
+update public.team_access_codes
+set revoked_at = coalesce(revoked_at, now()),
+    regenerated_at = now()
+where revoked_at is null
+  and code_digest is null;
+
 create unique index if not exists team_access_codes_code_digest_uidx
   on public.team_access_codes(code_digest) where revoked_at is null;
 

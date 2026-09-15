@@ -44,6 +44,8 @@ test('code and request tables are not directly exposed to anon or authenticated 
 
 test('migration 032 enforces deterministic global code collision prevention via canonical digest', () => {
   assert.match(sql032, /add column if not exists code_digest text/);
+  assert.match(sql032, /where revoked_at is null\s+and code_digest is null/);
+  assert.match(sql032, /Invalidate those legacy live codes/);
   assert.match(sql032, /create unique index if not exists team_access_codes_code_digest_uidx\s+on public\.team_access_codes\(code_digest\)\s+where revoked_at is null/);
   assert.match(sql032, /encode\(digest\(normalized_code, 'sha256'\), 'hex'\)/);
   assert.match(sql032, /This access code is already in use by another team/);
