@@ -136,6 +136,7 @@
     }
 
     async function editGame(scheduleId, fields) {
+      if (pendingAction === 'edit-game') throw new Error('This game is already being updated.');
       const { teamId, seasonId } = context();
       if (!teamId) throw new Error('No team is selected.');
       if (!seasonId) throw new Error('No season is selected.');
@@ -163,12 +164,17 @@
       // divergent, and would let a schedule-only editor mutate a game row they
       // lack games.edit on. The function re-checks both capabilities server-side
       // and never rewrites source_game_id, so existing stats stay attached.
-      const { data, error } = await client.rpc('save_schedule_game', patch);
-      if (error) throw new Error(error.message);
-      const row = Array.isArray(data) ? data[0] : data;
-      if (!row) throw new Error('That game was not found on this team.');
-      await onChanged?.('schedule');
-      return row;
+      pendingAction = 'edit-game';
+      try {
+        const { data, error } = await client.rpc('save_schedule_game', patch);
+        if (error) throw new Error(error.message);
+        const row = Array.isArray(data) ? data[0] : data;
+        if (!row) throw new Error('That game was not found on this team.');
+        await onChanged?.('schedule');
+        return row;
+      } finally {
+        pendingAction = null;
+      }
     }
 
     async function deleteGame(scheduleId) {
@@ -214,9 +220,14 @@
       status.textContent = '';
       status.className = 'coach-form-status';
       try {
-        await saveScore(form.gameId.value, form.goalsFor.value, form.goalsAgainst.value);
+        const result = await saveScore(form.gameId.value, form.goalsFor.value, form.goalsAgainst.value);
         button.textContent = '✓ Score Saved';
-        status.textContent = 'Score saved. Team record updated.';
+        const record = result?.season_record || result?.record;
+        const outcome = Number(form.goalsFor.value) > Number(form.goalsAgainst.value) ? 'W'
+          : Number(form.goalsFor.value) < Number(form.goalsAgainst.value) ? 'L' : 'T';
+        status.textContent = record
+          ? `Score saved. Record: ${record.wins || 0}–${record.losses || 0}–${record.ties || 0}.`
+          : `Score saved: ${form.goalsFor.value}–${form.goalsAgainst.value} (${outcome}). Team record updated.`;
         status.classList.add('ok');
       } catch (error) {
         button.disabled = false;
@@ -471,6 +482,29 @@
       return data;
     }
 
+    function parseBulkRoster(text) {
+      const seen = new Set((context().roster || []).map(player => String(player.jersey_number).trim()));
+      const rows = String(text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+      if (!rows.length) throw new Error('Paste at least one player row.');
+      return rows.map((line, index) => {
+        const parts = line.split(/\t|,/).map(value => value.trim()).filter(Boolean);
+        if (parts.length !== 3) throw new Error(`Row ${index + 1} must be Jersey, Name, Position.`);
+        const [jerseyNumber, name, position] = parts;
+        if (!/^\d{1,4}$/.test(jerseyNumber)) throw new Error(`Row ${index + 1} has an invalid jersey number.`);
+        if (!['F', 'D', 'G'].includes(position.toUpperCase())) throw new Error(`Row ${index + 1} position must be F, D, or G.`);
+        if (name.split(/\s+/).filter(Boolean).length < 2) throw new Error(`Row ${index + 1} needs a first and last name.`);
+        if (seen.has(jerseyNumber)) throw new Error(`Row ${index + 1} duplicates jersey #${jerseyNumber}.`);
+        seen.add(jerseyNumber);
+        return { jerseyNumber, name, position: position.toUpperCase() };
+      });
+    }
+
+    async function addPlayersBulk(text) {
+      const players = parseBulkRoster(text);
+      for (const player of players) await addPlayer(player);
+      return players.length;
+    }
+
     async function editPlayer(playerId, fields) {
       const { teamId } = context();
       if (!teamId) throw new Error('No team is selected.');
@@ -566,6 +600,12 @@
           <button class="btn admin-action danger" type="button" data-remove-player="${esc(p.id)}">Remove</button>
         </div>`).join('');
       return `<div class="roster-workspace">
+        <form class="coach-form bulk-roster" data-bulk-roster-form>
+          <label>Paste roster rows<textarea name="rosterRows" rows="5" placeholder="7, Jane Smith, F&#10;30, Sam Ray, G" required></textarea></label>
+          <p class="sub">One player per line: jersey, full name, position (F, D, or G).</p>
+          <button class="btn primary" type="submit" data-save-button>Add pasted roster</button>
+          <div class="coach-form-status" role="status" aria-live="polite"></div>
+        </form>
         <form class="coach-form quick-add" data-player-form>
           <input name="jerseyNumber" type="text" inputmode="numeric" maxlength="4" placeholder="#" aria-label="Jersey number" required />
           <input name="name" type="text" maxlength="120" placeholder="Player name" aria-label="Player name" required />
@@ -603,6 +643,29 @@
         status.textContent = error.message;
         status.classList.add('err');
       }
+
+    }
+
+    async function submitBulkRosterForm(form) {
+      const button = form.querySelector('[data-save-button]');
+      const status = form.querySelector('.coach-form-status');
+      if (button.disabled) return;
+      button.disabled = true;
+      button.textContent = 'Validating…';
+      status.textContent = '';
+      status.className = 'coach-form-status';
+      try {
+        const count = await addPlayersBulk(form.rosterRows.value);
+        button.textContent = '✓ Roster Added';
+        status.textContent = `${count} player${count === 1 ? '' : 's'} added.`;
+        status.classList.add('ok');
+        form.reset();
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = 'Add pasted roster';
+        status.textContent = error.message || 'The roster could not be added.';
+        status.classList.add('err');
+      }
     }
 
     return {
@@ -628,6 +691,9 @@
       playerEditFormHtml,
       submitPlayerEditForm,
       submitPlayerForm,
+      submitBulkRosterForm,
+      parseBulkRoster,
+      addPlayersBulk,
       addPlayer,
       editPlayer,
       removePlayer,

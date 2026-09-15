@@ -253,7 +253,7 @@ test('empty states tell the coach the next action', () => {
 });
 
 test('app wires coach controls behind capabilities and the module loads before app.js', () => {
-  assert.match(indexSource, /coach-qol\.js\?v=game-score-1/);
+  assert.match(indexSource, /coach-qol\.js\?v=admin-coach-qol-1/);
   assert.ok(indexSource.indexOf('coach-qol.js') < indexSource.indexOf('app.js'));
   assert.match(appSource, /FoxesCoachQol\.createCoachQol/);
   assert.match(appSource, /bindCoachGameControls/);
@@ -296,6 +296,25 @@ test('mobile layouts stack coach forms and enlarge stat inputs', () => {
   assert.match(stylesSource, /@media\(max-width:420px\)[\s\S]{0,300}\.stat-input\{min-height:48px/);
   assert.match(stylesSource, /\.help-bubble::after/);
   assert.match(stylesSource, /\.stats-save-bar/);
+});
+
+test('bulk roster preflight validates all rows before writes', () => {
+  const coach = loadCoach({}, { roster: [{ jersey_number: '7', name: 'Existing Player' }] });
+  assert.deepEqual(JSON.parse(JSON.stringify(coach.parseBulkRoster('8, Jane Smith, F\n30, Sam Ray, G'))), [
+    { jerseyNumber: '8', name: 'Jane Smith', position: 'F' },
+    { jerseyNumber: '30', name: 'Sam Ray', position: 'G' }
+  ]);
+  assert.throws(() => coach.parseBulkRoster('8, Jane Smith'), /Row 1 must be/);
+  assert.throws(() => coach.parseBulkRoster('8, Jane Smith, C'), /position must be/);
+  assert.throws(() => coach.parseBulkRoster('7, New Player, F'), /duplicates jersey/);
+  assert.match(coach.rosterWorkspaceHtml([]), /data-bulk-roster-form/);
+});
+
+test('edit games use an explicit in-flight guard and score feedback includes W/L/T', () => {
+  assert.match(coachSource, /pendingAction === 'edit-game'/);
+  assert.match(coachSource, /Score saved: .* \(\$\{outcome\}\)/);
+  assert.match(appSource, /event\.key !== 'Enter'/);
+  assert.match(appSource, /inputs\[inputs\.indexOf\(input\) \+ 1\]\?\.focus/);
 });
 
 // --- 2.0.x interaction fixes: schedule/roster identity, picker, scroll ---
@@ -371,9 +390,9 @@ test('a same-view rerender preserves scroll position and no dead hash links rema
 });
 
 test('changed web assets carry a fresh cache-busting version', () => {
-  assert.ok(indexSource.includes('coach-qol.js?v=game-score-1'), 'coach-qol.js must be cache-busted');
-  assert.ok(indexSource.includes('styles.css?v=onboarding2-beta-1'), 'styles.css must be cache-busted');
-  assert.ok(indexSource.includes('app.js?v=onboarding2-beta-1'), 'app.js must be cache-busted');
+  assert.ok(indexSource.includes('coach-qol.js?v=admin-coach-qol-1'), 'coach-qol.js must be cache-busted');
+  assert.ok(indexSource.includes('styles.css?v=admin-coach-qol-1'), 'styles.css must be cache-busted');
+  assert.ok(indexSource.includes('app.js?v=admin-coach-qol-1'), 'app.js must be cache-busted');
 });
 
 // --- 023 eager canonical game shells: Schedule -> Game Center linkage ---

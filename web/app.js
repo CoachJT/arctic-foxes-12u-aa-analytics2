@@ -103,12 +103,14 @@ const coachQol = window.FoxesCoachQol.createCoachQol({
   }
 });
 const D = window.FoxesDashboard;
+const ActionCenter = window.FoxesActionCenter;
 let dashboardLeaderCategory = 'points';
 let dashboardTrendWindow = 'season';
 // Tracks the last painted view so a same-view rerender (leader tabs, trend
 // window, data refresh) keeps the reader's scroll position instead of
 // snapping the page back to the top.
 let lastRenderedView = '';
+let actionCenterReturnFocus = null;
 
 function helpBubble(text) {
   return `<button class="help-bubble" type="button" aria-label="Help" data-help="${escapeHtml(text)}">?</button>`;
@@ -142,6 +144,7 @@ function command() {
   const canEditStats = can(PERMISSIONS.STATS_EDIT, activeStaff);
   const canEditSchedule = can(PERMISSIONS.SCHEDULE_EDIT, activeStaff);
   const canEditRoster = can(PERMISSIONS.PLAYERS_EVALUATE, activeStaff);
+  const actions = ActionCenter.actionableItems({ roster, schedule: scheduleData, playerStats, teamStats, capabilities: authCapabilities });
 
   if (stateInfo.emptyKind) {
     const content = {
@@ -173,7 +176,8 @@ function command() {
       ${[['Record', snap.hasRecord ? `${snap.w}–${snap.l}–${snap.t}` : '—', `${snap.gp} games played`],
         ['Last 5', last5.count >= 3 ? `${last5.w}–${last5.l}–${last5.t}` : '—', last5.count ? `${last5.count} scored game${last5.count === 1 ? '' : 's'}` : 'No scored games yet'],
         ['Goals For / Against', snap.hasRecord ? `${snap.gf} / ${snap.ga}` : '—', `Differential ${snap.diff > 0 ? '+' : ''}${snap.diff}`],
-        ['Shooting %', snap.shootingPct === null ? '—' : `${(snap.shootingPct * 100).toFixed(1)}%`, `${snap.shots} shots on goal`]]
+        ['Shooting %', snap.shootingPct === null ? '—' : `${(snap.shootingPct * 100).toFixed(1)}%`, `${snap.shots} shots on goal`],
+        ['Roster', String(roster.length), `${roster.length === 1 ? 'player' : 'players'} active`]]
         .map(x => `<div class="card stat-card"><small>${x[0]}</small><strong>${x[1]}</strong><span>${x[2]}</span></div>`).join('')}
     </div>
 
@@ -207,11 +211,13 @@ function command() {
       </section>
     </div>
 
+    ${actions.length ? `<section class="card action-needed">${cardTitle('ACTION NEEDED', `${actions.length} item${actions.length === 1 ? '' : 's'}`)}${actions.map(item => `<button class="action-needed-row" type="button" data-dashboard-action="${escapeHtml(item.view)}"><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(item.detail)}</span></button>`).join('')}</section>` : ''}
     <section class="card">${cardTitle('QUICK ACTIONS', '')}<div class="dash-actions">${quickActions.map(([view, label]) => `<button class="btn${label === 'Add Game' ? ' primary' : ''}" type="button" data-dashboard-goto="${view}">${label}</button>`).join('')}</div></section>`);
 }
 
 function bindDashboardControls() {
   document.querySelectorAll('[data-dashboard-goto]').forEach(button => button.addEventListener('click', () => render(button.dataset.dashboardGoto)));
+  document.querySelectorAll('[data-dashboard-action]').forEach(button => button.addEventListener('click', () => render(button.dataset.dashboardAction)));
   document.querySelectorAll('[data-leader-cat]').forEach(button => button.addEventListener('click', () => { dashboardLeaderCategory = button.dataset.leaderCat; render('command'); }));
   document.querySelectorAll('[data-trend-window]').forEach(button => button.addEventListener('click', () => { dashboardTrendWindow = button.dataset.trendWindow; render('command'); }));
 }
@@ -299,6 +305,10 @@ function bindCoachRosterControls() {
     event.preventDefault();
     coachQol.submitPlayerForm(event.currentTarget);
   });
+  host?.querySelector('[data-bulk-roster-form]')?.addEventListener('submit', event => {
+    event.preventDefault();
+    coachQol.submitBulkRosterForm(event.currentTarget);
+  });
   // Roster edit: mount the edit form in place of the quick-add form, save
   // through the existing editPlayer() path, then restore the workspace.
   host?.querySelectorAll('[data-edit-player]').forEach(button => button.addEventListener('click', () => {
@@ -364,7 +374,8 @@ function gameCenter() {
     const eligible = String(game.date) <= today;
     const score = hasScore ? `${phase1Number(stats.goals_for)}–${phase1Number(stats.goals_against)}` : eligible ? 'Score unavailable' : 'Not yet played';
     const result = hasScore ? (stats.goals_for > stats.goals_against ? 'WIN' : stats.goals_for < stats.goals_against ? 'LOSS' : 'TIE') : eligible ? 'NOT SCORED' : 'SCHEDULED';
-    return `<article class="card game-card"><div class="game-card-head"><div><span class="eyebrow">${escapeHtml(phase1Date(game.date))}</span><h2>${escapeHtml(game.opponent || 'Opponent unavailable')}</h2><p>${escapeHtml(game.period_length_min ? `${game.period_length_min}-minute periods` : 'Game details synced from Windows')}</p></div><span class="result ${result === 'WIN' ? 'win' : result === 'LOSS' ? 'loss' : ''}">${result}</span></div><div class="game-score">${escapeHtml(score)}</div><div class="game-card-meta"><span>${playerStats.get(game.source_game_id) || 0} player-stat rows</span><span>${stats ? `${phase1Number(stats.shots_for)} shots for` : 'Official team stats unavailable'}</span>${canEditStats && eligible ? `<button class="btn" type="button" data-enter-stats="${escapeHtml(game.source_game_id)}">${playerStats.get(game.source_game_id) ? 'Edit Stats' : 'Enter Stats'}</button>` : `<span class="tag">${canEditStats ? 'Not yet playable' : 'Read only'}</span>`}</div></article>`;
+    const statsState = hasScore ? (playerStats.get(game.source_game_id) ? 'Stats complete' : 'Stats needed') : eligible ? 'Score needed' : 'Score pending';
+    return `<article class="card game-card"><div class="game-card-head"><div><span class="eyebrow">${escapeHtml(phase1Date(game.date))}</span><h2>${escapeHtml(game.opponent || 'Opponent unavailable')}</h2><p>${escapeHtml(game.period_length_min ? `${game.period_length_min}-minute periods` : 'Game details synced from Windows')}</p></div><span class="result ${result === 'WIN' ? 'win' : result === 'LOSS' ? 'loss' : ''}">${result}</span></div><div class="game-score">${escapeHtml(score)}</div><div class="game-card-meta"><span>${escapeHtml(statsState)}</span><span>Film unavailable</span><span>Reports Windows-only</span>${canEditStats && eligible ? `<button class="btn" type="button" data-enter-stats="${escapeHtml(game.source_game_id)}">${playerStats.get(game.source_game_id) ? 'Edit Stats' : 'Enter Stats'}</button>` : `<span class="tag">${canEditStats ? 'Not yet playable' : 'Read only'}</span>`}</div></article>`;
   }).join('');
   return shell('Game Center', canEditStats ? 'Enter and correct game stats from one workspace.' : 'Read-only game summaries from the selected team and season.', `
     ${canEditStats ? '<section class="card" id="coachStatsHost" hidden></section>' : ''}
@@ -390,6 +401,12 @@ function bindCoachStatsControls() {
       coachQol.setStat(input.dataset.statType, input.dataset.statPlayer, input.dataset.statField, input.value, input.getAttribute('aria-label'));
       const flag = host.querySelector('[data-dirty-flag]');
       if (flag) flag.textContent = 'Unsaved changes';
+    }));
+    host.querySelectorAll('.stat-input').forEach(input => input.addEventListener('keydown', event => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      const inputs = Array.from(host.querySelectorAll('.stat-input'));
+      inputs[inputs.indexOf(input) + 1]?.focus();
     }));
     host.querySelector('[data-save-stats]')?.addEventListener('click', async event => {
       const saveButton = event.currentTarget;
@@ -671,6 +688,47 @@ function renderRoleSwitcher() {
     userMenu.appendChild(button);
   }
 }
+function actionItems() {
+  return ActionCenter.actionableItems({
+    roster: phase1Data?.roster || [], schedule: phase1Data?.schedule || [],
+    playerStats: phase1Data?.playerStats || [], teamStats: phase1Data?.teamStats || [],
+    capabilities: authCapabilities
+  });
+}
+function renderActionCenter() {
+  const button = document.querySelector('#actionCenterButton');
+  const badge = document.querySelector('#actionCenterBadge');
+  if (!button || !badge) return;
+  const count = actionItems().length;
+  badge.hidden = count === 0;
+  badge.textContent = String(count);
+  button.disabled = count === 0;
+}
+function closeActionCenter() {
+  const panel = document.querySelector('#actionCenter');
+  if (!panel || panel.hidden) return;
+  panel.hidden = true;
+  panel.setAttribute('aria-hidden', 'true');
+  document.querySelector('#actionCenterButton')?.setAttribute('aria-expanded', 'false');
+  actionCenterReturnFocus?.focus();
+}
+function openActionCenter() {
+  const panel = document.querySelector('#actionCenter');
+  const button = document.querySelector('#actionCenterButton');
+  const items = actionItems();
+  if (!panel || !items.length) return;
+  actionCenterReturnFocus = button;
+  panel.innerHTML = `<div class="action-center-head"><h2>Action Center</h2><button class="btn" type="button" data-close-action-center>Close</button></div>${items.map(item => `<button class="action-center-item" type="button" data-action-center-view="${escapeHtml(item.view)}"><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(item.detail)}</span></button>`).join('')}`;
+  panel.hidden = false;
+  panel.setAttribute('aria-hidden', 'false');
+  button?.setAttribute('aria-expanded', 'true');
+  panel.querySelector('[data-close-action-center]').addEventListener('click', closeActionCenter);
+  panel.querySelectorAll('[data-action-center-view]').forEach(item => item.addEventListener('click', () => {
+    closeActionCenter();
+    render(item.dataset.actionCenterView);
+  }));
+  panel.querySelector('[data-close-action-center]').focus();
+}
 function render(view = 'command') {
   if (!can(roleViews[view], activeStaff)) view = 'command';
   const sameView = view === lastRenderedView;
@@ -687,6 +745,7 @@ function render(view = 'command') {
   renderTeamSwitcher();
   renderSeasonSwitcher();
   renderTenantBranding();
+  renderActionCenter();
   const seasonPill = document.querySelector('#seasonPill');
   if (seasonPill) seasonPill.firstChild.textContent = tenantSeasonName();
   document.querySelector('#retryPhase1Data')?.addEventListener('click', () => loadPhase1Data(authTeam.team_id));
@@ -706,6 +765,16 @@ nav.forEach(item => item.addEventListener('click', () => render(item.dataset.vie
 document.querySelector('#openSidebar').addEventListener('click', () => { document.querySelector('#sidebar').classList.add('open'); document.querySelector('#scrim').classList.add('show'); });
 document.querySelector('#closeSidebar').addEventListener('click', () => { document.querySelector('#sidebar').classList.remove('open'); document.querySelector('#scrim').classList.remove('show'); });
 document.querySelector('#scrim').addEventListener('click', () => document.querySelector('#closeSidebar').click());
+document.querySelector('#actionCenterButton').addEventListener('click', () => {
+  if (document.querySelector('#actionCenter').hidden) openActionCenter();
+  else closeActionCenter();
+});
+document.addEventListener('keydown', event => { if (event.key === 'Escape') closeActionCenter(); });
+document.addEventListener('click', event => {
+  const panel = document.querySelector('#actionCenter');
+  const button = document.querySelector('#actionCenterButton');
+  if (!panel.hidden && !panel.contains(event.target) && !button.contains(event.target)) closeActionCenter();
+});
 function showLoading() {
   appShell.hidden = true;
   authScreen.hidden = false;
