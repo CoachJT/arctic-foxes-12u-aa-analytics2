@@ -12,6 +12,13 @@
     { id: 'review', label: 'Review' }
   ];
   const EDITABLE_STEPS = ['organization', 'team', 'season', 'roster', 'staff', 'branding', 'first_game', 'first_stats'];
+  const STAFF_ROLES = {
+    head_coach: { label: 'Head Coach', permissions: 'Full team operations and staff management' },
+    assistant: { label: 'Assistant Coach', permissions: 'Roster, schedule, games, and reports' },
+    assistant_goalie: { label: 'Assistant / Goalie Coach', permissions: 'Roster, schedule, games, and reports' },
+    team_manager: { label: 'Team Manager', permissions: 'Schedule, roster, reports, and staff administration' },
+    video_coach: { label: 'Video Coach', permissions: 'Games, video review, scouting, and reports' }
+  };
 
   function createOnboarding({ client, user, branding = {}, onComplete, onSignOut }) {
     let root = null;
@@ -175,7 +182,7 @@
     function rosterBody() {
       const rows = roster.map(player => `<tr><td>${esc(player.jersey_number)}</td><td>${esc(player.name)}</td><td>${esc(player.position)}</td></tr>`).join('');
       return `<section class="onboarding-card"><h2>Build your roster</h2>
-        <p>Add players one at a time, or paste a CSV list (<code>jersey,name,position</code> — one player per line). Positions: F forward, D defense, G goalie.</p>
+        <p>Add players one at a time, or import a CSV file/list with <code>jersey,name,position</code>. Positions: F forward, D defense, G goalie.</p>
         <form id="obAddPlayer" class="onboarding-inline">
           <input id="obJersey" type="text" inputmode="numeric" maxlength="4" required placeholder="#" aria-label="Jersey number" />
           <input id="obPlayerName" type="text" maxlength="120" required placeholder="Player name" aria-label="Player name" />
@@ -183,7 +190,8 @@
           <button class="btn" type="submit" ${busy ? 'disabled' : ''}>Add player</button>
         </form>
         <form id="obImport" class="onboarding-form onboarding-import">
-          <label>Import roster (CSV paste)<textarea id="obCsv" rows="4" placeholder="7, Jane Smith, F&#10;22, Alex Doe, D&#10;30, Sam Ray, G"></textarea></label>
+          <label>Roster CSV file<input id="obRosterFile" type="file" accept=".csv,text/csv" /></label>
+          <label>Import roster (paste or review CSV)<textarea id="obCsv" rows="4" placeholder="jersey,name,position&#10;7, Jane Smith, F&#10;22, Alex Doe, D&#10;30, Sam Ray, G"></textarea></label>
           <button class="btn" type="submit" ${busy ? 'disabled' : ''}>Import list</button>
         </form>
         <div class="onboarding-table-wrap"><table class="admin-table"><thead><tr><th>#</th><th>Player</th><th>Pos</th></tr></thead><tbody>${rows || '<tr><td colspan="3">No players yet. Add at least one to continue.</td></tr>'}</tbody></table></div>
@@ -192,15 +200,16 @@
     }
 
     function staffBody() {
-      const rows = invites.map(invite => `<tr><td>${esc(invite.email)}</td><td>${esc(invite.display_name || '—')}</td><td>${esc(invite.role_id === 'assistant_goalie' ? 'Assistant / Goalie Coach' : 'Assistant Coach')}</td><td>${esc(invite.status)}</td></tr>`).join('');
+      const rows = invites.map(invite => `<tr><td>${esc(invite.email)}</td><td>${esc(invite.display_name || '—')}</td><td>${esc(STAFF_ROLES[invite.role_id]?.label || invite.role_id)}</td><td>${esc(invite.status)}</td></tr>`).join('');
       return `<section class="onboarding-card"><h2>Add your staff</h2>
-        <p>Invite assistant coaches now, or skip and do it later. Each invite is recorded with a 14-day expiry and email delivery through the secure invite service.</p>
+        <p>Invite staff now, or skip and do it later. Roles control access inside this team only; no invite receives Platform Admin access.</p>
         <form id="obInvite" class="onboarding-inline onboarding-staff">
           <input id="obStaffName" type="text" maxlength="120" placeholder="Coach name" aria-label="Coach name" />
           <input id="obStaffEmail" type="email" maxlength="254" required placeholder="coach@example.com" aria-label="Coach email" />
-          <select id="obStaffRole" aria-label="Staff role"><option value="assistant">Assistant Coach</option><option value="assistant_goalie">Assistant / Goalie Coach</option></select>
+          <select id="obStaffRole" aria-label="Staff role">${Object.entries(STAFF_ROLES).map(([id, role]) => `<option value="${id}">${esc(role.label)}</option>`).join('')}</select>
           <button class="btn" type="submit" ${busy ? 'disabled' : ''}>Send invite</button>
         </form>
+        <p class="onboarding-role-note" id="obRoleNote"><strong>Assistant Coach:</strong> Roster, schedule, games, and reports. Permission is assigned securely when the invite is accepted.</p>
         <div class="onboarding-table-wrap"><table class="admin-table"><thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th></tr></thead><tbody>${rows || '<tr><td colspan="4">No staff invited yet.</td></tr>'}</tbody></table></div>
         <div class="onboarding-actions"><button class="btn" data-mark-step="staff" type="button" ${busy ? 'disabled' : ''}>${invites.length ? 'Continue' : 'Skip for now'}</button></div></section>`;
     }
@@ -211,12 +220,13 @@
         <p>Pick your team colors. This only affects your team's workspace — the ${esc(branding.name || 'PuckNexus')} platform brand is untouched.</p>
         <form id="obBranding" class="onboarding-form onboarding-branding">
           <label>Team display name<input id="obBrandName" type="text" maxlength="120" value="${esc(current.display_name || team?.name || '')}" /></label>
+          <label>Team logo (optional, PNG/JPEG/WebP, max 10 MB)<input id="obLogoFile" type="file" accept="image/png,image/jpeg,image/webp" /></label>
           <div class="onboarding-colors">
             <label>Primary<input id="obPrimary" type="color" value="${esc(current.primary_color || '#d71920')}" /></label>
             <label>Secondary<input id="obSecondary" type="color" value="${esc(current.secondary_color || '#0d0e10')}" /></label>
             <label>Accent<input id="obAccent" type="color" value="${esc(current.accent_color || '#f2f3f4')}" /></label>
           </div>
-          <div class="onboarding-preview" id="obPreview"><span class="onboarding-swatch" style="background:${esc(current.primary_color || '#d71920')}"></span><strong>${esc(current.display_name || team?.name || 'Your team')}</strong></div>
+          <div class="onboarding-preview" id="obPreview" style="border-color:${esc(current.primary_color || '#d71920')}">${current.logo_url ? `<img class="onboarding-logo" src="${esc(current.logo_url)}" alt="${esc(current.display_name || team?.name || 'Team')} logo" />` : '<span class="onboarding-swatch" style="background:#d71920"></span>'}<strong>${esc(current.display_name || team?.name || 'Your team')}</strong><span>Workspace preview</span></div>
           <div class="onboarding-actions"><button class="btn" data-mark-step="branding" type="button" ${busy ? 'disabled' : ''}>Skip for now</button>
           <button class="btn primary" type="submit" ${busy ? 'disabled' : ''}>${busy ? 'Saving…' : 'Save branding'}</button></div>
         </form></section>`;
@@ -303,6 +313,7 @@
       if (!root) return;
       root.innerHTML = `<div class="onboarding-head"><div class="eyebrow">${esc(branding.name || 'PuckNexus')} · Guided setup</div><h1>Set up your team</h1><p>Progress is saved to your account — you can leave and resume at any time.</p></div>
         ${progressBar()}${message()}${busy && !error ? '' : body()}
+        ${!busy && step !== 'organization' ? `<div class="onboarding-nav"><button class="btn" data-back type="button">Back</button><span>Changes save as you continue.</span></div>` : ''}
         <div class="onboarding-foot"><button class="btn" id="obSignOut" type="button">Sign out</button></div>`;
       bind();
     }
@@ -325,11 +336,52 @@
     }
 
     function parseCsv(text) {
-      return String(text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean).map((line, index) => {
-        const parts = line.split(',').map(part => part.trim());
-        if (parts.length < 3) throw new Error(`Line ${index + 1}: expected "jersey, name, position".`);
-        return { jersey: parts[0], name: parts[1], position: parts[2] };
+      const rows = [];
+      let row = [], value = '', quoted = false;
+      const source = String(text || '').replace(/^\uFEFF/, '');
+      for (let index = 0; index <= source.length; index += 1) {
+        const char = source[index] || '\n';
+        if (char === '"') {
+          if (quoted && source[index + 1] === '"') { value += '"'; index += 1; } else quoted = !quoted;
+        } else if (char === ',' && !quoted) { row.push(value.trim()); value = ''; }
+        else if ((char === '\n' || char === '\r') && !quoted) {
+          if (char === '\r' && source[index + 1] === '\n') index += 1;
+          row.push(value.trim());
+          if (row.some(Boolean)) rows.push(row);
+          row = []; value = '';
+        } else value += char;
+      }
+      if (quoted) throw new Error('Your CSV has an unclosed quote. Fix it and try again.');
+      if (rows[0]?.map(cell => cell.toLowerCase()).join(',') === 'jersey,name,position') rows.shift();
+      return rows.map((parts, index) => {
+        if (parts.length < 3 || !parts[0] || !parts[1] || !parts[2]) throw new Error(`Line ${index + 1}: expected "jersey, name, position".`);
+        return { jersey: parts[0], name: parts[1], position: parts[2].toUpperCase() };
       });
+    }
+
+    function previousStep() {
+      const index = EDITABLE_STEPS.indexOf(step);
+      return index > 0 ? EDITABLE_STEPS[index - 1] : 'organization';
+    }
+
+    async function uploadLogo(file) {
+      if (!file) return;
+      if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) throw new Error('Logo must be a PNG, JPEG, or WebP image.');
+      if (file.size < 1 || file.size > 10485760) throw new Error('Logo must be between 1 byte and 10 MB.');
+      const prepared = await call('prepare_organization_branding_asset', {
+        target_organization_id: progress.organization_id, target_team_id: progress.team_id,
+        requested_asset_key: 'logo', requested_mime_type: file.type, requested_size_bytes: file.size
+      });
+      const asset = Array.isArray(prepared) ? prepared[0] : prepared;
+      if (!asset?.asset_id || !asset?.bucket_name || !asset?.object_path) throw new Error('Logo upload could not be prepared.');
+      try {
+        const { error: storageError } = await client.storage.from(asset.bucket_name).upload(asset.object_path, file, { upsert: false, contentType: file.type });
+        if (storageError) throw new Error(storageError.message || 'Logo upload failed.');
+        await call('finalize_organization_branding_asset', { target_asset_id: asset.asset_id });
+      } catch (uploadError) {
+        await call('abort_organization_branding_asset', { target_asset_id: asset.asset_id }).catch(() => {});
+        throw uploadError;
+      }
     }
 
     function parseScore(value, label) {
@@ -341,6 +393,7 @@
     function bind() {
       root.querySelector('#obSignOut')?.addEventListener('click', () => onSignOut?.());
       root.querySelector('[data-next]')?.addEventListener('click', () => { step = 'organization'; paint(); });
+      root.querySelector('[data-back]')?.addEventListener('click', () => { step = previousStep(); paint(); });
       root.querySelectorAll('[data-goto]').forEach(button => button.addEventListener('click', () => { step = button.dataset.goto; paint(); }));
       root.querySelectorAll('[data-mark-step]').forEach(button => button.addEventListener('click', () => run(async () => {
         const result = await call('onboarding_mark_step', { step: button.dataset.markStep });
@@ -394,6 +447,19 @@
           notice = `${players.length} player${players.length === 1 ? '' : 's'} imported.`;
         });
       });
+      root.querySelector('#obRosterFile')?.addEventListener('change', event => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        if (file.size > 1048576) { error = 'Roster CSV must be 1 MB or smaller.'; paint(); return; }
+        const reader = new FileReader();
+        reader.onload = () => {
+          const textarea = root.querySelector('#obCsv');
+          if (textarea) textarea.value = String(reader.result || '');
+          notice = `${file.name} is ready to import.`;
+        };
+        reader.onerror = () => { error = 'The roster file could not be read.'; paint(); };
+        reader.readAsText(file);
+      });
       root.querySelector('#obInvite')?.addEventListener('submit', event => {
         event.preventDefault();
         const form = event.target;
@@ -412,10 +478,16 @@
           notice = 'Invitation created. Email delivery runs through the invite service.';
         });
       });
+      root.querySelector('#obStaffRole')?.addEventListener('change', event => {
+        const role = STAFF_ROLES[event.target.value] || STAFF_ROLES.assistant;
+        const note = root.querySelector('#obRoleNote');
+        if (note) note.innerHTML = `<strong>${esc(role.label)}:</strong> ${esc(role.permissions)}. Permission is assigned securely when the invite is accepted.`;
+      });
       root.querySelector('#obBranding')?.addEventListener('submit', event => {
         event.preventDefault();
         const form = event.target;
         run(async () => {
+          await uploadLogo(form.querySelector('#obLogoFile').files?.[0]);
           await call('onboarding_save_branding', {
             primary_color_input: form.querySelector('#obPrimary').value,
             secondary_color_input: form.querySelector('#obSecondary').value,

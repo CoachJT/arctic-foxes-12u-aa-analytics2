@@ -92,14 +92,15 @@ test('invite delivery state and resend cooldown are enforced in the database', (
   assert.match(deliveryMigration, /public\.is_platform_admin\(\)\s+or public\.has_team_capability/);
 });
 
-test('invite-staff only exposes assistant roles', () => {
+test('invite-staff exposes only approved team-scoped roles and never Platform Admin', () => {
   assert.match(app, /assistant_goalie/);
   assert.match(app, /value="assistant"/);
-  assert.match(functionSource, /new Set\(\['assistant_goalie', 'assistant'\]\)/);
+  assert.match(functionSource, /'head_coach', 'assistant', 'assistant_goalie', 'team_manager', 'video_coach'/);
+  assert.doesNotMatch(functionSource, /allowedRoles[^\n]*platform_admin/);
 });
 
 test('admin UI is cache-busted to the invite-flow build', () => {
-  assert.match(index, /app\.js\?v=onboarding2-handoff-1/);
+  assert.match(index, /app\.js\?v=onboarding2-beta-1/);
   assert.match(app, /id="inviteForm"/);
   assert.match(app, /id="inviteList"/);
 });
@@ -241,7 +242,7 @@ test('the invite hotfix preserves the workspace_invites lifecycle protections', 
   assert.match(functionSource, /rpc\(\s*'rotate_workspace_invite_delivery_token'/);
   assert.match(functionSource, /rpc\('record_workspace_invite_delivery'/);
   assert.match(functionSource, /crypto\.subtle\.digest\('SHA-256'/);
-  assert.match(functionSource, /allowedRoles = new Set\(\['assistant_goalie', 'assistant'\]\)/);
+  assert.match(functionSource, /allowedRoles = new Set\(\['head_coach', 'assistant', 'assistant_goalie', 'team_manager', 'video_coach'\]\)/);
   // Team scope is still derived from the resolved team, never from the payload.
   assert.match(functionSource, /target_team_id: context\.team\.id/);
   assert.match(functionSource, /target_organization_id: context\.team\.organization_id/);

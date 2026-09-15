@@ -101,7 +101,7 @@ test('resume returns the user to their saved step instead of restarting', async 
   assert.match(root.innerHTML, /1 players? added/);
 });
 
-test('roster step offers both manual add and CSV import with visible results', async () => {
+test('roster step offers manual add and safe CSV-file import with visible results', async () => {
   const manager = loadOnboarding({
     progress: { ...freshProgress, current_step: 'roster', team_id: 'team-1', organization_complete: true, team_complete: true, season_complete: true },
     rosterRows: []
@@ -111,6 +111,9 @@ test('roster step offers both manual add and CSV import with visible results', a
   await flush();
   assert.match(root.innerHTML, /id="obAddPlayer"/);
   assert.match(root.innerHTML, /id="obImport"/);
+  assert.match(root.innerHTML, /id="obRosterFile"/);
+  assert.match(onboardingSource, /Duplicate jersey number \$\{key\} in the import list/);
+  assert.match(onboardingSource, /Your CSV has an unclosed quote/);
   assert.match(root.innerHTML, /No players yet/);
   assert.match(root.innerHTML, /data-mark-step="roster"[^>]*disabled/);
 });
@@ -126,6 +129,27 @@ test('staff step uses the first-class invitation lifecycle and is skippable', as
   assert.match(root.innerHTML, /coach@example\.com/);
   assert.match(root.innerHTML, />pending</);
   assert.match(root.innerHTML, /Continue/);
+  assert.match(root.innerHTML, /Team Manager/);
+  assert.match(root.innerHTML, /Video Coach/);
+  assert.match(root.innerHTML, /no invite receives Platform Admin access/);
+});
+
+test('branding has an owner-scoped logo upload, preview, and mobile-safe navigation', async () => {
+  const manager = loadOnboarding({
+    progress: { ...freshProgress, current_step: 'branding', organization_id: 'org-1', team_id: 'team-1', organization_complete: true, team_complete: true, season_complete: true, roster_complete: true },
+    teamRow: { id: 'team-1', name: 'Foxes 12U AA' },
+    brandingRow: { display_name: 'Foxes 12U AA', primary_color: '#d71920', secondary_color: '#000000', accent_color: '#ffffff', logo_url: 'https://cdn.example/logo.png' }
+  });
+  const root = elementStub();
+  manager.mount(root);
+  await flush();
+  assert.match(root.innerHTML, /id="obLogoFile"/);
+  assert.match(root.innerHTML, /Workspace preview/);
+  assert.match(root.innerHTML, /data-back/);
+  assert.match(onboardingSource, /prepare_organization_branding_asset/);
+  assert.match(onboardingSource, /finalize_organization_branding_asset/);
+  assert.match(onboardingSource, /abort_organization_branding_asset/);
+  assert.match(stylesSource, /min-height:44px/);
 });
 
 test('review step shows required statuses and disables finish until required steps are complete', async () => {
@@ -354,7 +378,7 @@ test('admin dashboard surfaces real onboarding status per team', () => {
 });
 
 test('app wiring loads the wizard, passes progress to the resolver, and completes into the team workspace', () => {
-  assert.match(indexSource, /onboarding\.js\?v=onboarding2-handoff-1/);
+  assert.match(indexSource, /onboarding\.js\?v=onboarding2-beta-1/);
   assert.ok(indexSource.indexOf('onboarding.js') < indexSource.indexOf('app.js'));
   assert.match(appSource, /FoxesOnboarding\.createOnboarding/);
   assert.match(appSource, /from\('onboarding_progress'\)/);
@@ -367,5 +391,5 @@ test('app wiring loads the wizard, passes progress to the resolver, and complete
 test('onboarding is mobile-friendly with stacked layouts on small screens', () => {
   assert.match(stylesSource, /\.onboarding-progress li\.current/);
   assert.match(stylesSource, /@media\(max-width:700px\)[\s\S]{0,300}\.onboarding-inline,\.onboarding-staff\{grid-template-columns:1fr\}/);
-  assert.match(stylesSource, /@media\(max-width:420px\)[\s\S]{0,300}\.onboarding-actions\{flex-direction:column/);
+  assert.match(stylesSource, /@media\(max-width:420px\)[\s\S]{0,500}\.onboarding-actions\{flex-direction:column/);
 });

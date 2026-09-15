@@ -121,6 +121,10 @@ body{background:radial-gradient(circle at 72% -15%,#34363a 0,#0d0e10 39%)}
 .onboarding-colors input{width:100%;height:44px;padding:4px;cursor:pointer}
 .onboarding-preview{display:flex;align-items:center;gap:12px;padding:14px;border:1px solid var(--line);border-radius:9px;background:#0d0e10}
 .onboarding-swatch{width:34px;height:34px;border-radius:9px;border:1px solid #4a4d52}
+.onboarding-logo{width:42px;height:42px;object-fit:contain;border-radius:8px;background:#fff}
+.onboarding-preview span:last-child{margin-left:auto;color:var(--muted);font-size:11px}
+.onboarding-role-note{padding:10px 12px!important;border-left:3px solid var(--red);background:#15171b}
+.onboarding-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;color:var(--muted);font-size:11px}
 .onboarding-foot{display:flex;justify-content:flex-end;margin-top:16px}
 .onboarding-hint{color:var(--gold);font-size:11px;margin:10px 0 0}
 .onboarding-game-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
@@ -128,8 +132,8 @@ body{background:radial-gradient(circle at 72% -15%,#34363a 0,#0d0e10 39%)}
 .onboarding-score-form{display:flex;align-items:end;justify-content:center;gap:12px;padding:20px;border:1px solid var(--line);border-radius:10px;background:#0d0e10}.onboarding-score-form div{display:grid;gap:5px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.08em}.onboarding-score-form input{width:76px;min-height:52px;padding:8px;border:1px solid #4a4d52;border-radius:8px;background:#080f18;color:#fff;font:700 22px "Space Grotesk";text-align:center}.onboarding-score-form input:focus{outline:2px solid var(--red);outline-offset:1px}.onboarding-score-form>strong{padding-bottom:15px;font-size:22px}
 .ob-finish{min-width:170px;font-weight:700}
 .onboarding-root-host{margin-top:6px}
-@media(max-width:700px){.onboarding-auth-card{width:100%}.onboarding-inline,.onboarding-staff{grid-template-columns:1fr}.onboarding-colors{grid-template-columns:1fr 1fr 1fr}.onboarding-game-grid{grid-template-columns:1fr 1fr}.onboarding-progress li{font-size:9px;padding:5px 8px}}
-@media(max-width:420px){.onboarding-colors,.onboarding-game-grid{grid-template-columns:1fr}.onboarding-game-summary{align-items:flex-start;flex-direction:column}.onboarding-score-form{flex-wrap:wrap}.onboarding-score-form .btn{flex-basis:100%}.onboarding-actions{flex-direction:column;align-items:stretch}.onboarding-actions .btn{width:100%}}
+@media(max-width:700px){.onboarding-auth-card{width:100%}.onboarding-inline,.onboarding-staff{grid-template-columns:1fr}.onboarding-colors{grid-template-columns:1fr 1fr 1fr}.onboarding-game-grid{grid-template-columns:1fr 1fr}.onboarding-progress li{font-size:9px;padding:5px 8px}.onboarding-form input,.onboarding-form textarea,.onboarding-form select,.onboarding-inline input,.onboarding-inline select,.onboarding-root .btn{min-height:44px;font-size:16px}}
+@media(max-width:420px){.onboarding-colors,.onboarding-game-grid{grid-template-columns:1fr}.onboarding-game-summary{align-items:flex-start;flex-direction:column}.onboarding-score-form{flex-wrap:wrap}.onboarding-score-form .btn{flex-basis:100%}.onboarding-actions{flex-direction:column;align-items:stretch}.onboarding-nav{flex-direction:column;align-items:stretch}.onboarding-actions .btn{width:100%}.onboarding-preview span:last-child{margin-left:0}}
 
 /* Stage 6: Coach QOL — games, stats, roster, help */
 .help-bubble{display:inline-grid;place-items:center;width:18px;height:18px;margin-left:5px;border:1px solid #4a4d52;border-radius:99px;background:#202226;color:#8ed8f8;font-size:10px;font-weight:700;vertical-align:middle;cursor:help}

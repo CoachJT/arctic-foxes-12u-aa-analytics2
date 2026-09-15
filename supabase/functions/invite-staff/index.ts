@@ -6,7 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS'
 };
 
-const allowedRoles = new Set(['assistant_goalie', 'assistant']);
+// These are team-scoped roles defined by the controlled-beta role migration.
+// Platform Admin is intentionally not inviteable through this path.
+const allowedRoles = new Set(['head_coach', 'assistant', 'assistant_goalie', 'team_manager', 'video_coach']);
 // Invite expiry matches the 72-hour Beta onboarding window from migration 018.
 const inviteExpiryMs = 72 * 60 * 60 * 1000;
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
@@ -224,7 +226,7 @@ async function inviteStaff(context: Awaited<ReturnType<typeof getOwnerContext>>,
   const displayName = requiredText(payload.displayName, 'Name', 120);
   const roleId = requiredText(payload.roleId, 'Role', 40);
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error('A valid staff email is required.');
-  if (!allowedRoles.has(roleId)) throw new Error('Only assistant staff roles can be invited.');
+  if (!allowedRoles.has(roleId)) throw new Error('Choose a supported team staff role.');
 
   const existingUser = await findAuthUserByEmail(context.adminClient, email);
   if (existingUser) {
