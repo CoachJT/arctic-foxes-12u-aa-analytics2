@@ -54,6 +54,15 @@ test('signed-out visitors resolve to sign in and never a workspace', () => {
   assert.equal(resolveDestination({ user: null, platformAccess: { isPlatformAdmin: true }, memberships: [{}] }).state, DESTINATIONS.SIGNED_OUT);
 });
 
+test('signed-out landing offers explicit self-service sign up without granting workspace access', () => {
+  assert.match(appSource, /id="showSignUp"/);
+  assert.match(appSource, /function showSignUp\(/);
+  assert.match(appSource, /supabaseClient\.auth\.signUp\(/);
+  assert.match(appSource, /Create your coach account/);
+  assert.match(appSource, /data: \{ display_name: name \}/);
+  assert.doesNotMatch(appSource, /signInAnonymously/);
+});
+
 test('founder and platform admin resolve to the admin destination with zero team memberships', () => {
   const { DESTINATIONS, resolveDestination } = resolver();
   for (const access of [
@@ -213,6 +222,14 @@ test('app bootstrap resolves session, platform access, and memberships before on
   const bootstrap = appSource.indexOf('async function loadAuthenticatedWorkspace');
   assert.ok(appSource.indexOf('platformAccessManager.load()', bootstrap) < appSource.indexOf('resolveDestination', bootstrap));
   assert.ok(appSource.indexOf('teamContextManager.load', bootstrap) < appSource.indexOf('resolveDestination', bootstrap));
+});
+
+test('a confirmed self-service account gets server-backed onboarding before destination resolution', () => {
+  const bootstrap = appSource.slice(appSource.indexOf('async function loadAuthenticatedWorkspace'));
+  assert.match(bootstrap, /membershipContext\.memberships\.length === 0/);
+  assert.match(bootstrap, /membershipContext\.pendingMemberships\.length === 0/);
+  assert.match(bootstrap, /supabaseClient\.rpc\('onboarding_ensure'\)/);
+  assert.ok(bootstrap.indexOf("rpc('onboarding_ensure')") < bootstrap.indexOf("from('onboarding_progress')"));
 });
 
 test('every resolver destination has a dedicated safe UI state', () => {

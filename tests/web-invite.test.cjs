@@ -99,7 +99,7 @@ test('invite-staff only exposes assistant roles', () => {
 });
 
 test('admin UI is cache-busted to the invite-flow build', () => {
-  assert.match(index, /app\.js\?v=game-score-1/);
+  assert.match(index, /app\.js\?v=onboarding2-handoff-1/);
   assert.match(app, /id="inviteForm"/);
   assert.match(app, /id="inviteList"/);
 });

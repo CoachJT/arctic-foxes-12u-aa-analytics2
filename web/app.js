@@ -715,7 +715,8 @@ function showLoading() {
 function showLogin(error = '') {
   appShell.hidden = true;
   authScreen.hidden = false;
-  authScreen.innerHTML = `<div class="auth-card"><div class="auth-brand"><div class="brand-mark">PN</div><div><strong>${PLATFORM.name}</strong><span>${PLATFORM.tagline}</span></div></div><h1>Sign in to your team hub</h1><p>Use your ${PLATFORM.name} account to access your authorized team workspace.</p><form class="auth-form" id="loginForm"><label>Email<input id="loginEmail" type="email" autocomplete="username" required /></label><label>Password<input id="loginPassword" type="password" autocomplete="current-password" required /></label>${error ? `<div class="auth-error" role="alert">${escapeHtml(error)}</div>` : ''}<button class="btn primary" type="submit">Sign in</button></form></div>`;
+  authScreen.innerHTML = `<div class="auth-card"><div class="auth-brand"><div class="brand-mark">PN</div><div><strong>${PLATFORM.name}</strong><span>${PLATFORM.tagline}</span></div></div><h1>Sign in to your team hub</h1><p>Use your ${PLATFORM.name} account to access your authorized team workspace.</p><form class="auth-form" id="loginForm"><label>Email<input id="loginEmail" type="email" autocomplete="username" required /></label><label>Password<input id="loginPassword" type="password" autocomplete="current-password" required /></label>${error ? `<div class="auth-error" role="alert">${escapeHtml(error)}</div>` : ''}<button class="btn primary" type="submit">Sign in</button></form><div class="auth-switch"><span>New to ${PLATFORM.name}?</span><button class="btn" id="showSignUp" type="button">Create account</button></div></div>`;
+  authScreen.querySelector('#showSignUp').addEventListener('click', () => showSignUp());
   authScreen.querySelector('#loginForm').addEventListener('submit', async event => {
     event.preventDefault();
     const button = event.currentTarget.querySelector('button');
@@ -733,6 +734,47 @@ function showLogin(error = '') {
       workspaceTransitioning = false;
       console.error('Supabase sign-in request failed:', error);
       showLogin(formatAuthError(error));
+    }
+  });
+}
+
+function showSignUp(error = '', noticeText = '') {
+  appShell.hidden = true;
+  authScreen.hidden = false;
+  authScreen.innerHTML = `<div class="auth-card"><div class="auth-brand"><div class="brand-mark">PN</div><div><strong>${PLATFORM.name}</strong><span>${PLATFORM.tagline}</span></div></div><h1>Create your coach account</h1><p>Start a new organization and team. Setup progress saves automatically.</p>${noticeText ? `<div class="auth-success" role="status">${escapeHtml(noticeText)}</div>` : ''}<form class="auth-form" id="signUpForm"><label>Your name<input id="signUpName" type="text" autocomplete="name" maxlength="120" required /></label><label>Email<input id="signUpEmail" type="email" autocomplete="username" required /></label><label>Password<input id="signUpPassword" type="password" autocomplete="new-password" minlength="8" required /></label><label>Confirm password<input id="signUpPasswordConfirm" type="password" autocomplete="new-password" minlength="8" required /></label>${error ? `<div class="auth-error" role="alert">${escapeHtml(error)}</div>` : ''}<button class="btn primary" type="submit">Create account</button></form><div class="auth-switch"><span>Already have an account?</span><button class="btn" id="showSignIn" type="button">Sign in</button></div></div>`;
+  authScreen.querySelector('#showSignIn').addEventListener('click', () => showLogin());
+  authScreen.querySelector('#signUpForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const name = form.querySelector('#signUpName').value.trim();
+    const email = form.querySelector('#signUpEmail').value.trim();
+    const password = form.querySelector('#signUpPassword').value;
+    const confirmation = form.querySelector('#signUpPasswordConfirm').value;
+    if (password !== confirmation) {
+      showSignUp('The passwords do not match.');
+      return;
+    }
+    const button = form.querySelector('button[type="submit"]');
+    button.disabled = true;
+    button.textContent = 'Creating account…';
+    try {
+      const { data, error: signUpError } = await supabaseClient.auth.signUp({
+        email,
+        password,
+        options: { data: { display_name: name } }
+      });
+      if (signUpError) {
+        showSignUp(formatAuthError(signUpError));
+        return;
+      }
+      if (data.session?.user) {
+        await loadAuthenticatedWorkspace(data.session.user);
+        return;
+      }
+      showSignUp('', 'Account created. Check your email to confirm it, then return here and sign in.');
+    } catch (signUpError) {
+      console.error('Supabase sign-up request failed:', signUpError);
+      showSignUp(formatAuthError(signUpError));
     }
   });
 }
@@ -994,6 +1036,17 @@ async function loadAuthenticatedWorkspace(sessionUser = null) {
     } catch (error) {
       membershipContext = null;
       console.error('Could not load team memberships:', error);
+    }
+    // A confirmed self-service account has no memberships yet. Create its
+    // server-backed onboarding row before resolving a destination; otherwise a
+    // legitimate new coach would be indistinguishable from a no-access user.
+    // Existing team members and Platform Admin accounts never enter this path.
+    if (!platformAccess.isPlatformAdmin
+        && membershipContext
+        && membershipContext.memberships.length === 0
+        && membershipContext.pendingMemberships.length === 0) {
+      const { error: onboardingEnsureError } = await supabaseClient.rpc('onboarding_ensure');
+      if (onboardingEnsureError) throw new Error(onboardingEnsureError.message || 'Onboarding could not be started.');
     }
     const { data: profile } = await supabaseClient.from('profiles').select('id,display_name').eq('id', user.id).maybeSingle();
     const { data: onboardingProgress } = await supabaseClient.from('onboarding_progress').select('user_id,organization_id,team_id,season_id,current_step,completed_at').eq('user_id', user.id).maybeSingle();

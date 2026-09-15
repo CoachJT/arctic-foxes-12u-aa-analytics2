@@ -7,9 +7,11 @@
     { id: 'roster', label: 'Roster' },
     { id: 'staff', label: 'Staff' },
     { id: 'branding', label: 'Branding' },
+    { id: 'first_game', label: 'First Game' },
+    { id: 'first_stats', label: 'First Stats' },
     { id: 'review', label: 'Review' }
   ];
-  const EDITABLE_STEPS = ['organization', 'team', 'season', 'roster', 'staff', 'branding'];
+  const EDITABLE_STEPS = ['organization', 'team', 'season', 'roster', 'staff', 'branding', 'first_game', 'first_stats'];
 
   function createOnboarding({ client, user, branding = {}, onComplete, onSignOut }) {
     let root = null;
@@ -23,6 +25,8 @@
     let teamBranding = null;
     let organization = null;
     let team = null;
+    let firstGame = null;
+    let firstGameStats = null;
 
     function esc(value) {
       return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -43,6 +47,8 @@
       if (id === 'roster') return progress.roster_complete || roster.length > 0;
       if (id === 'staff') return progress.staff_complete || invites.length > 0;
       if (id === 'branding') return progress.branding_complete;
+      if (id === 'first_game') return progress.first_game_complete || Boolean(firstGame);
+      if (id === 'first_stats') return progress.first_stats_complete || Boolean(firstGameStats);
       if (id === 'review') return progress.review_complete;
       return false;
     }
@@ -50,8 +56,8 @@
     function stepStatus(id) {
       if (progress?.completed_at) return 'Complete';
       if (completion(id)) return 'Complete';
-      if (id === 'staff' || id === 'branding') return 'Optional';
-      if (['organization', 'team', 'season', 'roster'].includes(id)) return 'Needs attention';
+      if (id === 'staff' || id === 'branding' || id === 'first_stats') return 'Optional';
+      if (['organization', 'team', 'season', 'roster', 'first_game'].includes(id)) return 'Needs attention';
       return 'Optional';
     }
 
@@ -68,6 +74,8 @@
       teamBranding = null;
       organization = null;
       team = null;
+      firstGame = null;
+      firstGameStats = null;
       if (progress?.organization_id) {
         const { data: org } = await client.from('organizations').select('id,name,slug,status').eq('id', progress.organization_id).maybeSingle();
         organization = org || null;
@@ -85,6 +93,21 @@
       teamBranding = brandingResult.data || null;
       const { data: teamRow } = await client.from('teams').select('id,name,slug').eq('id', progress.team_id).maybeSingle();
       team = teamRow || null;
+      if (progress.season_id) {
+        const { data: gameRow, error: gameError } = await client.from('team_schedule_games')
+          .select('id,date,time,opponent,home_away,game_type,location,linked_game_source_id')
+          .eq('team_id', progress.team_id).eq('season_id', progress.season_id)
+          .order('created_at', { ascending: true }).limit(1).maybeSingle();
+        if (gameError) throw new Error(gameError.message);
+        firstGame = gameRow || null;
+        if (firstGame?.linked_game_source_id) {
+          const { data: statsRow, error: statsError } = await client.from('team_game_team_stats')
+            .select('goals_for,goals_against').eq('team_id', progress.team_id)
+            .eq('source_game_id', firstGame.linked_game_source_id).maybeSingle();
+          if (statsError) throw new Error(statsError.message);
+          firstGameStats = statsRow || null;
+        }
+      }
     }
 
     async function load() {
@@ -199,13 +222,58 @@
         </form></section>`;
     }
 
+    function firstGameBody() {
+      const today = new Date().toLocaleDateString('en-CA');
+      if (firstGame) {
+        return `<section class="onboarding-card"><h2>Your first game is ready</h2>
+          <div class="onboarding-game-summary"><strong>${esc(firstGame.opponent)}</strong><span>${esc(firstGame.date)} · ${esc(firstGame.home_away)}${firstGame.time ? ` · ${esc(firstGame.time)}` : ''}</span></div>
+          <p>You can manage every game later from Schedule. Continue now to enter the first result when the game is eligible.</p>
+          <div class="onboarding-actions"><button class="btn primary" data-mark-step="first_game" type="button" ${busy ? 'disabled' : ''}>Continue to stats</button></div></section>`;
+      }
+      return `<section class="onboarding-card"><h2>Add your first game</h2>
+        <p>This creates the first real Schedule and Game Center entry for your team.</p>
+        <form id="obFirstGame" class="onboarding-form onboarding-game-form">
+          <div class="onboarding-game-grid">
+            <label>Date<input id="obGameDate" type="date" required value="${esc(today)}" /></label>
+            <label>Opponent<input id="obGameOpponent" type="text" maxlength="120" required placeholder="Opponent name" /></label>
+            <label>Time<input id="obGameTime" type="time" /></label>
+            <label>Home / Away<select id="obGameHomeAway"><option>Home</option><option>Away</option></select></label>
+            <label>Game type<select id="obGameType"><option>League</option><option>Exhibition</option><option>Tournament</option><option>Playoff</option></select></label>
+            <label>Location<input id="obGameLocation" type="text" maxlength="160" placeholder="Arena (optional)" /></label>
+          </div>
+          <button class="btn primary" type="submit" ${busy ? 'disabled' : ''}>${busy ? 'Adding…' : 'Add first game'}</button>
+        </form></section>`;
+    }
+
+    function firstStatsBody() {
+      if (!firstGame) return `<section class="onboarding-card"><h2>Enter your first stats</h2><p>Add your first game before entering a result.</p><div class="onboarding-actions"><button class="btn primary" data-goto="first_game" type="button">Add first game</button></div></section>`;
+      const today = new Date().toLocaleDateString('en-CA');
+      const eligible = String(firstGame.date) <= today;
+      const scored = firstGameStats?.goals_for !== null && firstGameStats?.goals_for !== undefined
+        && firstGameStats?.goals_against !== null && firstGameStats?.goals_against !== undefined;
+      if (!eligible) {
+        return `<section class="onboarding-card"><h2>Stats unlock on game day</h2>
+          <p>Your game against <strong>${esc(firstGame.opponent)}</strong> is scheduled for ${esc(firstGame.date)}. PuckNexus will not accept a result before the game is played.</p>
+          <div class="onboarding-actions"><button class="btn primary" data-mark-step="first_stats" type="button" ${busy ? 'disabled' : ''}>Continue to review</button></div></section>`;
+      }
+      return `<section class="onboarding-card"><h2>Enter your first result</h2>
+        <p>Save the final score now. Detailed player and goalie stats remain available in Game Center after setup.</p>
+        <form id="obFirstStats" class="onboarding-score-form">
+          <div><span>Us</span><input id="obGoalsFor" type="number" min="0" step="1" inputmode="numeric" required value="${scored ? esc(firstGameStats.goals_for) : ''}" /></div>
+          <strong>–</strong>
+          <div><span>Them</span><input id="obGoalsAgainst" type="number" min="0" step="1" inputmode="numeric" required value="${scored ? esc(firstGameStats.goals_against) : ''}" /></div>
+          <button class="btn primary" type="submit" ${busy ? 'disabled' : ''}>${busy ? 'Saving…' : scored ? 'Update result' : 'Save result'}</button>
+        </form>
+        <div class="onboarding-actions"><button class="btn" data-mark-step="first_stats" type="button" ${busy ? 'disabled' : ''}>Enter detailed stats later</button></div></section>`;
+    }
+
     function reviewBody() {
       const rows = STEPS.filter(item => item.id !== 'review').map(item => {
         const status = stepStatus(item.id);
         return `<tr><td>${esc(item.label)}</td><td><span class="admin-badge admin-badge-${status === 'Complete' ? 'active' : status === 'Optional' ? 'standard' : 'pending'}">${status}</span></td>
           <td>${status !== 'Complete' && EDITABLE_STEPS.includes(item.id) ? `<button class="btn admin-action" data-goto="${item.id}" type="button">Go to ${esc(item.label)}</button>` : ''}</td></tr>`;
       }).join('');
-      const requiredReady = ['organization', 'team', 'season', 'roster'].every(completion);
+      const requiredReady = ['organization', 'team', 'season', 'roster', 'first_game'].every(completion);
       return `<section class="onboarding-card"><h2>Review your setup</h2>
         <div class="admin-stat-grid">
           <div class="admin-stat"><small>Organization</small><strong>${esc(organization?.name || '—')}</strong></div>
@@ -215,7 +283,7 @@
         </div>
         <div class="onboarding-table-wrap"><table class="admin-table"><thead><tr><th>Step</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
         <div class="onboarding-actions"><button class="btn primary ob-finish" id="obFinish" type="button" ${busy || !requiredReady ? 'disabled' : ''}>${busy ? 'Finishing…' : 'FINISH SETUP'}</button></div>
-        ${requiredReady ? '' : '<p class="onboarding-hint">Organization, team, season, and at least one roster player are required before finishing.</p>'}</section>`;
+        ${requiredReady ? '' : '<p class="onboarding-hint">Organization, team, season, at least one roster player, and a first game are required before finishing.</p>'}</section>`;
     }
 
     function body() {
@@ -226,6 +294,8 @@
       if (step === 'roster') return rosterBody();
       if (step === 'staff') return staffBody();
       if (step === 'branding') return brandingBody();
+      if (step === 'first_game') return firstGameBody();
+      if (step === 'first_stats') return firstStatsBody();
       return reviewBody();
     }
 
@@ -260,6 +330,12 @@
         if (parts.length < 3) throw new Error(`Line ${index + 1}: expected "jersey, name, position".`);
         return { jersey: parts[0], name: parts[1], position: parts[2] };
       });
+    }
+
+    function parseScore(value, label) {
+      const score = Number(value);
+      if (!Number.isInteger(score) || score < 0) throw new Error(`${label} must be a non-negative whole number.`);
+      return score;
     }
 
     function bind() {
@@ -346,7 +422,38 @@
             accent_color_input: form.querySelector('#obAccent').value,
             display_name_input: form.querySelector('#obBrandName').value
           });
+          step = 'first_game';
+        });
+      });
+      root.querySelector('#obFirstGame')?.addEventListener('submit', event => {
+        event.preventDefault();
+        const form = event.target;
+        run(async () => {
+          await call('onboarding_add_first_game', {
+            game_date: form.querySelector('#obGameDate').value,
+            opponent_name: form.querySelector('#obGameOpponent').value,
+            game_time: form.querySelector('#obGameTime').value || null,
+            game_home_away: form.querySelector('#obGameHomeAway').value,
+            game_type_name: form.querySelector('#obGameType').value,
+            game_location: form.querySelector('#obGameLocation').value
+          });
+          step = 'first_stats';
+        });
+      });
+      root.querySelector('#obFirstStats')?.addEventListener('submit', event => {
+        event.preventDefault();
+        const form = event.target;
+        run(async () => {
+          await call('save_game_score', {
+            target_team_id: progress.team_id,
+            target_season_id: progress.season_id,
+            target_source_game_id: firstGame.linked_game_source_id,
+            target_goals_for: parseScore(form.querySelector('#obGoalsFor').value, 'Our score'),
+            target_goals_against: parseScore(form.querySelector('#obGoalsAgainst').value, 'Opponent score')
+          });
+          await call('onboarding_mark_step', { step: 'first_stats' });
           step = 'review';
+          notice = 'First result saved. Your dashboard record is ready.';
         });
       });
       root.querySelector('#obFinish')?.addEventListener('click', () => run(async () => {
@@ -373,6 +480,8 @@
       teamBranding = null;
       organization = null;
       team = null;
+      firstGame = null;
+      firstGameStats = null;
     }
 
     return { mount, unmount, get progress() { return progress; }, get step() { return step; } };

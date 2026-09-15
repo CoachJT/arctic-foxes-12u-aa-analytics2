@@ -8,6 +8,7 @@ const appSource = fs.readFileSync('web/app.js', 'utf8');
 const indexSource = fs.readFileSync('web/index.html', 'utf8');
 const stylesSource = fs.readFileSync('web/styles.css', 'utf8');
 const migrationSource = fs.readFileSync('supabase/migrations/20260909000200_021_reconciled_self_service_onboarding.sql', 'utf8');
+const handoffMigrationSource = fs.readFileSync('supabase/migrations/20260915000200_028_onboarding_first_game_handoff.sql', 'utf8');
 const resolverSource = fs.readFileSync('web/destination-resolver.js', 'utf8');
 
 function elementStub() {
@@ -21,13 +22,15 @@ function flush() {
   return new Promise(resolve => setImmediate(resolve)).then(() => new Promise(resolve => setImmediate(resolve)));
 }
 
-function makeClient({ progress, rosterRows = [], inviteRows = [], brandingRow = null, orgRow = null, teamRow = null } = {}) {
+function makeClient({ progress, rosterRows = [], inviteRows = [], brandingRow = null, orgRow = null, teamRow = null, gameRow = null, gameStatsRow = null } = {}) {
   const rpcCalls = [];
   const tables = {
     team_roster_players: rosterRows,
     team_branding: brandingRow,
     organizations: orgRow,
-    teams: teamRow
+    teams: teamRow,
+    team_schedule_games: gameRow,
+    team_game_team_stats: gameStatsRow
   };
   return {
     rpcCalls,
@@ -43,6 +46,7 @@ function makeClient({ progress, rosterRows = [], inviteRows = [], brandingRow = 
         select: () => chain,
         eq: () => chain,
         order: () => chain,
+        limit: () => chain,
         maybeSingle: () => Promise.resolve({ data: result, error: null }),
         then: (resolve, reject) => Promise.resolve({ data: result, error: null }).then(resolve, reject)
       };
@@ -66,7 +70,8 @@ const freshProgress = {
   user_id: 'user-new', organization_id: null, team_id: null, season_id: null,
   current_step: 'organization', organization_complete: false, team_complete: false,
   season_complete: false, roster_complete: false, staff_complete: false,
-  branding_complete: false, review_complete: false, completed_at: null
+  branding_complete: false, first_game_complete: false, first_stats_complete: false,
+  review_complete: false, completed_at: null
 };
 
 test('brand-new users start at the organization step with a clear progress indicator', async () => {
@@ -138,10 +143,11 @@ test('review step shows required statuses and disables finish until required ste
   assert.match(root.innerHTML, /id="obFinish"[^>]*disabled/);
 
   const complete = loadOnboarding({
-    progress: { ...freshProgress, current_step: 'review', team_id: 'team-1', organization_complete: true, team_complete: true, season_complete: true, roster_complete: true },
+    progress: { ...freshProgress, current_step: 'review', team_id: 'team-1', season_id: 'season-1', organization_complete: true, team_complete: true, season_complete: true, roster_complete: true, first_game_complete: true },
     rosterRows: [{ jersey_number: '7', name: 'Jane Smith', position: 'F' }],
     orgRow: { id: 'org-1', name: 'Arctic Foxes' },
-    teamRow: { id: 'team-1', name: 'Foxes 12U AA' }
+    teamRow: { id: 'team-1', name: 'Foxes 12U AA' },
+    gameRow: { id: 'schedule-1', date: '2026-09-15', opponent: 'Riverside', home_away: 'Home', linked_game_source_id: 'game-1' }
   });
   const root2 = elementStub();
   complete.mount(root2);
@@ -152,7 +158,7 @@ test('review step shows required statuses and disables finish until required ste
 
 test('finish setup calls the server-side completion exactly once per click', async () => {
   const completed = { ...freshProgress, completed_at: '2026-09-08T00:00:00Z', current_step: 'complete', team_id: 'team-1' };
-  let progressState = { ...freshProgress, current_step: 'review', team_id: 'team-1', organization_complete: true, team_complete: true, season_complete: true, roster_complete: true };
+  let progressState = { ...freshProgress, current_step: 'review', team_id: 'team-1', season_id: 'season-1', organization_complete: true, team_complete: true, season_complete: true, roster_complete: true, first_game_complete: true };
   let completedCalls = 0;
   const context = { window: {} };
   vm.runInNewContext(onboardingSource, context);
@@ -160,7 +166,8 @@ test('finish setup calls the server-side completion exactly once per click', asy
     progress: () => progressState,
     rosterRows: [{ jersey_number: '7', name: 'Jane Smith', position: 'F' }],
     orgRow: { id: 'org-1', name: 'Arctic Foxes' },
-    teamRow: { id: 'team-1', name: 'Foxes 12U AA' }
+    teamRow: { id: 'team-1', name: 'Foxes 12U AA' },
+    gameRow: { id: 'schedule-1', date: '2026-09-15', opponent: 'Riverside', home_away: 'Home', linked_game_source_id: 'game-1' }
   });
   const baseRpc = client.rpc;
   client.rpc = (name, args) => {
@@ -254,11 +261,62 @@ test('roster, staff, and branding RPCs validate input and scope to the onboardin
 });
 
 test('completion validates required steps and writes completed_at exactly once', () => {
-  assert.match(migrationSource, /function public\.onboarding_complete\(\)/);
-  assert.match(migrationSource, /Organization, team, and season setup must be complete\./);
-  assert.match(migrationSource, /Add at least one active roster player before finishing setup\./);
-  assert.match(migrationSource, /where user_id = caller_id/);
-  assert.match(migrationSource, /already_complete/);
+  assert.match(handoffMigrationSource, /function public\.onboarding_complete\(\)/);
+  assert.match(handoffMigrationSource, /Organization, team, and season setup must be complete\./);
+  assert.match(handoffMigrationSource, /Add at least one active roster player before finishing setup\./);
+  assert.match(handoffMigrationSource, /Add your first game before finishing setup\./);
+  assert.match(handoffMigrationSource, /where user_id = caller_id/);
+  assert.match(handoffMigrationSource, /already_complete/);
+});
+
+test('onboarding continues through first game and first stats before review', async () => {
+  const firstGame = loadOnboarding({
+    progress: { ...freshProgress, current_step: 'first_game', team_id: 'team-1', season_id: 'season-1', organization_complete: true, team_complete: true, season_complete: true, roster_complete: true },
+    rosterRows: [{ jersey_number: '7', name: 'Jane Smith', position: 'F' }],
+    teamRow: { id: 'team-1', name: 'Foxes 12U AA' }
+  });
+  const root = elementStub();
+  firstGame.mount(root);
+  await flush();
+  assert.equal(firstGame.step, 'first_game');
+  assert.match(root.innerHTML, /Add your first game/);
+  assert.match(root.innerHTML, /id="obFirstGame"/);
+
+  const firstStats = loadOnboarding({
+    progress: { ...freshProgress, current_step: 'first_stats', team_id: 'team-1', season_id: 'season-1', organization_complete: true, team_complete: true, season_complete: true, roster_complete: true, first_game_complete: true },
+    rosterRows: [{ jersey_number: '7', name: 'Jane Smith', position: 'F' }],
+    teamRow: { id: 'team-1', name: 'Foxes 12U AA' },
+    gameRow: { id: 'schedule-1', date: '2026-09-15', opponent: 'Riverside', home_away: 'Home', linked_game_source_id: 'game-1' }
+  });
+  const root2 = elementStub();
+  firstStats.mount(root2);
+  await flush();
+  assert.equal(firstStats.step, 'first_stats');
+  assert.match(root2.innerHTML, /Enter your first result/);
+  assert.match(root2.innerHTML, /id="obFirstStats"/);
+});
+
+test('future first games do not accept premature stats and can continue to review', async () => {
+  const manager = loadOnboarding({
+    progress: { ...freshProgress, current_step: 'first_stats', team_id: 'team-1', season_id: 'season-1', organization_complete: true, team_complete: true, season_complete: true, roster_complete: true, first_game_complete: true },
+    gameRow: { id: 'schedule-1', date: '2099-09-15', opponent: 'Riverside', home_away: 'Away', linked_game_source_id: 'game-1' }
+  });
+  const root = elementStub();
+  manager.mount(root);
+  await flush();
+  assert.match(root.innerHTML, /Stats unlock on game day/);
+  assert.match(root.innerHTML, /data-mark-step="first_stats"/);
+  assert.doesNotMatch(root.innerHTML, /id="obFirstStats"/);
+});
+
+test('first-game handoff is server-scoped, retry-safe, and not callable anonymously', () => {
+  assert.match(handoffMigrationSource, /function public\.onboarding_add_first_game/);
+  assert.match(handoffMigrationSource, /on conflict \(team_id, source_schedule_id\) do update/);
+  assert.match(handoffMigrationSource, /public\.ensure_schedule_game_shell\(schedule_row\.id\)/);
+  assert.match(handoffMigrationSource, /membership\.user_id = caller_id/);
+  assert.match(handoffMigrationSource, /revoke all on function public\.onboarding_add_first_game[^;]+from public, anon/);
+  assert.match(handoffMigrationSource, /first_game_complete = true/);
+  assert.match(handoffMigrationSource, /current_step = 'first_stats'/);
 });
 
 test('existing configured users have no progress row and bypass onboarding', () => {
@@ -296,7 +354,7 @@ test('admin dashboard surfaces real onboarding status per team', () => {
 });
 
 test('app wiring loads the wizard, passes progress to the resolver, and completes into the team workspace', () => {
-  assert.match(indexSource, /onboarding\.js\?v=stage5-onboarding-1/);
+  assert.match(indexSource, /onboarding\.js\?v=onboarding2-handoff-1/);
   assert.ok(indexSource.indexOf('onboarding.js') < indexSource.indexOf('app.js'));
   assert.match(appSource, /FoxesOnboarding\.createOnboarding/);
   assert.match(appSource, /from\('onboarding_progress'\)/);
