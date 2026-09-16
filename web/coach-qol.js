@@ -41,6 +41,7 @@
     let dirty = false;
     let saveState = SAVE_STATES.IDLE;
     let pendingAction = null;
+    let statHistory = [];
 
     function esc(value) {
       return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -318,6 +319,7 @@
 
     function openGame(gameId, skaterRows, goalieRows) {
       draft = { skaters: {}, goalies: {}, gameId };
+      statHistory = [];
       (skaterRows || []).forEach(row => {
         draft.skaters[row.source_player_id] = { ...row };
       });
@@ -329,13 +331,28 @@
     }
 
     function setStat(playerType, playerId, field, value, label) {
-      const n = numeric(value, label || field);
+      const n = field === 'plus_minus' ? Number(value || 0) : numeric(value, label || field);
+      if (!Number.isFinite(n) || !Number.isInteger(n)) throw new Error(`${label || field} must be a whole number.`);
+      if (saveState === SAVE_STATES.SAVING) throw new Error('Wait for the current save to finish.');
       const bucket = playerType === 'goalie' ? draft.goalies : draft.skaters;
+      statHistory.push({ playerType, playerId, field, value: bucket[playerId]?.[field], row: bucket[playerId] ? { ...bucket[playerId] } : null, dirty });
       if (!bucket[playerId]) bucket[playerId] = {};
       bucket[playerId][field] = n;
       dirty = true;
       saveState = SAVE_STATES.IDLE;
       return n;
+    }
+
+    function undoStat() {
+      if (saveState === SAVE_STATES.SAVING) return null;
+      const change = statHistory.pop();
+      if (!change) return null;
+      const bucket = change.playerType === 'goalie' ? draft.goalies : draft.skaters;
+      if (change.row) bucket[change.playerId] = change.row;
+      else delete bucket[change.playerId];
+      dirty = change.dirty;
+      saveState = SAVE_STATES.IDLE;
+      return change;
     }
 
     function derivedSkater(row) {
@@ -398,6 +415,7 @@
         });
         if (error) throw new Error(error.message);
         saveState = SAVE_STATES.SAVED;
+        statHistory = [];
         dirty = false;
         await onChanged?.('stats');
         return true;
@@ -411,10 +429,11 @@
     function statCell(playerType, playerId, field, helpText) {
       const bucket = playerType === 'goalie' ? draft.goalies : draft.skaters;
       const value = bucket[playerId]?.[field] ?? '';
-      return `<input class="stat-input" type="number" min="0" step="1" inputmode="numeric" data-stat-type="${playerType}" data-stat-player="${esc(playerId)}" data-stat-field="${field}" value="${esc(value)}" aria-label="${esc(helpText)}" />`;
+      return `<input class="stat-input" type="number" ${field === 'plus_minus' ? '' : 'min="0"'} step="1" inputmode="numeric" data-stat-type="${playerType}" data-stat-player="${esc(playerId)}" data-stat-field="${field}" value="${esc(value)}" aria-label="${esc(helpText)}" />`;
     }
 
     function statsWorkspaceHtml(roster, existingSkaters = [], existingGoalies = []) {
+      roster = global.PuckWorkspace ? global.PuckWorkspace.sortRoster(roster) : roster;
       const skaters = (roster || []).filter(p => p.position !== 'G');
       const goalies = (roster || []).filter(p => p.position === 'G');
       if (!skaters.length && !goalies.length) {
@@ -591,7 +610,7 @@
     }
 
     function rosterWorkspaceHtml(roster) {
-      const rows = (roster || []).slice().sort((a, b) => Number(a.jersey_number) - Number(b.jersey_number)).map(p => `
+      const rows = (global.PuckWorkspace ? global.PuckWorkspace.sortRoster(roster) : (roster || []).slice().sort((a, b) => Number(a.jersey_number) - Number(b.jersey_number))).map(p => `
         <div class="roster-row">
           <span class="stat-jersey">#${esc(p.jersey_number)}</span>
           <strong>${esc(p.name)}</strong>
@@ -600,13 +619,13 @@
           <button class="btn admin-action danger" type="button" data-remove-player="${esc(p.id)}">Remove</button>
         </div>`).join('');
       return `<div class="roster-workspace">
-        <form class="coach-form bulk-roster" data-bulk-roster-form>
+        <details class="workspace-disclosure"><summary>Paste multiple players</summary><form class="coach-form bulk-roster" data-bulk-roster-form>
           <label>Paste roster rows<textarea name="rosterRows" rows="5" placeholder="7, Jane Smith, F&#10;30, Sam Ray, G" required></textarea></label>
           <p class="sub">One player per line: jersey, full name, position (F, D, or G).</p>
           <button class="btn primary" type="submit" data-save-button>Add pasted roster</button>
           <div class="coach-form-status" role="status" aria-live="polite"></div>
         </form>
-        <form class="coach-form quick-add" data-player-form>
+        </details><form class="coach-form quick-add" data-player-form>
           <input name="jerseyNumber" type="text" inputmode="numeric" maxlength="4" placeholder="#" aria-label="Jersey number" required />
           <input name="name" type="text" maxlength="120" placeholder="Player name" aria-label="Player name" required />
           <select name="position" aria-label="Position"><option value="F">Forward</option><option value="D">Defense</option><option value="G">Goalie</option></select>
@@ -683,6 +702,8 @@
       submitScoreForm,
       openGame,
       setStat,
+      undoStat,
+      get canUndo() { return statHistory.length > 0; },
       saveStats,
       derivedSkater,
       derivedGoalie,
