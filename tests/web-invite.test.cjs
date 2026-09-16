@@ -100,7 +100,7 @@ test('invite-staff exposes only approved team-scoped roles and never Platform Ad
 });
 
 test('admin UI is cache-busted to the invite-flow build', () => {
-  assert.match(index, /app\.js\?v=team-support-1/);
+  assert.match(index, /app\.js\?v=active-games-1/);
   assert.match(app, /id="inviteForm"/);
   assert.match(app, /id="inviteList"/);
 });

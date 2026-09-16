@@ -335,12 +335,26 @@
       if (!Number.isFinite(n) || !Number.isInteger(n)) throw new Error(`${label || field} must be a whole number.`);
       if (saveState === SAVE_STATES.SAVING) throw new Error('Wait for the current save to finish.');
       const bucket = playerType === 'goalie' ? draft.goalies : draft.skaters;
+      if (bucket[playerId]?.gp === 0) throw new Error('Mark this player present before entering stats.');
       statHistory.push({ playerType, playerId, field, value: bucket[playerId]?.[field], row: bucket[playerId] ? { ...bucket[playerId] } : null, dirty });
       if (!bucket[playerId]) bucket[playerId] = {};
       bucket[playerId][field] = n;
       dirty = true;
       saveState = SAVE_STATES.IDLE;
       return n;
+    }
+
+    function setAbsent(playerType, playerId, absent) {
+      if (saveState === SAVE_STATES.SAVING) throw new Error('Wait for the current save to finish.');
+      const bucket = playerType === 'goalie' ? draft.goalies : draft.skaters;
+      const existing = bucket[playerId] || {};
+      const unsupported = playerType === 'goalie' ? [] : ['faceoff_attempts', 'power_play_assists', 'short_handed_assists', 'game_winning_goals', 'game_tying_goals', 'takeaways', 'giveaways', 'chances', 'toi_minutes'];
+      if (absent && unsupported.some(field => Number(existing[field] || 0) !== 0)) throw new Error('This player has additional recorded stats that this form cannot clear. Review the full game record before marking absent.');
+      if (absent) bucket[playerId] = { gp: 0, ...Object.fromEntries((playerType === 'goalie' ? GOALIE_FIELDS : SKATER_FIELDS).map(([field]) => [field, 0])), power_play_goals: 0, power_play_points: 0, short_handed_goals: 0, short_handed_points: 0, minutes: 0 };
+      else bucket[playerId] = { ...existing, gp: 1 };
+      dirty = true;
+      saveState = SAVE_STATES.IDLE;
+      return bucket[playerId];
     }
 
     function undoStat() {
@@ -429,7 +443,7 @@
     function statCell(playerType, playerId, field, helpText) {
       const bucket = playerType === 'goalie' ? draft.goalies : draft.skaters;
       const value = bucket[playerId]?.[field] ?? '';
-      return `<input class="stat-input" type="number" ${field === 'plus_minus' ? '' : 'min="0"'} step="1" inputmode="numeric" data-stat-type="${playerType}" data-stat-player="${esc(playerId)}" data-stat-field="${field}" value="${esc(value)}" aria-label="${esc(helpText)}" />`;
+      return `<input class="stat-input" type="number" ${field === 'plus_minus' ? '' : 'min="0"'} step="1" inputmode="numeric" data-stat-type="${playerType}" data-stat-player="${esc(playerId)}" data-stat-field="${field}" value="${esc(value)}" aria-label="${esc(helpText)}" ${bucket[playerId]?.gp === 0 ? 'disabled' : ''} />`;
     }
 
     function statsWorkspaceHtml(roster, existingSkaters = [], existingGoalies = []) {
@@ -443,7 +457,7 @@
         const row = draft.skaters[p.source_player_id] || existingSkaters.find(s => s.source_player_id === p.source_player_id) || {};
         const d = derivedSkater(row);
         return `<div class="stat-row" role="row">
-          <div class="stat-row-head"><span class="stat-jersey">#${esc(p.jersey_number)}</span><strong>${esc(p.name)}</strong></div>
+          <div class="stat-row-head"><span class="stat-jersey">#${esc(p.jersey_number)}</span><strong>${esc(p.name)}</strong><button class="btn" type="button" data-player-absent="${esc(p.source_player_id)}" data-player-type="skater" aria-pressed="${row.gp === 0 ? 'true' : 'false'}">${row.gp === 0 ? 'Absent ✓' : 'Absent'}</button></div>
           <div class="stat-fields">${SKATER_FIELDS.map(([field, label, helpText]) => `<label>${esc(label)}${['G', 'S', '+/−', 'FOW', 'FOL'].includes(label) ? help(helpText) : ''}${statCell('skater', p.source_player_id, field, helpText)}</label>`).join('')}</div>
           <div class="stat-derived"><span>PTS ${d.points}</span><span>S% ${d.shotPct === null ? '—' : (d.shotPct * 100).toFixed(1)}</span></div>
         </div>`;
@@ -452,7 +466,7 @@
         const row = draft.goalies[p.source_player_id] || existingGoalies.find(s => s.source_player_id === p.source_player_id) || {};
         const d = derivedGoalie(row);
         return `<div class="stat-row goalie" role="row">
-          <div class="stat-row-head"><span class="stat-jersey">#${esc(p.jersey_number)}</span><strong>${esc(p.name)}</strong><span class="tag">Goalie</span></div>
+          <div class="stat-row-head"><span class="stat-jersey">#${esc(p.jersey_number)}</span><strong>${esc(p.name)}</strong><span class="tag">Goalie</span><button class="btn" type="button" data-player-absent="${esc(p.source_player_id)}" data-player-type="goalie" aria-pressed="${row.gp === 0 ? 'true' : 'false'}">${row.gp === 0 ? 'Absent ✓' : 'Absent'}</button></div>
           <div class="stat-fields">${GOALIE_FIELDS.map(([field, label, helpText]) => `<label>${esc(label)}${statCell('goalie', p.source_player_id, field, helpText)}</label>`).join('')}</div>
           <div class="stat-derived"><span>SA ${d.shotsAgainst}</span><span>SV% ${d.savePct === null ? '—' : (d.savePct * 100).toFixed(1)}</span></div>
         </div>`;
@@ -702,6 +716,7 @@
       submitScoreForm,
       openGame,
       setStat,
+      setAbsent,
       undoStat,
       get canUndo() { return statHistory.length > 0; },
       saveStats,

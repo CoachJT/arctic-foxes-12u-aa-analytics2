@@ -40,7 +40,7 @@
     function refresh() {
       quick.querySelector('.selected-player').textContent = `#${selected.jersey_number} · ${selected.name}`;
       quick.querySelectorAll('[data-pick-player]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.pickPlayer === selected.source_player_id)));
-      quick.querySelector('.event-buttons').innerHTML = playerInputs().map(input => `<button class="event-button" type="button" data-add-stat="${esc(input.dataset.statField)}"><span>+ ${labels[input.dataset.statField]}</span><strong>${esc(input.value || 0)}</strong></button>`).join('');
+      quick.querySelector('.event-buttons').innerHTML = playerInputs().map(input => `<button class="event-button" type="button" data-add-stat="${esc(input.dataset.statField)}" ${input.disabled ? 'disabled' : ''}><span>+ ${labels[input.dataset.statField]}</span><strong>${esc(input.value || 0)}</strong></button>`).join('');
       const values = Object.fromEntries(playerInputs().map(i => [i.dataset.statField, Number(i.value || 0)]));
       const goalie = position(selected) === 'G';
       const derived = goalie ? coach.derivedGoalie(values) : coach.derivedSkater(values);
@@ -60,6 +60,7 @@
       const add = event.target.closest('[data-add-stat]');
       if (add) {
         const input = playerInputs().find(i => i.dataset.statField === add.dataset.addStat);
+        if (!input || input.disabled) return;
         input.value = Number(input.value || 0) + 1;
         input.dispatchEvent(new Event('input', { bubbles: true }));
         refresh();

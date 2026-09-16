@@ -49,6 +49,23 @@ const sampleTeams = [
   { id: 'team-2', name: 'Foxes 10U', slug: 'foxes-10u', organization_id: 'org-1', organization_name: 'Arctic Foxes', default_season_id: null, default_season_key: null, beta_status: 'none', created_at: '2026-01-03', member_count: 1, pending_invite_count: 0 }
 ];
 
+test('View organization offers read-only support and only exposes normal hub for an active membership', async () => {
+  const context = { window: {} };
+  vm.runInNewContext(adminSource, context);
+  const responses = { admin_list_teams: sampleTeams, admin_list_memberships: [], admin_list_invitations: [], admin_list_onboarding: [] };
+  const root = elementStub();
+  const manager = context.window.FoxesPlatformAdmin.createPlatformAdmin({ client: rpcClient(responses), platformAccess: { isPlatformAdmin: true }, canOpenTeamHub: id => id === 'team-1' });
+  manager.mount(root);
+  manager.setView('team', { id: 'team-1' });
+  await flush();
+  assert.match(root.innerHTML, /View organization/);
+  assert.match(root.innerHTML, /data-open-support="team-1"/);
+  assert.match(root.innerHTML, /data-open-team-hub="team-1"/);
+  manager.setView('team', { id: 'team-2' });
+  await flush();
+  assert.doesNotMatch(root.innerHTML, /data-open-team-hub=/);
+});
+
 const sampleUsers = [
   { id: 'user-founder', display_name: 'Justin Platform', platform_roles: ['founder', 'platform_admin'], organization_memberships: [], team_memberships: [], pending_invitations: 0 },
   { id: 'user-coach', display_name: 'Joe Coach', platform_roles: [], organization_memberships: [{ organization_id: 'org-1', organization_name: 'Arctic Foxes', role: 'coach', status: 'active' }], team_memberships: [{ team_id: 'team-1', team_name: 'Foxes 12U AA', role_id: 'assistant', status: 'active' }], pending_invitations: 0 },
@@ -248,7 +265,7 @@ test('app routes the platform admin destination to the dashboard and unmounts on
   assert.match(appSource, /FoxesPlatformAdmin\.createPlatformAdmin/);
   assert.match(appSource, /platformAdminManager\.mount\(authScreen\.querySelector\('#platformAdminRoot'\)\)/);
   assert.match(appSource, /platformAdminManager\.unmount\(\)/);
-  assert.match(indexSource, /platform-admin\.js\?v=team-support-1/);
+  assert.match(indexSource, /platform-admin\.js\?v=org-view-1/);
   assert.ok(indexSource.indexOf('platform-access.js') < indexSource.indexOf('platform-admin.js'));
   assert.ok(indexSource.indexOf('platform-admin.js') < indexSource.indexOf('app.js'));
 });
