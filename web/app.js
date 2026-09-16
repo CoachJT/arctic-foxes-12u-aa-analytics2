@@ -92,7 +92,7 @@ const prototypeMode = prototypeHost
   && !authCallbackPresent
   && queryParams.get('prototype') === '1';
 
-const viewNames = { command: 'Command Center', schedule: 'Schedule', stats: 'Team Stats', players: 'Player Profiles', games: 'Game Center', film: 'Film Room', scouting: 'Scouting', reports: 'Coach Reports', development: 'Player Development', admin: 'Admin', settings: 'Settings' };
+const viewNames = { command: 'Command Center', schedule: 'Schedule', stats: 'Team Stats', players: 'Player Profiles', games: 'Game Center', film: 'Film Room', scouting: 'Scouting', reports: 'Coach Reports', development: 'Player Development', admin: 'Admin', settings: 'Team Settings' };
 const roleViews = { command: PERMISSIONS.DASHBOARD_VIEW, schedule: PERMISSIONS.SCHEDULE_VIEW, stats: PERMISSIONS.STATS_VIEW, players: PERMISSIONS.PLAYERS_VIEW, games: PERMISSIONS.GAMES_VIEW, film: PERMISSIONS.FILM_VIEW, scouting: PERMISSIONS.SCOUTING_VIEW, reports: PERMISSIONS.REPORTS_VIEW, development: PERMISSIONS.PLAYERS_VIEW, admin: PERMISSIONS.ADMIN_USERS, settings: PERMISSIONS.DASHBOARD_VIEW };
 
 // The trailing text is a descriptive note, not a destination. It previously
@@ -207,7 +207,7 @@ function command() {
   ].filter(Boolean);
 
   return shell(`Command Center`, `Your team. Your next move.`, `
-    <section class="command-hero arena-panel"><div class="command-identity">${window.PuckWorkspace.crest(tenantName(), seasonContext.branding?.logo_url)}<div><span class="eyebrow">${escapeHtml(tenantSeasonName())} / TEAM WORKSPACE</span><h2>${escapeHtml(tenantName())}</h2><p>Every game. Every player.<br><strong>One connected team.</strong></p></div></div><div class="command-next"><span class="eyebrow">${next ? 'UP NEXT' : 'SEASON IN FOCUS'}</span><h3>${next ? 'vs ' + escapeHtml(next.opponent) : 'Build the next win.'}</h3><p>${next ? `${phase1Date(next.date)} · ${escapeHtml(next.time || 'Time TBD')}<br>${escapeHtml(next.location || 'Location TBD')}` : 'Review your team. Prepare for what comes next.'}</p><button class="btn primary" data-dashboard-goto="schedule">${next ? 'Game preparation' : 'View schedule'} <span aria-hidden="true">↗</span></button></div></section>
+    <section class="command-hero arena-panel"><div class="command-identity">${window.PuckWorkspace.crest(tenantName(), seasonContext.branding?.logo_url)}<div><span class="eyebrow">${escapeHtml(tenantSeasonName())} / TEAM WORKSPACE</span><h2>${escapeHtml(tenantName())}</h2><p>${escapeHtml(window.PuckTeamBranding.appearance(seasonContext.branding, 'command').tagline || 'Every game. Every player. One connected team.')}</p>${window.PuckTeamBranding.appearance(seasonContext.branding, 'command').bio ? `<p class="team-bio">${escapeHtml(window.PuckTeamBranding.appearance(seasonContext.branding, 'command').bio)}</p>` : ''}</div></div><div class="command-next"><span class="eyebrow">${next ? 'UP NEXT' : 'SEASON IN FOCUS'}</span><h3>${next ? 'vs ' + escapeHtml(next.opponent) : 'Build the next win.'}</h3><p>${next ? `${phase1Date(next.date)} · ${escapeHtml(next.time || 'Time TBD')}<br>${escapeHtml(next.location || 'Location TBD')}` : 'Review your team. Prepare for what comes next.'}</p><button class="btn primary" data-dashboard-goto="schedule">${next ? 'Game preparation' : 'View schedule'} <span aria-hidden="true">↗</span></button></div></section>
     <div class="coach-action-strip"><div class="dash-actions">${quickActions.map(([view,label]) => `<button class="btn${label === 'Enter Stats' ? ' primary' : ''}" type="button" data-dashboard-goto="${view}">${label === 'Enter Stats' ? '<span aria-hidden="true">＋</span> ' : ''}${label}</button>`).join('')}</div><span class="coach-action-caption">THE WORK STARTS HERE</span></div>
     ${actions.length ? `<section class="card action-needed">${cardTitle('Needs your attention', `${actions.length} item${actions.length === 1 ? '' : 's'}`)}${actions.map(item => `<button class="action-needed-row" type="button" data-dashboard-action="${escapeHtml(item.view)}" data-action-game="${escapeHtml(item.gameId || '')}"><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(item.detail)}</span></button>`).join('')}</section>` : ''}
 
@@ -559,7 +559,7 @@ function development() {
   return shell('Player Development', 'A read-only workspace shell for future development records.', '<section class="card workspace-shell"><div class="workspace-icon">↗</div><h2>Development records are not synced yet</h2><p>Private evaluations and development notes remain protected in the Windows app. This web surface will stay empty until an approved, team-scoped cloud model exists.</p><span class="tag">No cloud data available</span></section>');
 }
 function settings() {
-  return shell('Settings', 'Review the selected workspace context and access model.', `<div class="settings-grid"><section class="card settings-card"><div class="card-title"><h2>Workspace context</h2><span class="tag">Read only</span></div><dl class="settings-list"><div><dt>Platform</dt><dd>${escapeHtml(PLATFORM.name)}</dd></div><div><dt>Team</dt><dd>${escapeHtml(tenantName())}</dd></div><div><dt>Season</dt><dd>${escapeHtml(tenantSeasonName())}</dd></div><div><dt>Role</dt><dd>${escapeHtml(activeStaff?.role || 'Authenticated team member')}</dd></div><div><dt>Platform access</dt><dd>${escapeHtml(platformAccess.isPlatformAdmin ? `PuckNexus ${platformAccess.roles.join(' + ') || 'platform_admin'}` : 'Team workspace only')}</dd></div></dl></section><section class="card settings-card"><div class="card-title"><h2>Data policy</h2><span class="tag">Supabase reads</span></div><p class="settings-copy">This browser workspace reads authorized team data through Supabase RLS. Local video, TOI, tracking, vault, backups, and device settings remain in the Windows app.</p><span class="permission-lock">${authCapabilities.length} database-provided capabilities loaded</span></section></div>`);
+  return shell('Team Settings', 'Your team identity, workspace and access.', `<div class="settings-grid"><section class="card settings-card"><div class="card-title"><h2>Workspace context</h2><span class="tag">Read only</span></div><dl class="settings-list"><div><dt>Platform</dt><dd>${escapeHtml(PLATFORM.name)}</dd></div><div><dt>Team</dt><dd>${escapeHtml(tenantName())}</dd></div><div><dt>Season</dt><dd>${escapeHtml(tenantSeasonName())}</dd></div><div><dt>Role</dt><dd>${escapeHtml(activeStaff?.role || 'Authenticated team member')}</dd></div><div><dt>Platform access</dt><dd>${escapeHtml(platformAccess.isPlatformAdmin ? `PuckNexus ${platformAccess.roles.join(' + ') || 'platform_admin'}` : 'Team workspace only')}</dd></div></dl></section><section class="card settings-card"><div class="card-title"><h2>Data policy</h2><span class="tag">Team access</span></div><p class="settings-copy">This browser workspace reads authorized team data through Supabase RLS. Local video, TOI, tracking, vault, backups, and device settings remain in the Windows app.</p><span class="permission-lock">${authCapabilities.length} database-provided capabilities loaded</span></section></div>${window.PuckTeamBranding.markup()}`);
 }
 function generic(view) { const titles = { games:['Game Center','One place for game-day details and post-game review.'], reports:['Coach Reports','Turn team observations into clear, shareable reports.'], development:['Player Development','Review future cloud-backed development records.'], settings:['Settings','Configure the team hub experience and future integrations.'] }; const [title, sub] = titles[view]; return shell(title, sub, `<section class="card empty-view"><div class="empty-icon">${view === 'settings' ? '⚙' : '✦'}</div><h2>Workspace unavailable</h2><p>This surface does not have approved cloud-backed data for the selected team and season.</p></section>`); }
 function admin() {
@@ -718,6 +718,7 @@ function renderTeamSwitcher() {
 
 function renderTenantBranding() {
   const displayName = tenantName();
+  window.PuckTeamBranding.apply(seasonContext.branding, lastRenderedView || 'command');
   const seasonName = tenantSeasonName();
   const mark = displayName.split(/\s+/).filter(Boolean).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'PN';
   const tenantMark = document.querySelector('#tenantMark');
@@ -726,13 +727,22 @@ function renderTenantBranding() {
   const tenantFooter = document.querySelector('#tenantFooter');
   const teamStatus = document.querySelector('#teamStatus');
   if (tenantMark) tenantMark.innerHTML = window.PuckWorkspace.crest(displayName, seasonContext.branding?.logo_url);
-  if (tenantNameNode) tenantNameNode.textContent = displayName;
+  document.querySelector('#tenantSecondary')?.remove();
+  const secondaryLogo = window.PuckTeamBranding.safeImage(seasonContext.branding?.settings?.secondary_image_url);
+  if (secondaryLogo && tenantFooter) { const image = document.createElement('img'); image.id = 'tenantSecondary'; image.className = 'tenant-secondary'; image.alt = displayName + ' secondary logo'; image.src = secondaryLogo; image.loading = 'lazy'; tenantFooter.after(image); }
+  if (tenantNameNode) {
+    tenantNameNode.textContent = displayName;
+    document.querySelector('#tenantWordmark')?.remove();
+    const wordmark = window.PuckTeamBranding.safeImage(seasonContext.branding?.settings?.wordmark_url);
+    if (wordmark) { const image = document.createElement('img'); image.id = 'tenantWordmark'; image.className = 'tenant-wordmark'; image.alt = displayName + ' wordmark'; image.src = wordmark; tenantNameNode.before(image); }
+  }
   if (tenantSeasonLabel) tenantSeasonLabel.textContent = seasonName;
   if (tenantFooter) tenantFooter.textContent = displayName;
   if (teamStatus) teamStatus.textContent = `${displayName} · ${activeStaff?.role || 'Team workspace'}`;
 }
 
 async function selectTeam(teamId) {
+  if (!window.PuckTeamBranding.canLeave()) { renderTeamSwitcher(); return; }
   if (coachQol.saveState === coachQol.SAVE_STATES.SAVING) { renderTeamSwitcher(); return; }
   if (coachQol.dirty && !window.confirm('You have unsaved stats. Leave without saving?')) { renderTeamSwitcher(); return; }
   coachQol.openGame(null, [], []);
@@ -862,6 +872,7 @@ function openActionCenter() {
   panel.querySelector('[data-close-action-center]').focus();
 }
 function render(view = 'command') {
+  if (lastRenderedView === 'settings' && !window.PuckTeamBranding.canLeave()) return false;
   if (coachQol.saveState === coachQol.SAVE_STATES.SAVING) return false;
   if (coachQol.dirty && lastRenderedView === 'games') {
     if (!window.confirm('You have unsaved stats. Leave without saving?')) return false;
@@ -889,6 +900,12 @@ function render(view = 'command') {
   if (seasonPill) seasonPill.firstChild.textContent = tenantSeasonName();
   document.querySelector('#retryPhase1Data')?.addEventListener('click', () => loadPhase1Data(authTeam.team_id));
   document.querySelector('#retryPhase2AData')?.addEventListener('click', () => loadPhase2AData(authTeam.team_id));
+  window.PuckTeamBranding.apply(seasonContext.branding, view);
+  if (view === 'settings') window.PuckTeamBranding.mount(document.querySelector('#brandEditor'), {
+    client: supabaseClient,
+    getContext: () => ({membership:authTeam, capabilities:authCapabilities, userId:authUser?.id, organizationId:authTeam?.teams?.organization_id}),
+    onSaved: async branding => { seasonContext.branding = branding; renderTenantBranding(); window.PuckTeamBranding.apply(branding, 'settings'); }
+  });
   if (view === 'admin') bindAdminControls();
   if (view === 'schedule') bindCoachGameControls();
   if (view === 'players') bindCoachRosterControls();
@@ -1006,15 +1023,16 @@ document.addEventListener('click', event => {
 function showLoading() {
   appShell.hidden = true;
   authScreen.hidden = false;
-  authScreen.innerHTML = `<div class="auth-card"><div class="auth-brand"><div class="brand-mark">PN</div><div><strong>${PLATFORM.name}</strong><span>${PLATFORM.tagline}</span></div></div><h1>Restoring your session</h1><p class="auth-loading">Connecting to the secure team workspace…</p></div>`;
+  authScreen.removeAttribute('aria-hidden');
+  authScreen.innerHTML = `<div class="auth-card"><div class="auth-brand"><div class="platform-lockup"><img src="./assets/pucknexus-official.png" alt="PuckNexus — THE BEST PUCKING ANALYTICS" width="1280" height="1280" /></div></div><h1>Restoring your session</h1><p class="auth-loading">Connecting to the secure team workspace…</p></div>`;
 }
 
 function authLanding(content, activeTab = 'signin') {
   const usaFlag = '<svg class="login-flag" viewBox="0 0 28 18" role="img" aria-label="USA flag"><path fill="#fff" d="M0 0h28v18H0z"/><path stroke="#cf243f" stroke-width="2" d="M0 1h28M0 5h28M0 9h28M0 13h28M0 17h28"/><path fill="#194878" d="M0 0h12v10H0z"/><path fill="#fff" d="M2 2h1v1H2zm4 0h1v1H6zm4 0h1v1h-1zM4 5h1v1H4zm4 0h1v1H8zM2 8h1v1H2zm4 0h1v1H6zm4 0h1v1h-1z"/></svg>';
   const canadaFlag = '<svg class="login-flag" viewBox="0 0 28 18" role="img" aria-label="Canada flag"><path fill="#fff" d="M0 0h28v18H0z"/><path fill="#e2233d" d="M0 0h7v18H0zm21 0h7v18h-7zM14 3l1 3 2-1-1 3 3 1-4 3v3h-2v-3l-4-3 3-1-1-3 2 1z"/></svg>';
   return `<div class="login-landing">
-    <header class="login-header"><div class="login-logo" aria-label="PuckNexus"><span class="login-logo-mark">PN</span><span class="login-logo-type"><strong>PUCK<span>NEXUS</span></strong><small>THE BEST PUCKING ANALYTICS</small></span></div>
-      <nav class="login-nav" aria-label="PuckNexus"><a href="#login-features">Features</a><span>Pricing</span><a href="#login-community">About</a><a href="#login-features">Teams</a><span>Contact</span></nav>
+    <header class="login-header"><div class="login-logo platform-lockup"><img src="./assets/pucknexus-official.png" alt="PuckNexus — THE BEST PUCKING ANALYTICS — USA and Canada" width="1280" height="1280" fetchpriority="high" /></div>
+      <nav class="login-nav" aria-label="PuckNexus"><a href="#login-features">Features</a><a href="#login-community">Our community</a></nav>
       <div class="login-header-actions"><button type="button" class="login-header-signin" id="headerSignIn">Sign In</button><button type="button" class="login-header-start" id="headerGetStarted">Get Started</button></div></header>
     <div class="login-countries">USA ${usaFlag} <span>|</span> CANADA ${canadaFlag}</div>
     <main class="login-main"><section class="login-story" aria-label="PuckNexus community"><div class="login-story-copy"><p>HOCKEY BUILDS MORE THAN PLAYERS</p><h2>IT BUILDS <span>PEOPLE.</span></h2><div>Analytics. Development. Community. A brighter path for every player.</div></div></section>
@@ -1034,7 +1052,8 @@ function bindAuthLanding() {
 function showLogin(error = '', notice = '') {
   appShell.hidden = true;
   authScreen.hidden = false;
-  authScreen.innerHTML = authLanding(`<h1>Welcome to Puck<span>Nexus</span></h1><p class="login-intro">Sign in to your account and get back to what matters.</p><form class="login-form" id="loginForm"><label class="login-field"><span class="sr-only">Email address</span><span aria-hidden="true">✉</span><input id="loginEmail" type="email" placeholder="Email address" autocomplete="username" required /></label><label class="login-field"><span class="sr-only">Password</span><span aria-hidden="true">♙</span><input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password" required /><button id="toggleLoginPassword" type="button" aria-label="Show password">◉</button></label><div class="login-options"><label><input type="checkbox" checked disabled title="This browser keeps you signed in until you sign out" /> Remember me</label><button type="button" id="forgotLoginPassword">Forgot password?</button></div>${error ? `<div class="auth-error" role="alert">${escapeHtml(error)}</div>` : ''}${notice ? `<div class="auth-success" role="status">${escapeHtml(notice)}</div>` : ''}<button class="login-submit" type="submit">Sign In</button></form><div class="login-divider"><span>OR</span></div><button class="login-google" id="googleLogin" type="button"><span aria-hidden="true">G</span> Continue with Google</button><p class="login-new">New to PuckNexus?</p><button class="login-create" id="showSignUp" type="button">Create an Account</button><p class="login-belong">Coaches. Teams. Players. Communities.<br>All belong here.</p>`, 'signin');
+  authScreen.removeAttribute('aria-hidden');
+  authScreen.innerHTML = authLanding(`<h1>Welcome to Puck<span>Nexus</span></h1><p class="login-intro">Sign in to your account and get back to what matters.</p><form class="login-form" id="loginForm"><label class="login-field"><span class="sr-only">Email address</span><span aria-hidden="true">✉</span><input id="loginEmail" type="email" placeholder="Email address" autocomplete="username" required /></label><label class="login-field"><span class="sr-only">Password</span><span aria-hidden="true">♙</span><input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password" required /><button id="toggleLoginPassword" type="button" aria-label="Show password">◉</button></label><div class="login-options"><span class="login-session-note">Your session stays active until you sign out.</span><button type="button" id="forgotLoginPassword">Forgot password?</button></div>${error ? `<div class="auth-error" role="alert">${escapeHtml(error)}</div>` : ''}${notice ? `<div class="auth-success" role="status">${escapeHtml(notice)}</div>` : ''}<button class="login-submit" type="submit">Sign In</button></form><div class="login-divider"><span>OR</span></div><button class="login-google" id="googleLogin" type="button"><span aria-hidden="true">G</span> Continue with Google</button><p class="login-new">New to PuckNexus?</p><button class="login-create" id="showSignUp" type="button">Create an Account</button><p class="login-belong">Coaches. Teams. Players. Communities.<br>All belong here.</p>`, 'signin');
   bindAuthLanding();
   authScreen.querySelector('#showSignUp').addEventListener('click', () => showSignUp());
   authScreen.querySelector('#toggleLoginPassword').addEventListener('click', () => {
@@ -1080,6 +1099,7 @@ function showLogin(error = '', notice = '') {
 function showSignUp(error = '', noticeText = '') {
   appShell.hidden = true;
   authScreen.hidden = false;
+  authScreen.removeAttribute('aria-hidden');
   authScreen.innerHTML = authLanding(`<h1>Create your Puck<span>Nexus</span> account</h1><p class="login-intro">Start a new organization and team. Setup progress saves automatically.</p>${noticeText ? `<div class="auth-success" role="status">${escapeHtml(noticeText)}</div>` : ''}<form class="auth-form login-signup-form" id="signUpForm"><label>Your name<input id="signUpName" type="text" autocomplete="name" maxlength="120" required /></label><label>Email address<input id="signUpEmail" type="email" autocomplete="username" required /></label><label>Password<input id="signUpPassword" type="password" autocomplete="new-password" minlength="8" required /></label><label>Confirm password<input id="signUpPasswordConfirm" type="password" autocomplete="new-password" minlength="8" required /></label>${error ? `<div class="auth-error" role="alert">${escapeHtml(error)}</div>` : ''}<button class="login-submit" type="submit">Create account</button></form><p class="login-new">Already have an account?</p><button class="login-create" id="showSignIn" type="button">Sign In</button>`, 'signup');
   bindAuthLanding();
   authScreen.querySelector('#showSignIn').addEventListener('click', () => showLogin());
@@ -1122,7 +1142,8 @@ function showSignUp(error = '', noticeText = '') {
 function showPasswordRecovery(error = '') {
   appShell.hidden = true;
   authScreen.hidden = false;
-  authScreen.innerHTML = `<div class="auth-card"><div class="auth-brand"><div class="brand-mark">PN</div><div><strong>${PLATFORM.name}</strong><span>${PLATFORM.tagline}</span></div></div><h1>Set a new password</h1><p>Choose a new password for your ${PLATFORM.name} account.</p><form class="auth-form" id="recoveryForm"><label>New password<input id="recoveryPassword" type="password" autocomplete="new-password" minlength="8" required /></label><label>Confirm new password<input id="recoveryPasswordConfirm" type="password" autocomplete="new-password" minlength="8" required /></label>${error ? `<div class="auth-error" role="alert">${escapeHtml(error)}</div>` : ''}<button class="btn primary" type="submit">Update password</button></form></div>`;
+  authScreen.removeAttribute('aria-hidden');
+  authScreen.innerHTML = `<div class="auth-card"><div class="auth-brand"><div class="platform-lockup"><img src="./assets/pucknexus-official.png" alt="PuckNexus — THE BEST PUCKING ANALYTICS" width="1280" height="1280" /></div></div><h1>Set a new password</h1><p>Choose a new password for your ${PLATFORM.name} account.</p><form class="auth-form" id="recoveryForm"><label>New password<input id="recoveryPassword" type="password" autocomplete="new-password" minlength="8" required /></label><label>Confirm new password<input id="recoveryPasswordConfirm" type="password" autocomplete="new-password" minlength="8" required /></label>${error ? `<div class="auth-error" role="alert">${escapeHtml(error)}</div>` : ''}<button class="btn primary" type="submit">Update password</button></form></div>`;
   authScreen.querySelector('#recoveryForm').addEventListener('submit', async event => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -1259,6 +1280,8 @@ function initialsFor(name) {
 }
 
 function clearWorkspaceState() {
+  window.PuckTeamBranding.apply(null);
+  document.querySelector('#tenantWordmark')?.remove();
   selectedGameId = '';
   gameWorkspaceTab = 'overview';
   coachQol.openGame(null, [], []);
@@ -1288,7 +1311,7 @@ function showPlatformLanding(displayName, hasTeamMemberships) {
   authScreen.hidden = false;
   authScreen.removeAttribute('aria-hidden');
   const roleLabel = platformAccess.isFounder ? 'Founder' : 'Platform Admin';
-  authScreen.innerHTML = `<div class="auth-card admin-auth-card"><div class="auth-brand"><div class="brand-mark">PN</div><div><strong>${PLATFORM.name}</strong><span>${PLATFORM.tagline}</span></div></div><h1>Admin Dashboard</h1><p class="admin-identity">Signed in as ${escapeHtml(displayName)} · ${escapeHtml(roleLabel)}</p><div id="platformAdminRoot" class="platform-admin-root-host"></div><div class="auth-actions">${hasTeamMemberships ? '<button class="btn" id="continueToTeamWorkspace" type="button">Open team workspace</button>' : ''}<button class="btn" id="authScreenSignOut" type="button">Sign out</button></div></div>`;
+  authScreen.innerHTML = `<div class="auth-card admin-auth-card"><div class="auth-brand"><div class="platform-lockup"><img src="./assets/pucknexus-official.png" alt="PuckNexus — THE BEST PUCKING ANALYTICS" width="1280" height="1280" /></div></div><h1>Admin Dashboard</h1><p class="admin-identity">Signed in as ${escapeHtml(displayName)} · ${escapeHtml(roleLabel)}</p><div id="platformAdminRoot" class="platform-admin-root-host"></div><div class="auth-actions">${hasTeamMemberships ? '<button class="btn" id="continueToTeamWorkspace" type="button">Open team workspace</button>' : ''}<button class="btn" id="authScreenSignOut" type="button">Sign out</button></div></div>`;
   platformAdminManager.mount(authScreen.querySelector('#platformAdminRoot'));
   authScreen.querySelector('#continueToTeamWorkspace')?.addEventListener('click', () => {
     platformAdminManager.unmount();
@@ -1308,7 +1331,7 @@ function showOnboarding(destination) {
   authScreen.hidden = false;
   authScreen.removeAttribute('aria-hidden');
   const pendingTeams = (destination.pending || []).map(item => item.teams?.name).filter(Boolean).join(', ');
-  authScreen.innerHTML = `<div class="auth-card onboarding-auth-card"><div class="auth-brand"><div class="brand-mark">PN</div><div><strong>${PLATFORM.name}</strong><span>${PLATFORM.tagline}</span></div></div><div id="onboardingRoot" class="onboarding-root-host"></div></div>`;
+  authScreen.innerHTML = `<div class="auth-card onboarding-auth-card"><div class="auth-brand"><div class="platform-lockup"><img src="./assets/pucknexus-official.png" alt="PuckNexus — THE BEST PUCKING ANALYTICS" width="1280" height="1280" /></div></div><div id="onboardingRoot" class="onboarding-root-host"></div></div>`;
   onboardingManager = window.FoxesOnboarding.createOnboarding({
     client: supabaseClient,
     user: authUser,
@@ -1337,7 +1360,7 @@ function showNoAccess(message = '') {
   appShell.hidden = true;
   authScreen.hidden = false;
   authScreen.removeAttribute('aria-hidden');
-  authScreen.innerHTML = `<div class="auth-card"><div class="auth-brand"><div class="brand-mark">PN</div><div><strong>${PLATFORM.name}</strong><span>${PLATFORM.tagline}</span></div></div><h1>No active team access</h1><p>${escapeHtml(message || 'This account has no platform role and no active organization or team membership. An invitation from your organization or team owner is required before a workspace can be opened.')}</p><div class="auth-actions"><button class="btn" id="authScreenSignOut" type="button">Sign out</button></div></div>`;
+  authScreen.innerHTML = `<div class="auth-card"><div class="auth-brand"><div class="platform-lockup"><img src="./assets/pucknexus-official.png" alt="PuckNexus — THE BEST PUCKING ANALYTICS" width="1280" height="1280" /></div></div><h1>No active team access</h1><p>${escapeHtml(message || 'This account has no platform role and no active organization or team membership. An invitation from your organization or team owner is required before a workspace can be opened.')}</p><div class="auth-actions"><button class="btn" id="authScreenSignOut" type="button">Sign out</button></div></div>`;
   bindAuthScreenSignOut();
 }
 
@@ -1431,6 +1454,7 @@ async function loadAuthenticatedWorkspace(sessionUser = null) {
 }
 
 async function signOut() {
+  if (!window.PuckTeamBranding.canLeave()) return;
   if (coachQol.saveState === coachQol.SAVE_STATES.SAVING) return;
   if (coachQol.dirty && !window.confirm('You have unsaved stats. Leave without saving?')) return;
   coachQol.openGame(null, [], []);
