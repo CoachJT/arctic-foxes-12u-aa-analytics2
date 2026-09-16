@@ -4,6 +4,8 @@ const fs = require('node:fs');
 
 const migrationFile = '20260916000711_032_film_web_associations.sql';
 const migration = fs.readFileSync(`supabase/migrations/${migrationFile}`, 'utf8');
+const policyFixMigrationFile = '20260916005029_033_fix_film_playlist_policy_recursion.sql';
+const policyFixMigration = fs.readFileSync(`supabase/migrations/${policyFixMigrationFile}`, 'utf8');
 const room = fs.readFileSync('web/film-room.js', 'utf8');
 const app = fs.readFileSync('web/app.js', 'utf8');
 const index = fs.readFileSync('web/index.html', 'utf8');
@@ -45,6 +47,17 @@ test('Film migration remains forward-only and does not apply production changes'
   assert.doesNotMatch(migration, /\bdrop table\b/i);
   assert.doesNotMatch(migration, /\btruncate\b/i);
   assert.match(migration, /queued migration/i);
+});
+
+test('Film playlist reads avoid recursive RLS between playlists and selected-staff shares', () => {
+  assert.equal(policyFixMigrationFile > migrationFile, true);
+  assert.match(policyFixMigration, /create or replace function public\.can_read_team_film_playlist/);
+  assert.match(policyFixMigration, /security definer/);
+  assert.match(policyFixMigration, /set search_path = public/);
+  assert.match(policyFixMigration, /revoke all on function public\.can_read_team_film_playlist\(uuid\) from public, anon/);
+  assert.match(policyFixMigration, /grant execute on function public\.can_read_team_film_playlist\(uuid\) to authenticated/);
+  assert.match(policyFixMigration, /using \(public\.can_read_team_film_playlist\(id\)\)/);
+  assert.match(policyFixMigration, /using \(public\.can_read_team_film_playlist\(playlist_id\)\)/);
 });
 
 test('clip management supports edit, delete, timestamp validation, and playlist-safe removal', () => {
