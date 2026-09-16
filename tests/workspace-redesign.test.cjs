@@ -73,7 +73,7 @@ test('player selector escapes imported names and ids', () => {
 });
 function renderGame({future=false,readOnly=false,partial=false}={}) {
   const app=fs.readFileSync('web/app.js','utf8');
-  const context={window:{PuckWorkspace:workspace},phase1Data:{games:[{id:'row',source_game_id:'game',date:future?'2099-01-01':'2020-01-01',opponent:'Opponent'}],teamStats:future?[]:[{source_game_id:'game',goals_for:0,goals_against:partial?null:0}],roster:[],playerStats:[]},PERMISSIONS:{STATS_EDIT:'edit',FILM_VIEW:'film'},activeStaff:{},can:()=>!readOnly,phase1Date:x=>x,tenantName:()=> 'Team',tenantSeasonName:()=> 'Season',escapeHtml:x=>String(x??''),shell:(_t,_s,body)=>body,cardTitle:()=>'',coachQol:setup(),phase1Number:x=>Number(x||0)};
+  const context={window:{PuckWorkspace:workspace},seasonContext:{branding:{}},phase1Data:{games:[{id:'row',source_game_id:'game',date:future?'2099-01-01':'2020-01-01',opponent:'Opponent'}],teamStats:future?[]:[{source_game_id:'game',goals_for:0,goals_against:partial?null:0}],roster:[],playerStats:[]},PERMISSIONS:{STATS_EDIT:'edit',FILM_VIEW:'film'},activeStaff:{},can:()=>!readOnly,phase1Date:x=>x,tenantName:()=> 'Team',tenantSeasonName:()=> 'Season',escapeHtml:x=>String(x??''),shell:(_t,_s,body)=>body,cardTitle:()=>'',coachQol:setup(),phase1Number:x=>Number(x||0)};
   vm.createContext(context);
   vm.runInContext(app.slice(app.indexOf("let selectedGameId = ''"),app.indexOf('function bindCoachStatsControls()'))+';output=gameCenter();',context);
   return context.output;

@@ -1,5 +1,10 @@
 (function (global) {
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  function crest(name, logoUrl = '') {
+    const initials = String(name || 'Team').split(/\s+/).filter(Boolean).slice(0, 2).map(word => word[0]).join('').toUpperCase();
+    const logo = /^https?:\/\//i.test(logoUrl) ? `<img src="${esc(logoUrl)}" alt="" loading="lazy">` : '';
+    return `<div class="team-crest" aria-hidden="true"><span>${esc(initials)}</span>${logo}<svg viewBox="0 0 60 18"><path d="M13 2l30 13h9M47 2L17 15H8"/></svg></div>`;
+  }
   function position(player) {
     const p = String(player.position || '').toUpperCase();
     return player.player_type === 'goalie' || p === 'G' ? 'G' : ['D', 'LD', 'RD'].includes(p) ? 'D' : ['F', 'C', 'LW', 'RW'].includes(p) ? 'F' : 'Other';
@@ -79,6 +84,6 @@
     rows.forEach(row => { row.hidden = true; });
     refresh();
   }
-  global.PuckWorkspace = { position, sortRoster, playerPicker, bindQuickEntry };
+  global.PuckWorkspace = { crest, position, sortRoster, playerPicker, bindQuickEntry };
   if (typeof module !== 'undefined') module.exports = global.PuckWorkspace;
 }(typeof window !== 'undefined' ? window : globalThis));

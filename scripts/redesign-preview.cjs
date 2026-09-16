@@ -12,6 +12,7 @@ http.createServer((req,res)=>{
   let file=path.resolve(root, '.'+(u.pathname==='/'?'/index.html':u.pathname));
   if(!file.startsWith(root+path.sep)){res.writeHead(403).end();return;}
   try {
+    if (/\.(png|jpg|webp)$/.test(file)) { res.writeHead(200, {'Content-Type':file.endsWith('.png')?'image/png':file.endsWith('.webp')?'image/webp':'image/jpeg'}); res.end(fs.readFileSync(file)); return; }
     let text=fs.readFileSync(file,'utf8').replace(/\r\n/g,'\n');
     if(file.endsWith('index.html')) text=text.replace(/<script src="https:[^>]+><\/script>/g,'').replace('<script src="./permissions',`<script>${stub}</script><div style="background:#48222b;padding:6px 16px;color:#fff;font:12px sans-serif;text-align:center">LOCAL DESIGN REVIEW · Illustrative fixture data · No live connection</div><script src="./permissions`);
     if(file.endsWith('app.js')) {

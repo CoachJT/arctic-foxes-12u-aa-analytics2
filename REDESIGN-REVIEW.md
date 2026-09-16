@@ -35,3 +35,9 @@ The web app is static: the existing Pages workflow uploads `web/` directly. Ther
 No Supabase configuration, database functions, migrations, permission definitions, authentication implementation, deployment workflows or Windows application files were changed. No migrations were created or applied, and no deployment or merge was performed.
 
 Live authenticated saves, Film uploads/playback and real backend behavior were not exercised. Existing automated persistence tests pass, but production integration should be verified in a separately authorized release review. Shifts, shot/faceoff locations and game notes remain in the Windows workspace, as at baseline; the web redesign does not invent unsupported data or controls. Save remains explicit rather than claiming autosave.
+
+## Visual refinement
+
+Added a hockey arena backdrop, condensed sports typography, team crests (existing uploaded logos when available, initials otherwise), a centered game scoreboard, compact player leaders and recorded-stat comparisons. The Command Center now leads with team identity and the next game, followed by actions, attention items and season metrics. The arena image is AI-generated decorative artwork, not a photograph of a team venue. Unknown comparison values remain unavailable and do not display a comparison bar.
+
+Repeated the full 397-test suite and desktop/mobile browser review after this pass, including 320px Game Center and quick entry overflow checks.
