@@ -37,7 +37,6 @@ on:
       - 'stats-import-ui.js'
       - 'vendor/**'
       - 'package-lock.json'
-      - 'tests/**'
       - '.github/workflows/publish-windows.yml'
   workflow_dispatch:
 
