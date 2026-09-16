@@ -71,6 +71,18 @@ using (
   and not exists (select 1 from public.team_film_clips c where c.film_id = team_film.id)
 );
 
+drop policy if exists team_film_playlists_update_for_coaches on public.team_film_playlists;
+create policy team_film_playlists_update_for_coaches on public.team_film_playlists for update to authenticated
+using (
+  public.has_team_capability(team_id, 'film.edit')
+  and (created_by = (select auth.uid()) or public.is_team_owner(team_id))
+)
+with check (
+  public.has_team_capability(team_id, 'film.edit')
+  and (created_by = (select auth.uid()) or public.is_team_owner(team_id))
+  and (sharing = 'team_private' or public.has_team_capability(team_id, 'film.share'))
+);
+
 drop policy if exists team_film_playlist_shares_write_for_owners on public.team_film_playlist_shares;
 create policy team_film_playlist_shares_write_for_owners on public.team_film_playlist_shares
 for all to authenticated
