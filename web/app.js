@@ -763,6 +763,23 @@ function renderRoleSwitcher() {
   document.querySelector('#userAvatar').textContent = activeStaff.initials;
   document.querySelector('#userName').textContent = activeStaff.name;
   const userMenu = document.querySelector('.user-menu');
+  userMenu.querySelector('[data-platform-admin]')?.remove();
+  if (platformAccess.isPlatformAdmin) {
+    const adminButton = document.createElement('button');
+    adminButton.type = 'button';
+    adminButton.className = 'btn';
+    adminButton.dataset.platformAdmin = 'true';
+    adminButton.textContent = 'Platform Admin';
+    adminButton.onclick = () => {
+      if (coachQol.saveState === coachQol.SAVE_STATES.SAVING) return;
+      if (coachQol.dirty && !window.confirm('You have unsaved stats. Leave without saving?')) return;
+      coachQol.openGame(null, [], []);
+      closeActionCenter();
+      showPlatformLanding(activeStaff.name, teamContext.memberships.length > 0);
+    };
+    userMenu.appendChild(adminButton);
+  }
+
   if (!userMenu.querySelector('.signout-button')) {
     const button = document.createElement('button');
     button.className = 'signout-button';
