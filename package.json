@@ -9,6 +9,7 @@
     "release": "node scripts/guarded-build.cjs --win nsis --publish always",
     "publish": "node scripts/guarded-build.cjs --win --publish always",
     "test": "node --test tests/*.test.cjs",
+    "preview:redesign": "node scripts/redesign-preview.cjs",
     "dist:portable": "node scripts/guarded-build.cjs --win portable --publish never --config.directories.output=dist/portable",
     "dist:installer": "node scripts/guarded-build.cjs --win nsis --publish never"
   },

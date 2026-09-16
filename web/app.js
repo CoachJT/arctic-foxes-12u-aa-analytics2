@@ -115,10 +115,14 @@ const coachQol = window.FoxesCoachQol.createCoachQol({
     schedule: phase1Data?.schedule || [],
     roster: phase1Data?.roster || []
   }),
-  onChanged: () => {
+  onChanged: async () => {
     // Returned so callers can await the reload; this is what makes UI
     // restoration deterministic instead of timer-based.
-    if (authTeam?.team_id) return loadPhase1Data(authTeam.team_id);
+    if (authTeam?.team_id) {
+      const view = lastRenderedView || 'command';
+      await loadPhase1Data(authTeam.team_id);
+      render(view);
+    }
     return Promise.resolve();
   }
 });
@@ -189,7 +193,9 @@ function command() {
     ['schedule', 'View Schedule']
   ].filter(Boolean);
 
-  return shell(`How are we doing?`, `${escapeHtml(tenantName())} · ${escapeHtml(tenantSeasonName())} — derived from real synced data only.`, `
+  return shell(`Command Center`, `Your team. Your next move.`, `
+    ${actions.length ? `<section class="card action-needed">${cardTitle('ACTION NEEDED', `${actions.length} item${actions.length === 1 ? '' : 's'}`)}${actions.map(item => `<button class="action-needed-row" type="button" data-dashboard-action="${escapeHtml(item.view)}" data-action-game="${escapeHtml(item.gameId || '')}"><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(item.detail)}</span></button>`).join('')}</section>` : ''}
+    <section class="card">${cardTitle('QUICK ACTIONS', '')}<div class="dash-actions">${quickActions.map(([view, label]) => `<button class="btn${label === 'Add Game' ? ' primary' : ''}" type="button" data-dashboard-goto="${view}">${label}</button>`).join('')}</div></section>
     ${next ? `<section class="card next-game">${cardTitle('NEXT GAME', 'Schedule')}<div class="game-top"><div class="opponent"><div class="opponent-mark">${escapeHtml(String(next.opponent || 'AF').slice(0, 2).toUpperCase())}</div><div><p>${phase1Date(next.date)} · ${escapeHtml(next.home_away)}</p><h2>${escapeHtml(next.opponent)}</h2><p>${escapeHtml(next.location || 'Location unavailable')}${next.time ? ` · ${escapeHtml(next.time)}` : ''}</p></div></div><span class="home-pill">${escapeHtml(next.home_away)}</span></div></section>` : ''}
 
     <div class="grid stat-grid">
@@ -202,7 +208,7 @@ function command() {
     </div>
 
     <div class="grid split">
-      <section class="card recent">${cardTitle('RECENT GAMES', 'Game Center')}${recent.length ? recent.map(game => `<div class="game-row"><div><strong>${escapeHtml(game.opponent)}</strong><small>${phase1Date(game.date)}</small></div><span class="score">${escapeHtml(game.score)}</span><span class="result ${game.result === 'W' ? 'win' : game.result === 'L' ? 'loss' : ''}">${game.result === 'W' ? 'WIN' : game.result === 'L' ? 'LOSS' : 'TIE'}</span></div>`).join('') : '<p class="sub">No completed games with scores yet.</p>'}<div class="dash-actions"><button class="btn" type="button" data-dashboard-goto="schedule">View Full Schedule</button></div></section>
+      <section class="card recent">${cardTitle('RECENT GAMES', 'Game Center')}${recent.length ? recent.map(game => `<button type="button" class="game-row recent-game-link" data-recent-game="${escapeHtml(game.id)}"><div><strong>${escapeHtml(game.opponent)}</strong><small>${phase1Date(game.date)}</small></div><span class="score">${escapeHtml(game.score)}</span><span class="result ${game.result === 'W' ? 'win' : game.result === 'L' ? 'loss' : ''}">${game.result === 'W' ? 'WIN' : game.result === 'L' ? 'LOSS' : 'TIE'}</span></button>`).join('') : '<p class="sub">No completed games with scores yet.</p>'}<div class="dash-actions"><button class="btn" type="button" data-dashboard-goto="schedule">View Full Schedule</button></div></section>
 
       <section class="card">${cardTitle('PLAYER LEADERS', 'Player Profiles')}
         <div class="leader-tabs">${Object.entries(D.LEADER_CATEGORIES).filter(([key]) => ['goals', 'assists', 'points', 'shots', 'blocks', 'plusMinus', 'faceoffPct'].includes(key)).map(([key, config]) => `<button class="leader-tab${dashboardLeaderCategory === key ? ' active' : ''}" type="button" data-leader-cat="${key}">${escapeHtml(config.label)}</button>`).join('')}</div>
@@ -217,6 +223,7 @@ function command() {
       </section>
     </div>
 
+    <details class="workspace-disclosure dashboard-depth"><summary>Go deeper · goalies &amp; team trends</summary>
     <div class="grid split">
       <section class="card">${cardTitle('GOALIE SNAPSHOT', 'Player Profiles')}
         ${goalies.length ? goalies.map(goalie => `<div class="goalie-row"><span class="jersey">#${escapeHtml(goalie.player.jersey_number)}</span><div><strong>${escapeHtml(goalie.player.name)}</strong><small>${goalie.gp} GP · ${goalie.w}–${goalie.l}–${goalie.t}${goalie.so ? ` · ${goalie.so} SO` : ''}</small></div><span class="leader-value">${goalie.savePct === null ? '—' : `${(goalie.savePct * 100).toFixed(1)}%`} <small>SV%</small></span><small class="sub">${goalie.saves} saves · ${goalie.shotsAgainst} SA</small></div>`).join('') : '<p class="sub">No goalies on the roster yet. Mark a player as Goalie (G) to see goalie stats here.</p>'}
@@ -231,13 +238,13 @@ function command() {
       </section>
     </div>
 
-    ${actions.length ? `<section class="card action-needed">${cardTitle('ACTION NEEDED', `${actions.length} item${actions.length === 1 ? '' : 's'}`)}${actions.map(item => `<button class="action-needed-row" type="button" data-dashboard-action="${escapeHtml(item.view)}"><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(item.detail)}</span></button>`).join('')}</section>` : ''}
-    <section class="card">${cardTitle('QUICK ACTIONS', '')}<div class="dash-actions">${quickActions.map(([view, label]) => `<button class="btn${label === 'Add Game' ? ' primary' : ''}" type="button" data-dashboard-goto="${view}">${label}</button>`).join('')}</div></section>`);
+</details>`);
 }
 
 function bindDashboardControls() {
-  document.querySelectorAll('[data-dashboard-goto]').forEach(button => button.addEventListener('click', () => render(button.dataset.dashboardGoto)));
-  document.querySelectorAll('[data-dashboard-action]').forEach(button => button.addEventListener('click', () => render(button.dataset.dashboardAction)));
+  document.querySelectorAll('[data-recent-game]').forEach(button => button.addEventListener('click', () => { selectedGameId = button.dataset.recentGame; render('games'); }));
+  document.querySelectorAll('[data-dashboard-goto]').forEach(button => button.addEventListener('click', () => { render(button.dataset.dashboardGoto); if (button.textContent === 'Add Game') document.querySelector('#scheduleCreate')?.setAttribute('open', ''); if (button.textContent === 'Manage Roster') document.querySelector('.roster-management')?.setAttribute('open', ''); }));
+  document.querySelectorAll('[data-dashboard-action]').forEach(button => button.addEventListener('click', () => { if (button.dataset.actionGame) selectedGameId = button.dataset.actionGame; render(button.dataset.dashboardAction); }));
   document.querySelectorAll('[data-leader-cat]').forEach(button => button.addEventListener('click', () => { dashboardLeaderCategory = button.dataset.leaderCat; render('command'); }));
   document.querySelectorAll('[data-trend-window]').forEach(button => button.addEventListener('click', () => { dashboardTrendWindow = button.dataset.trendWindow; render('command'); }));
 }
@@ -263,7 +270,7 @@ function schedule() {
     return `<div class="schedule-item${String(game.date) < today ? ' past' : ''}"><div class="schedule-date"><strong>${escapeHtml(new Date(`${game.date}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: '2-digit' }).toUpperCase())}</strong>${escapeHtml(String(game.date).slice(0, 4))}</div><div><h3>${escapeHtml(game.opponent)}</h3><p>${escapeHtml(game.home_away)} · ${escapeHtml(game.location || 'Location unavailable')}${game.time ? ` · ${escapeHtml(game.time)}` : ''}</p>${scoreForm}</div><span class="tag">${escapeHtml(game.game_type)}</span>${canEdit ? `<span class="schedule-actions"><button class="btn admin-action" type="button" data-coach-edit-game="${escapeHtml(game.id)}">Edit</button><button class="btn admin-action danger" type="button" data-coach-delete-game="${escapeHtml(game.id)}">Delete</button></span>` : ''}</div>`;
   };
   return shell('Schedule', canEdit ? 'Add and manage games. Changes save to the team immediately.' : 'Live schedule synced from the team Windows app.', `
-    ${canEdit ? `<section class="card"><div class="card-title"><h2>${phase1Data?.schedule?.some(() => true) ? 'Add game' : 'Add your first game'}</h2><span class="admin-security-note">Team-scoped · RLS enforced</span></div><div id="coachGameFormHost">${coachQol.gameFormHtml()}</div></section>` : ''}
+    ${canEdit ? `<details id="scheduleCreate" class="card workspace-disclosure" ${games.length ? '' : 'open'}><summary>+ Add a game</summary><div id="coachGameFormHost">${coachQol.gameFormHtml()}</div></details>` : ''}
     ${games.length ? `<section class="card">${cardTitle(`Upcoming · ${upcoming.length}`, 'Newest changes save instantly')}<div class="schedule-list">${upcoming.map(row).join('') || '<div class="empty-view"><p>No upcoming games.</p></div>'}</div></section>
     <section class="card">${cardTitle(`Completed · ${past.length}`, '')}<div class="schedule-list">${past.map(row).join('') || '<div class="empty-view"><p>No completed games yet.</p></div>'}</div></section>`
     : `<section class="card empty-view"><div class="empty-icon">◷</div><h2>No games yet</h2><p>Add your first game to start tracking your season.</p>${canEdit ? '' : '<p>Schedule editing requires the schedule.edit capability.</p>'}</div></section>`}`);
@@ -283,6 +290,7 @@ function bindCoachGameControls() {
   document.querySelectorAll('[data-coach-edit-game]').forEach(button => button.addEventListener('click', () => {
     const game = (phase1Data?.schedule || []).find(g => g.id === button.dataset.coachEditGame);
     if (!game || !host) return;
+    host.closest('details')?.setAttribute('open', '');
     host.innerHTML = coachQol.gameFormHtml(game);
     coachQol.enhanceDateInputs(host);
     host.querySelector('[data-game-form]').addEventListener('submit', event => {
@@ -314,9 +322,9 @@ function stats() { const edit = can(PERMISSIONS.STATS_EDIT_OFFICIAL, activeStaff
 function players() {
   const totals = playerStatTotals();
   const canEditRoster = can(PERMISSIONS.PLAYERS_EVALUATE, activeStaff);
-  return shell('Player Profiles', canEditRoster ? 'Quick add, edit, and manage your roster.' : 'Live roster and basic player stats from Supabase.', `
-    ${canEditRoster ? `<section class="card"><div class="card-title"><h2>Roster management</h2><span class="admin-security-note">Team-scoped · RLS enforced</span></div><div id="coachRosterHost">${coachQol.rosterWorkspaceHtml(phase1Data?.roster || [])}</div></section>` : ''}
-    <section class="card">${cardTitle(`Roster · ${phase1Data?.roster?.length || 0} players`, 'Supabase live data')}<div class="table-wrap"><table class="data-table"><thead><tr><th>Player</th><th>Position</th><th>Games</th><th>Goals</th><th>Points</th><th>+ / −</th><th>Status</th></tr></thead><tbody>${(phase1Data?.roster || []).map(player => { const stat = totals.get(player.source_player_id) || {}; return `<tr><td><div class="player-cell"><span class="player-photo">${escapeHtml(player.jersey_number)}</span><strong>${escapeHtml(player.name)}</strong></div></td><td class="role">${escapeHtml(player.position)}</td><td>${phase1Number(stat.games)}</td><td>${phase1Number(stat.goals)}</td><td>${phase1Number(stat.goals) + phase1Number(stat.assists)}</td><td class="trend-up">${phase1Number(stat.plus_minus)}</td><td><span class="tag">${canEditRoster ? 'Editable' : 'View only'}</span></td></tr>`; }).join('') || `<tr><td colspan="7">${canEditRoster ? 'Your roster is empty. Add players above before entering game stats.' : 'No roster data is available.'}</td></tr>`}</tbody></table></div></section>`);
+  return shell('Player Profiles', canEditRoster ? 'Your team, organized by position and jersey number.' : 'Your team, organized by position and jersey number.', `
+    ${canEditRoster ? `<details class="card workspace-disclosure roster-management" ${phase1Data?.roster?.length ? '' : 'open'}><summary>Manage roster · add, edit or remove players</summary><div id="coachRosterHost">${coachQol.rosterWorkspaceHtml(window.PuckWorkspace.sortRoster(phase1Data?.roster || []))}</div></details>` : ''}
+    <section class="card roster-overview">${cardTitle(`Roster · ${phase1Data?.roster?.length || 0} players`, 'Forwards → Defense → Goalies · jersey order')}<div class="table-wrap"><table class="data-table"><thead><tr><th>Player</th><th>Position</th><th>Games</th><th>Goals</th><th>Points</th><th>+ / −</th><th>Status</th></tr></thead><tbody>${window.PuckWorkspace.sortRoster(phase1Data?.roster || []).map(player => { const stat = totals.get(player.source_player_id) || {}; return `<tr><td><div class="player-cell"><span class="player-photo">${escapeHtml(player.jersey_number)}</span><strong>${escapeHtml(player.name)}</strong></div></td><td data-label="Position" class="role">${escapeHtml(player.position)}</td><td data-label="GP">${phase1Number(stat.games)}</td><td data-label="G">${phase1Number(stat.goals)}</td><td data-label="PTS">${phase1Number(stat.goals) + phase1Number(stat.assists)}</td><td data-label="+/−" class="trend-up">${phase1Number(stat.plus_minus)}</td><td><span class="tag">${canEditRoster ? 'Editable' : 'View only'}</span></td></tr>`; }).join('') || `<tr><td colspan="7">${canEditRoster ? 'Your roster is empty. Add players above before entering game stats.' : 'No roster data is available.'}</td></tr>`}</tbody></table></div></section>`);
 }
 
 function bindCoachRosterControls() {
@@ -375,52 +383,74 @@ function bindCoachRosterControls() {
     }
   }));
 }
+let selectedGameId = '';
+let gameWorkspaceTab = 'overview';
 function gameCenter() {
   const teamStats = new Map((phase1Data?.teamStats || []).map(row => [row.source_game_id, row]));
-  const playerStats = new Map();
-  (phase1Data?.playerStats || []).forEach(row => playerStats.set(row.source_game_id, (playerStats.get(row.source_game_id) || 0) + 1));
   const games = (phase1Data?.games || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
   const canEditStats = can(PERMISSIONS.STATS_EDIT, activeStaff);
-  // A game counts as played only when it carries a team-stats row. Eager
-  // shells created by Schedule Add therefore appear here immediately without
-  // ever being counted as completed, and a future-dated shell is not yet
-  // eligible for stat entry (save_game_stats enforces the same date rule).
   const today = new Date().toLocaleDateString('en-CA');
   const isPlayed = game => teamStats.has(game.source_game_id);
   const playedCount = games.filter(isPlayed).length;
-  const cards = games.map(game => {
-    const stats = teamStats.get(game.source_game_id);
-    const hasScore = stats && (stats.goals_for !== null || stats.goals_against !== null);
-    const eligible = String(game.date) <= today;
-    const score = hasScore ? `${phase1Number(stats.goals_for)}–${phase1Number(stats.goals_against)}` : eligible ? 'Score unavailable' : 'Not yet played';
-    const result = hasScore ? (stats.goals_for > stats.goals_against ? 'WIN' : stats.goals_for < stats.goals_against ? 'LOSS' : 'TIE') : eligible ? 'NOT SCORED' : 'SCHEDULED';
-    const statsState = hasScore ? (playerStats.get(game.source_game_id) ? 'Stats complete' : 'Stats needed') : eligible ? 'Score needed' : 'Score pending';
-    return `<article class="card game-card"><div class="game-card-head"><div><span class="eyebrow">${escapeHtml(phase1Date(game.date))}</span><h2>${escapeHtml(game.opponent || 'Opponent unavailable')}</h2><p>${escapeHtml(game.period_length_min ? `${game.period_length_min}-minute periods` : 'Game details synced from Windows')}</p></div><span class="result ${result === 'WIN' ? 'win' : result === 'LOSS' ? 'loss' : ''}">${result}</span></div><div class="game-score">${escapeHtml(score)}</div><div class="game-card-meta"><span>${escapeHtml(statsState)}</span>${can(PERMISSIONS.FILM_VIEW, activeStaff) ? `<button class="btn" type="button" data-open-film-room="${escapeHtml(game.id)}">Film Room</button>` : '<span class="tag">Film restricted</span>'}${canEditStats && eligible ? `<button class="btn" type="button" data-enter-stats="${escapeHtml(game.source_game_id)}">${playerStats.get(game.source_game_id) ? 'Edit Stats' : 'Enter Stats'}</button>` : `<span class="tag">${canEditStats ? 'Not yet playable' : 'Read only'}</span>`}</div></article>`;
-  }).join('');
-  return shell('Game Center', canEditStats ? 'Enter and correct game stats from one workspace.' : 'Read-only game summaries from the selected team and season.', `
+  const game = games.find(g => g.source_game_id === selectedGameId) || games.find(g => String(g.date) <= today) || games[0];
+  if (!game) return shell('Game Center', 'Prepare. Record. Review.', '<section class="card empty-view"><h2>Your season starts here</h2><p>No completed games are synced. Add a game to the schedule to bring its score, players, stats and film together.</p><button class="btn primary" data-workspace-goto="schedule">View schedule</button></section>');
+  selectedGameId = game.source_game_id;
+  const stats = teamStats.get(game.source_game_id);
+  const hasScore = stats?.goals_for != null && stats?.goals_against != null;
+  const eligible = String(game.date) <= today;
+  const result = hasScore ? stats.goals_for > stats.goals_against ? 'WIN' : stats.goals_for < stats.goals_against ? 'LOSS' : 'TIE' : eligible ? 'NOT SCORED' : 'SCHEDULED';
+  const playerRows = (phase1Data?.playerStats || []).filter(row => row.source_game_id === game.source_game_id);
+  const roster = window.PuckWorkspace.sortRoster(phase1Data?.roster || []);
+  const rowsByPlayer = new Map(playerRows.map(row => [row.source_player_id, row]));
+  const metric = (label, value) => `<div class="game-metric"><small>${label}</small><strong>${value == null ? '—' : escapeHtml(value)}</strong></div>`;
+  const playerTable = type => {
+    const players = roster.filter(p => (window.PuckWorkspace.position(p) === 'G') === (type === 'goalie'));
+    return `<div class="table-wrap"><table class="data-table"><thead><tr><th>Player</th>${(type === 'goalie' ? ['Saves', 'GA', 'SA', 'SV%'] : ['Position', 'G', 'A', 'S', 'PTS']).map(label => `<th>${label}</th>`).join('')}</tr></thead><tbody>${players.map(p => {
+      const row = rowsByPlayer.get(p.source_player_id);
+      const derived = coachQol.derivedGoalie(row);
+      const values = type === 'goalie' ? [row?.saves, row?.goals_against, row ? derived.shotsAgainst : null, row && derived.savePct !== null ? (derived.savePct * 100).toFixed(1) + '%' : null] : [p.position, row?.goals, row?.assists, row?.shots, row ? phase1Number(row.goals) + phase1Number(row.assists) : null];
+      return `<tr><td><span class="jersey">#${escapeHtml(p.jersey_number)}</span> ${escapeHtml(p.name)}</td>${values.map(v => `<td>${v == null ? '—' : escapeHtml(v)}</td>`).join('')}</tr>`;
+    }).join('') || '<tr><td colspan="6">No players in this group.</td></tr>'}</tbody></table></div>`;
+  };
+  const scoreForm = canEditStats && eligible ? `<details class="workspace-disclosure"><summary>${hasScore ? 'Correct final score' : 'Enter final score'}</summary><form class="score-entry" data-score-form><input type="hidden" name="gameId" value="${escapeHtml(game.source_game_id)}"><label>Us<input name="goalsFor" type="number" min="0" step="1" required value="${hasScore ? escapeHtml(stats.goals_for) : ''}"></label><span>–</span><label>Them<input name="goalsAgainst" type="number" min="0" step="1" required value="${hasScore ? escapeHtml(stats.goals_against) : ''}"></label><button class="btn primary" data-score-save>Save Score</button><span class="coach-form-status" data-score-status role="status" aria-live="polite"></span></form></details>` : '';
+  return shell('Game Center', `${playedCount} of ${games.length} games played`, `
+    <div class="game-toolbar"><label>Choose game<select id="gameSelect">${games.map(g => `<option value="${escapeHtml(g.source_game_id)}"${g === game ? ' selected' : ''}>${escapeHtml(phase1Date(g.date))} · ${escapeHtml(g.opponent)}</option>`).join('')}</select></label><button class="btn" data-workspace-goto="schedule">Full schedule ↗</button></div>
+    <article class="card game-hub"><div class="game-hub-heading"><div><span class="eyebrow">${escapeHtml(phase1Date(game.date))} · ${escapeHtml(tenantSeasonName())}</span><h2>${escapeHtml(tenantName())} <span>vs</span><br>${escapeHtml(game.opponent)}</h2><p>${escapeHtml(game.period_length_min ? game.period_length_min + '-minute periods' : 'Game review')}</p></div><div class="game-hub-score"><span class="result ${result === 'WIN' ? 'win' : result === 'LOSS' ? 'loss' : ''}">${result}</span><strong>${hasScore ? `${escapeHtml(stats.goals_for)}<span> : </span>${escapeHtml(stats.goals_against)}` : '— : —'}</strong><small>${hasScore ? 'Final score' : eligible ? 'Score unavailable' : 'Not yet played'}</small></div></div>
+    <div class="game-hub-actions">${canEditStats && eligible ? `<button class="btn primary" data-enter-stats="${escapeHtml(game.source_game_id)}">${playerRows.length ? 'Edit Stats' : 'Enter Stats'}</button>` : `<span class="tag">${eligible ? 'Read only' : 'Stat entry opens on game day'}</span>`}${can(PERMISSIONS.FILM_VIEW, activeStaff) ? `<button class="btn" data-open-film-room="${escapeHtml(game.id)}">Film Room</button>` : ''}<span class="sub">${playerRows.length ? `${playerRows.length} player stat records` : 'Player stats not entered'}</span></div></article>
     ${canEditStats ? '<section class="card" id="coachStatsHost" hidden></section>' : ''}
-    <div class="callout"><strong>${playedCount} of ${games.length} games played</strong><br>${canEditStats ? 'Choose Enter Stats on a game to open the roster-wide stat entry workspace. One save persists the whole game.' : 'Game Center shows official cloud-backed summaries only. Detailed video, TOI, tracking, and local game workflows remain in the Windows app.'}</div><div class="game-center-grid">${cards || `<section class="card empty-view"><div class="empty-icon">▣</div><h2>No games available</h2><p>${canEditStats ? 'Add a game from the Schedule page, then enter stats here.' : 'No completed games are synced for the selected team and season.'}</p></section>`}</div>`);
+    <nav class="workspace-tabs" aria-label="Game sections">${[['overview', 'Overview'], ['players', 'Skaters'], ['goalies', 'Goalies']].map(([id, label]) => `<button type="button" data-game-tab="${id}" aria-pressed="${gameWorkspaceTab === id}" class="${gameWorkspaceTab === id ? 'active' : ''}">${label}</button>`).join('')}</nav>
+    <section class="card game-detail">${gameWorkspaceTab === 'players' ? cardTitle('Skaters', 'Position → jersey number') + playerTable('skater') : gameWorkspaceTab === 'goalies' ? cardTitle('Goalies', 'Game totals') + playerTable('goalie') : `${cardTitle('Game at a glance', hasScore ? 'Recorded totals' : 'Awaiting game data')}<div class="game-metrics">${metric('Shots for', stats?.shots_for)}${metric('Shots against', stats?.shots_against)}${metric('Power play', stats?.power_play_chances != null ? `${stats.power_play_success ?? '—'} / ${stats.power_play_chances}` : null)}${metric('Faceoffs won', stats?.faceoff_wins)}</div>${!hasScore || !playerRows.length ? '<p class="game-data-note">Finish this game: '+ (!hasScore ? 'add the final score. ' : '') + (!playerRows.length ? 'Enter player stats to complete the review.' : '') + '</p>' : ''}${scoreForm}<details class="workspace-disclosure"><summary>About this game data</summary><p class="sub">A dash means a value has not been recorded. Player stats and the final score save separately. Detailed shifts, shot locations, faceoff locations and game notes remain available in the Windows workspace.</p></details>`}</section>`);
 }
 
 function bindCoachStatsControls() {
   const host = document.querySelector('#coachStatsHost');
   if (!host) return;
   document.querySelectorAll('[data-enter-stats]').forEach(button => button.addEventListener('click', () => {
+    if (coachQol.saveState === coachQol.SAVE_STATES.SAVING) return;
+    if (coachQol.dirty && !window.confirm('Discard unsaved stat changes?')) return;
     const gameId = button.dataset.enterStats;
+    const game = (phase1Data?.games || []).find(g => g.source_game_id === gameId);
     const skaters = (phase1Data?.playerStats || []).filter(s => s.source_game_id === gameId && s.player_type === 'skater');
     const goalies = (phase1Data?.playerStats || []).filter(s => s.source_game_id === gameId && s.player_type === 'goalie');
     coachQol.openGame(gameId, skaters, goalies);
     host.hidden = false;
-    host.innerHTML = `<div class="card-title"><h2>Enter stats · ${escapeHtml(gameId)}</h2><button class="btn" type="button" data-close-stats>Close</button></div>${coachQol.statsWorkspaceHtml(phase1Data?.roster || [], skaters, goalies)}`;
+    host.innerHTML = `<div class="card-title"><h2>Enter stats · ${escapeHtml(game?.opponent || gameId)} · ${phase1Date(game?.date)}</h2><button class="btn" type="button" data-close-stats>Close</button></div>${coachQol.statsWorkspaceHtml(phase1Data?.roster || [], skaters, goalies)}`;
+    host.querySelector('[data-coach-goto]')?.addEventListener('click', () => render('players'));
     host.querySelector('[data-close-stats]').addEventListener('click', () => {
       if (coachQol.dirty && !window.confirm('You have unsaved changes. Leave without saving?')) return;
+      coachQol.openGame(null, [], []);
       host.hidden = true;
       host.innerHTML = '';
+      button.focus();
     });
     host.querySelectorAll('.stat-input').forEach(input => input.addEventListener('input', () => {
-      coachQol.setStat(input.dataset.statType, input.dataset.statPlayer, input.dataset.statField, input.value, input.getAttribute('aria-label'));
+      try {
+        coachQol.setStat(input.dataset.statType, input.dataset.statPlayer, input.dataset.statField, input.value, input.getAttribute('aria-label'));
+        input.setCustomValidity('');
+      } catch (error) { input.setCustomValidity(error.message); input.reportValidity(); }
       const flag = host.querySelector('[data-dirty-flag]');
       if (flag) flag.textContent = 'Unsaved changes';
+      host.querySelector('[data-save-stats]').textContent = 'SAVE GAME STATS';
     }));
     host.querySelectorAll('.stat-input').forEach(input => input.addEventListener('keydown', event => {
       if (event.key !== 'Enter') return;
@@ -429,7 +459,12 @@ function bindCoachStatsControls() {
       inputs[inputs.indexOf(input) + 1]?.focus();
     }));
     host.querySelector('[data-save-stats]')?.addEventListener('click', async event => {
+      const invalid = [...host.querySelectorAll('.stat-input')].find(input => !input.checkValidity());
+      if (invalid) { host.querySelector('[data-mode="bulk"]')?.click(); invalid.reportValidity(); return; }
       const saveButton = event.currentTarget;
+      const controls = [...host.querySelectorAll('button, input')];
+      const priorDisabled = controls.map(control => control.disabled);
+      controls.forEach(control => { control.disabled = true; });
       const status = host.querySelector('[data-stats-status]');
       saveButton.disabled = true;
       saveButton.textContent = 'Saving…';
@@ -437,16 +472,30 @@ function bindCoachStatsControls() {
       status.className = 'coach-form-status';
       try {
         await coachQol.saveStats();
+        controls.forEach((control, index) => { control.disabled = priorDisabled[index]; });
+        saveButton.disabled = false;
+        host.querySelector('[data-undo-stat]')?.setAttribute('disabled', '');
+        const flag = host.querySelector('[data-dirty-flag]');
+        if (flag) flag.textContent = 'All changes saved';
+        if (!host.isConnected) {
+          const confirmation = document.createElement('p');
+          confirmation.className = 'save-confirmation';
+          confirmation.setAttribute('role', 'status');
+          confirmation.textContent = 'Game stats saved.';
+          app.querySelector('.game-hub')?.after(confirmation);
+        }
         saveButton.textContent = '✓ Stats Saved';
         status.textContent = 'Stats saved.';
         status.classList.add('ok');
       } catch (error) {
+        controls.forEach((control, index) => { control.disabled = priorDisabled[index]; });
         saveButton.disabled = false;
         saveButton.textContent = 'Save failed — Retry';
         status.textContent = 'Stats could not be saved — your changes are still on screen. Retry.';
         status.classList.add('err');
       }
     });
+    window.PuckWorkspace.bindQuickEntry(host, phase1Data?.roster || [], coachQol);
     host.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }));
 }
@@ -646,6 +695,10 @@ function renderTenantBranding() {
 }
 
 async function selectTeam(teamId) {
+  if (coachQol.saveState === coachQol.SAVE_STATES.SAVING) { renderTeamSwitcher(); return; }
+  if (coachQol.dirty && !window.confirm('You have unsaved stats. Leave without saving?')) { renderTeamSwitcher(); return; }
+  coachQol.openGame(null, [], []);
+  selectedGameId = '';
   if (teamId === teamContext.selectedTeamId) return;
   teamContextManager.select(teamId);
   await loadSelectedTeam();
@@ -664,6 +717,10 @@ function renderSeasonSwitcher() {
 }
 
 async function selectSeason(seasonId) {
+  if (coachQol.saveState === coachQol.SAVE_STATES.SAVING) { renderSeasonSwitcher(); return; }
+  if (coachQol.dirty && !window.confirm('You have unsaved stats. Leave without saving?')) { renderSeasonSwitcher(); return; }
+  coachQol.openGame(null, [], []);
+  selectedGameId = '';
   if (seasonId === seasonContext.selectedSeasonId) return;
   seasonContextManager.select(seasonId);
   phase1Data = null;
@@ -750,8 +807,14 @@ function openActionCenter() {
   panel.querySelector('[data-close-action-center]').focus();
 }
 function render(view = 'command') {
+  if (coachQol.saveState === coachQol.SAVE_STATES.SAVING) return false;
+  if (coachQol.dirty && lastRenderedView === 'games') {
+    if (!window.confirm('You have unsaved stats. Leave without saving?')) return false;
+    coachQol.openGame(null, [], []);
+  }
   if (!can(roleViews[view], activeStaff)) view = 'command';
   const sameView = view === lastRenderedView;
+  const dashboardExpanded = document.querySelector('.dashboard-depth')?.open;
   const preservedScroll = sameView ? window.scrollY : 0;
   const page = view === 'scouting'
     ? scouting()
@@ -761,6 +824,7 @@ function render(view = 'command') {
         ? shell('Loading team data', 'Reading the live team roster, schedule, games, and stats…', '<section class="card empty-view"><div class="empty-icon">⌁</div><h2>Loading synced team data</h2><p>Please wait while the secure workspace reads your team data.</p></section>')
         : view === 'command' ? command() : view === 'schedule' ? schedule() : view === 'stats' ? stats() : view === 'players' ? players() : view === 'games' ? gameCenter() : view === 'film' ? (filmRoom.render(), '') : view === 'reports' ? reports() : view === 'development' ? development() : view === 'settings' ? settings() : view === 'admin' ? admin() : generic(view);
   app.innerHTML = page;
+  if (sameView && dashboardExpanded && document.querySelector('.dashboard-depth')) document.querySelector('.dashboard-depth').open = true;
   document.querySelector('#viewCrumb').textContent = viewNames[view]; renderRoleSwitcher();
   renderTeamSwitcher();
   renderSeasonSwitcher();
@@ -773,23 +837,66 @@ function render(view = 'command') {
   if (view === 'admin') bindAdminControls();
   if (view === 'schedule') bindCoachGameControls();
   if (view === 'players') bindCoachRosterControls();
-  if (view === 'games') bindCoachStatsControls();
-  if (view === 'games') document.querySelectorAll('[data-open-film-room]').forEach(button => button.addEventListener('click', () => { render('film'); filmRoom.openForGame(button.dataset.openFilmRoom); }));
+  if (view === 'games') {
+    bindCoachStatsControls();
+    document.querySelector('#gameSelect')?.addEventListener('change', event => {
+      const previous = selectedGameId;
+      selectedGameId = event.target.value;
+      if (render('games') === false) { selectedGameId = previous; event.target.value = previous; }
+    });
+    document.querySelectorAll('[data-game-tab]').forEach(button => button.addEventListener('click', () => {
+      const previous = gameWorkspaceTab;
+      gameWorkspaceTab = button.dataset.gameTab;
+      if (render('games') === false) gameWorkspaceTab = previous;
+      else document.querySelector(`[data-game-tab="${gameWorkspaceTab}"]`)?.focus({ preventScroll: true });
+    }));
+    document.querySelectorAll('[data-score-form]').forEach(form => form.addEventListener('submit', event => { event.preventDefault(); if (coachQol.saveState === coachQol.SAVE_STATES.SAVING) return; if (coachQol.dirty) { if (!window.confirm('Discard unsaved player stats before saving the score?')) return; coachQol.openGame(null, [], []); } coachQol.submitScoreForm(form); }));
+  }
+  document.querySelectorAll('[data-workspace-goto]').forEach(button => button.addEventListener('click', () => render(button.dataset.workspaceGoto)));
+  if (view === 'games') document.querySelectorAll('[data-open-film-room]').forEach(button => button.addEventListener('click', () => { if (render('film') !== false) filmRoom.openForGame(button.dataset.openFilmRoom); }));
   if (view === 'film') {
     filmRoom.render();
     filmRoom.load().then(() => filmRoom.render());
   }
   if (view === 'command') bindDashboardControls();
-  nav.forEach(item => { const allowed = can(roleViews[item.dataset.view], activeStaff); item.hidden = !allowed; item.classList.toggle('active', item.dataset.view === view); item.toggleAttribute('aria-current', item.dataset.view === view); });
+  nav.forEach(item => { const allowed = can(roleViews[item.dataset.view], activeStaff); item.hidden = !allowed; item.classList.toggle('active', item.dataset.view === view); if (item.dataset.view === view) item.setAttribute('aria-current', 'page'); else item.removeAttribute('aria-current'); });
+  document.querySelector('.nav-item.active')?.closest('details')?.setAttribute('open', '');
   document.querySelector('#sidebar').classList.remove('open'); document.querySelector('#scrim').classList.remove('show');
+  document.querySelector('#openSidebar').setAttribute('aria-expanded', 'false');
+  syncNavigation();
   lastRenderedView = view;
   // Only a real view change resets the page to the top.
   window.scrollTo(0, sameView ? preservedScroll : 0);
 }
+window.addEventListener('beforeunload', event => { if (coachQol.dirty) { event.preventDefault(); event.returnValue = ''; } });
 nav.forEach(item => item.addEventListener('click', () => render(item.dataset.view)));
-document.querySelector('#openSidebar').addEventListener('click', () => { document.querySelector('#sidebar').classList.add('open'); document.querySelector('#scrim').classList.add('show'); });
-document.querySelector('#closeSidebar').addEventListener('click', () => { document.querySelector('#sidebar').classList.remove('open'); document.querySelector('#scrim').classList.remove('show'); });
-document.querySelector('#scrim').addEventListener('click', () => document.querySelector('#closeSidebar').click());
+function setNavigation(open) {
+  const sidebar = document.querySelector('#sidebar');
+  const trigger = document.querySelector('#openSidebar');
+  sidebar.classList.toggle('open', open);
+  document.querySelector('#scrim').classList.toggle('show', open);
+  trigger.setAttribute('aria-expanded', String(open));
+  sidebar.inert = window.matchMedia('(max-width:900px)').matches && !open;
+  if (open) document.querySelector('#closeSidebar').focus();
+  else if (window.matchMedia('(max-width:900px)').matches) trigger.focus();
+}
+document.querySelector('#openSidebar').addEventListener('click', () => setNavigation(true));
+document.querySelector('#closeSidebar').addEventListener('click', () => setNavigation(false));
+document.querySelector('#scrim').addEventListener('click', () => setNavigation(false));
+const mobileNavigation = window.matchMedia('(max-width:900px)');
+function syncNavigation() { document.querySelector('#sidebar').inert = mobileNavigation.matches && !document.querySelector('#sidebar').classList.contains('open'); }
+mobileNavigation.addEventListener('change', syncNavigation);
+syncNavigation();
+document.querySelector('#sidebar').addEventListener('keydown', event => {
+  if (!mobileNavigation.matches) return;
+  if (event.key === 'Escape') { event.preventDefault(); setNavigation(false); }
+  if (event.key === 'Tab') {
+    const buttons = [...event.currentTarget.querySelectorAll('button, summary')].filter(node => !node.hidden && node.getClientRects().length);
+    const first = buttons[0], last = buttons[buttons.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  }
+});
 document.querySelector('#actionCenterButton').addEventListener('click', () => {
   if (document.querySelector('#actionCenter').hidden) openActionCenter();
   else closeActionCenter();
@@ -1013,6 +1120,9 @@ function initialsFor(name) {
 }
 
 function clearWorkspaceState() {
+  selectedGameId = '';
+  gameWorkspaceTab = 'overview';
+  coachQol.openGame(null, [], []);
   authUser = null;
   authTeam = null;
   activeStaff = null;
@@ -1182,6 +1292,10 @@ async function loadAuthenticatedWorkspace(sessionUser = null) {
 }
 
 async function signOut() {
+  if (coachQol.saveState === coachQol.SAVE_STATES.SAVING) return;
+  if (coachQol.dirty && !window.confirm('You have unsaved stats. Leave without saving?')) return;
+  coachQol.openGame(null, [], []);
+  selectedGameId = '';
   intentionalSignOut = true;
   const { error } = await supabaseClient.auth.signOut();
   if (error) {

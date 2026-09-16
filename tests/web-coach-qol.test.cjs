@@ -253,7 +253,7 @@ test('empty states tell the coach the next action', () => {
 });
 
 test('app wires coach controls behind capabilities and the module loads before app.js', () => {
-  assert.match(indexSource, /coach-qol\.js\?v=admin-coach-qol-1/);
+  assert.match(indexSource, /coach-qol\.js\?v=coach-redesign-1/);
   assert.ok(indexSource.indexOf('coach-qol.js') < indexSource.indexOf('app.js'));
   assert.match(appSource, /FoxesCoachQol\.createCoachQol/);
   assert.match(appSource, /bindCoachGameControls/);
@@ -390,9 +390,9 @@ test('a same-view rerender preserves scroll position and no dead hash links rema
 });
 
 test('changed web assets carry a fresh cache-busting version', () => {
-  assert.ok(indexSource.includes('coach-qol.js?v=admin-coach-qol-1'), 'coach-qol.js must be cache-busted');
+  assert.ok(indexSource.includes('coach-qol.js?v=coach-redesign-1'), 'coach-qol.js must be cache-busted');
   assert.ok(indexSource.includes('styles.css?v=admin-coach-qol-1'), 'styles.css must be cache-busted');
-  assert.ok(indexSource.includes('app.js?v=admin-coach-qol-1'), 'app.js must be cache-busted');
+  assert.ok(indexSource.includes('app.js?v=coach-redesign-1'), 'app.js must be cache-busted');
 });
 
 // --- 023 eager canonical game shells: Schedule -> Game Center linkage ---
@@ -615,7 +615,7 @@ test('the shell RPC is row-locked, idempotent, and authorizes server-side', () =
 test('player edit restoration is deterministic and not timer-based', () => {
   assert.doesNotMatch(appSource, /setTimeout\([^)]*restore/, 'restoration must not be scheduled on a timer');
   assert.match(appSource, /await coachQol\.submitPlayerEditForm\(event\.currentTarget\);\s*\n[^\n]*\n[^\n]*\n\s*if \(document\.body\.contains\(host\)\) restore\(\);/);
-  assert.match(appSource, /return loadPhase1Data\(authTeam\.team_id\);/, 'onChanged returns the reload promise');
+  assert.match(appSource, /await loadPhase1Data\(authTeam\.team_id\);/, 'async onChanged awaits the reload before restoring the view');
   assert.match(coachSource, /await onChanged\?\.\('roster'\)/, 'writes await the reload');
   assert.match(coachSource, /await onChanged\?\.\('schedule'\)/);
 });

@@ -6,11 +6,14 @@
     <meta name="theme-color" content="#07111e" />
     <title>PuckNexus | The Connected Hockey Platform</title>
     <link rel="stylesheet" href="./styles.css?v=admin-coach-qol-1" />
+    <link rel="stylesheet" href="./workspace.css?v=redesign-1" />
   </head>
   <body>
+    <a class="skip-link" href="#app">Skip to workspace</a>
     <div class="auth-screen" id="authScreen" hidden></div>
     <div class="app-shell" id="appShell" hidden>
       <aside class="sidebar" id="sidebar">
+        <div class="platform-wordmark">Puck<span>Nexus</span><small>COACH WORKSPACE</small></div>
         <div class="brand">
           <div class="brand-mark" id="tenantMark">PN</div>
           <div>
@@ -20,29 +23,32 @@
         </div>
         <button class="mobile-close" id="closeSidebar" aria-label="Close navigation">×</button>
         <nav class="nav" aria-label="Primary navigation">
-          <p class="nav-label">Workspace</p>
+          <p class="nav-label">Coach workspace</p>
           <button class="nav-item active" data-view="command" aria-current="page"><span>⌂</span> Command Center</button>
-          <button class="nav-item" data-view="schedule"><span>◷</span> Schedule</button>
-          <button class="nav-item" data-view="stats"><span>↗</span> Team Stats</button>
-          <button class="nav-item" data-view="players"><span>♙</span> Player Profiles</button>
           <button class="nav-item" data-view="games"><span>▣</span> Game Center</button>
+          <button class="nav-item" data-view="schedule"><span>◷</span> Schedule</button>
+          <button class="nav-item" data-view="players"><span>♙</span> Player Profiles</button>
           <button class="nav-item" data-view="film"><span>▶</span> Film Room</button>
-          <button class="nav-item" data-view="scouting"><span>⌁</span> Scouting</button>
-          <button class="nav-item" data-view="reports"><span>▤</span> Coach Reports</button>
-          <button class="nav-item" data-view="development"><span>↗</span> Player Development</button>
-          <p class="nav-label">Team setup</p>
-          <button class="nav-item" data-view="admin"><span>♙</span> Admin</button>
-          <button class="nav-item" data-view="settings"><span>⚙</span> Settings</button>
+          <details class="nav-group" open><summary>Insights &amp; development</summary>
+            <button class="nav-item" data-view="stats"><span>↗</span> Team Stats</button>
+            <button class="nav-item" data-view="scouting"><span>⌁</span> Scouting</button>
+            <button class="nav-item" data-view="reports"><span>▤</span> Coach Reports</button>
+            <button class="nav-item" data-view="development"><span>↗</span> Player Development</button>
+          </details>
+          <details class="nav-group"><summary>Team management</summary>
+            <button class="nav-item" data-view="admin"><span>♙</span> Admin</button>
+            <button class="nav-item" data-view="settings"><span>⚙</span> Settings</button>
+          </details>
         </nav>
         <div class="sidebar-foot">
           <div class="sample-badge"><span class="pulse"></span> Live team workspace</div>
-          <small id="teamStatus">Supabase session active</small>
+          <small id="teamStatus">Team connected</small>
         </div>
       </aside>
 
       <main class="main">
         <header class="topbar">
-          <button class="mobile-menu" id="openSidebar" aria-label="Open navigation">☰</button>
+          <button class="mobile-menu" id="openSidebar" aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation">☰</button>
           <div class="crumbs"><span>Team Hub</span><b>/</b><strong id="viewCrumb">Command Center</strong></div>
           <div class="top-actions">
             <div id="teamSwitcher" class="team-switcher" hidden></div>
@@ -53,9 +59,9 @@
           </div>
         </header>
 
-        <div id="app"></div>
+        <div id="app" tabindex="-1"></div>
 
-        <footer class="footer-note"><span id="tenantFooter">PuckNexus</span> · Secure team workspace <span>Supabase-authenticated workspace</span></footer>
+        <footer class="footer-note"><span id="tenantFooter">PuckNexus</span> · Secure team workspace <span>Built for the people behind the game</span></footer>
       </main>
     </div>
     <div class="scrim" id="scrim"></div>
@@ -69,11 +75,12 @@
     <script src="./platform-access.js?v=platform-identity-1"></script>
     <script src="./platform-admin.js?v=stage4-admin-1"></script>
     <script src="./onboarding.js?v=onboarding2-beta-1"></script>
-    <script src="./coach-qol.js?v=admin-coach-qol-1"></script>
+    <script src="./workspace.js?v=redesign-1"></script>
+    <script src="./coach-qol.js?v=coach-redesign-1"></script>
     <script src="./film-room.js?v=film-web-1"></script>
     <script src="./dashboard.js?v=stage7-dashboard-1"></script>
     <script src="./action-center.js?v=admin-coach-qol-1"></script>
     <script src="./destination-resolver.js?v=stage3-routing-1"></script>
-    <script src="./app.js?v=admin-coach-qol-1"></script>
+    <script src="./app.js?v=coach-redesign-1"></script>
   </body>
 </html>
