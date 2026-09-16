@@ -219,3 +219,15 @@ body{background:radial-gradient(circle at 72% -15%,#34363a 0,#0d0e10 39%)}
 .trend-compare{font-size:12px;color:var(--muted)}
 .dash-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
 @media(max-width:700px){.leader-tabs{overflow-x:auto;flex-wrap:nowrap;padding-bottom:4px}.leader-tab{white-space:nowrap}.goalie-row{grid-template-columns:auto 1fr}.goalie-row .leader-value{grid-column:1/-1}.sparkline{max-width:100%}}
+/* Admin is a full workspace, not a sign-in card. Keep sizing in core CSS. */
+.auth-screen:has(.admin-auth-card){display:block;padding:28px 32px;min-width:0}
+.auth-screen>.auth-card.admin-auth-card{width:100%;max-width:1440px!important;min-width:0;margin:0 auto;padding:28px;background:transparent;border:0;box-shadow:none;border-radius:0}
+.admin-auth-card .platform-admin-root{width:100%;max-width:none;min-width:0;grid-template-columns:minmax(0,1fr)}
+.admin-auth-card .platform-admin-root>*{min-width:0}
+.admin-auth-card .admin-head{flex-wrap:wrap;gap:16px}
+.admin-auth-card .admin-stat-grid{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+.admin-auth-card .admin-nav{display:flex;flex-wrap:wrap}
+.admin-auth-card .admin-table-wrap{max-width:100%;overflow-x:auto}
+.admin-auth-card>.auth-actions{display:flex;gap:12px;flex-wrap:wrap}
+@media(max-width:700px){.auth-screen:has(.admin-auth-card){padding:16px}.auth-screen>.auth-card.admin-auth-card{padding:0;max-width:100%!important}.admin-auth-card .admin-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-auth-card .admin-stat{padding:14px}.admin-auth-card .admin-nav-item{flex:1 1 30%;min-height:44px}.admin-auth-card .admin-table-wrap{overflow:visible}}
+@media(max-width:360px){.admin-auth-card .admin-stat-grid{grid-template-columns:minmax(0,1fr)}}
