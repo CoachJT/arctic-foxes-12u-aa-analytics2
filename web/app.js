@@ -4,9 +4,12 @@ const app = document.querySelector('#app');
 const nav = document.querySelectorAll('.nav-item');
 const authScreen = document.querySelector('#authScreen');
 const appShell = document.querySelector('#appShell');
+const SUPABASE_URL = 'https://yshbvrumzusmwlprfcnr.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_PFK2d1or62DYpk3VxarJwA_Anazyv7D';
+const SUPABASE_PROJECT_REF = new URL(SUPABASE_URL).hostname.split('.')[0];
 const supabaseClient = window.supabase.createClient(
-  'https://yshbvrumzusmwlprfcnr.supabase.co',
-  'sb_publishable_PFK2d1or62DYpk3VxarJwA_Anazyv7D'
+  SUPABASE_URL,
+  SUPABASE_PUBLISHABLE_KEY
 );
 const INVITE_FUNCTION = 'invite-staff';
 let activeStaff = null;
@@ -34,6 +37,23 @@ const platformAdminManager = window.FoxesPlatformAdmin.createPlatformAdmin({
   platformAccess,
   branding: PLATFORM
 });
+const filmRoom = window.FoxesFilmRoom.createFilmRoom({
+  client: supabaseClient,
+  supabaseUrl: SUPABASE_URL,
+  publishableKey: SUPABASE_PUBLISHABLE_KEY,
+  projectRef: SUPABASE_PROJECT_REF,
+  getContext: () => ({
+    teamId: authTeam?.team_id || '',
+    organizationId: authTeam?.teams?.organization_id || authTeam?.organization_id || '',
+    teamName: tenantName(),
+    seasonId: seasonContext.selectedSeasonId || '',
+    seasonName: tenantSeasonName(),
+    userId: authUser?.id || '',
+    capabilities: authCapabilities,
+    games: phase1Data?.games || []
+  }),
+  onChanged: () => loadPhase1Data(authTeam?.team_id)
+});
 let onboardingManager = null;
 applyDocumentBrand();
 const hashParams = new URLSearchParams(location.hash.replace(/^#/, ''));
@@ -59,8 +79,8 @@ const prototypeMode = prototypeHost
   && !authCallbackPresent
   && queryParams.get('prototype') === '1';
 
-const viewNames = { command: 'Command Center', schedule: 'Schedule', stats: 'Team Stats', players: 'Player Profiles', games: 'Game Center', scouting: 'Scouting', reports: 'Coach Reports', development: 'Player Development', admin: 'Admin', settings: 'Settings' };
-const roleViews = { command: PERMISSIONS.DASHBOARD_VIEW, schedule: PERMISSIONS.SCHEDULE_VIEW, stats: PERMISSIONS.STATS_VIEW, players: PERMISSIONS.PLAYERS_VIEW, games: PERMISSIONS.GAMES_VIEW, scouting: PERMISSIONS.SCOUTING_VIEW, reports: PERMISSIONS.REPORTS_VIEW, development: PERMISSIONS.PLAYERS_VIEW, admin: PERMISSIONS.ADMIN_USERS, settings: PERMISSIONS.DASHBOARD_VIEW };
+const viewNames = { command: 'Command Center', schedule: 'Schedule', stats: 'Team Stats', players: 'Player Profiles', games: 'Game Center', film: 'Film Room', scouting: 'Scouting', reports: 'Coach Reports', development: 'Player Development', admin: 'Admin', settings: 'Settings' };
+const roleViews = { command: PERMISSIONS.DASHBOARD_VIEW, schedule: PERMISSIONS.SCHEDULE_VIEW, stats: PERMISSIONS.STATS_VIEW, players: PERMISSIONS.PLAYERS_VIEW, games: PERMISSIONS.GAMES_VIEW, film: PERMISSIONS.FILM_VIEW, scouting: PERMISSIONS.SCOUTING_VIEW, reports: PERMISSIONS.REPORTS_VIEW, development: PERMISSIONS.PLAYERS_VIEW, admin: PERMISSIONS.ADMIN_USERS, settings: PERMISSIONS.DASHBOARD_VIEW };
 
 // The trailing text is a descriptive note, not a destination. It previously
 // rendered as an empty-hash anchor, whose default navigation jumped the page
@@ -375,7 +395,7 @@ function gameCenter() {
     const score = hasScore ? `${phase1Number(stats.goals_for)}–${phase1Number(stats.goals_against)}` : eligible ? 'Score unavailable' : 'Not yet played';
     const result = hasScore ? (stats.goals_for > stats.goals_against ? 'WIN' : stats.goals_for < stats.goals_against ? 'LOSS' : 'TIE') : eligible ? 'NOT SCORED' : 'SCHEDULED';
     const statsState = hasScore ? (playerStats.get(game.source_game_id) ? 'Stats complete' : 'Stats needed') : eligible ? 'Score needed' : 'Score pending';
-    return `<article class="card game-card"><div class="game-card-head"><div><span class="eyebrow">${escapeHtml(phase1Date(game.date))}</span><h2>${escapeHtml(game.opponent || 'Opponent unavailable')}</h2><p>${escapeHtml(game.period_length_min ? `${game.period_length_min}-minute periods` : 'Game details synced from Windows')}</p></div><span class="result ${result === 'WIN' ? 'win' : result === 'LOSS' ? 'loss' : ''}">${result}</span></div><div class="game-score">${escapeHtml(score)}</div><div class="game-card-meta"><span>${escapeHtml(statsState)}</span><span>Film unavailable</span><span>Reports Windows-only</span>${canEditStats && eligible ? `<button class="btn" type="button" data-enter-stats="${escapeHtml(game.source_game_id)}">${playerStats.get(game.source_game_id) ? 'Edit Stats' : 'Enter Stats'}</button>` : `<span class="tag">${canEditStats ? 'Not yet playable' : 'Read only'}</span>`}</div></article>`;
+    return `<article class="card game-card"><div class="game-card-head"><div><span class="eyebrow">${escapeHtml(phase1Date(game.date))}</span><h2>${escapeHtml(game.opponent || 'Opponent unavailable')}</h2><p>${escapeHtml(game.period_length_min ? `${game.period_length_min}-minute periods` : 'Game details synced from Windows')}</p></div><span class="result ${result === 'WIN' ? 'win' : result === 'LOSS' ? 'loss' : ''}">${result}</span></div><div class="game-score">${escapeHtml(score)}</div><div class="game-card-meta"><span>${escapeHtml(statsState)}</span>${can(PERMISSIONS.FILM_VIEW, activeStaff) ? `<button class="btn" type="button" data-open-film-room="${escapeHtml(game.id)}">Film Room</button>` : '<span class="tag">Film restricted</span>'}${canEditStats && eligible ? `<button class="btn" type="button" data-enter-stats="${escapeHtml(game.source_game_id)}">${playerStats.get(game.source_game_id) ? 'Edit Stats' : 'Enter Stats'}</button>` : `<span class="tag">${canEditStats ? 'Not yet playable' : 'Read only'}</span>`}</div></article>`;
   }).join('');
   return shell('Game Center', canEditStats ? 'Enter and correct game stats from one workspace.' : 'Read-only game summaries from the selected team and season.', `
     ${canEditStats ? '<section class="card" id="coachStatsHost" hidden></section>' : ''}
@@ -739,7 +759,7 @@ function render(view = 'command') {
       ? shell('Team data unavailable', 'The authenticated workspace is available, but the live team data could not be read.', `<section class="card empty-view"><div class="empty-icon">!</div><h2>Unable to load synced team data</h2><p>${escapeHtml(phase1DataError)}</p><button class="btn primary" id="retryPhase1Data" type="button">Retry</button></section>`)
       : !phase1Data
         ? shell('Loading team data', 'Reading the live team roster, schedule, games, and stats…', '<section class="card empty-view"><div class="empty-icon">⌁</div><h2>Loading synced team data</h2><p>Please wait while the secure workspace reads your team data.</p></section>')
-        : view === 'command' ? command() : view === 'schedule' ? schedule() : view === 'stats' ? stats() : view === 'players' ? players() : view === 'games' ? gameCenter() : view === 'reports' ? reports() : view === 'development' ? development() : view === 'settings' ? settings() : view === 'admin' ? admin() : generic(view);
+        : view === 'command' ? command() : view === 'schedule' ? schedule() : view === 'stats' ? stats() : view === 'players' ? players() : view === 'games' ? gameCenter() : view === 'film' ? (filmRoom.render(), '') : view === 'reports' ? reports() : view === 'development' ? development() : view === 'settings' ? settings() : view === 'admin' ? admin() : generic(view);
   app.innerHTML = page;
   document.querySelector('#viewCrumb').textContent = viewNames[view]; renderRoleSwitcher();
   renderTeamSwitcher();
@@ -754,6 +774,11 @@ function render(view = 'command') {
   if (view === 'schedule') bindCoachGameControls();
   if (view === 'players') bindCoachRosterControls();
   if (view === 'games') bindCoachStatsControls();
+  if (view === 'games') document.querySelectorAll('[data-open-film-room]').forEach(button => button.addEventListener('click', () => { render('film'); filmRoom.openForGame(button.dataset.openFilmRoom); }));
+  if (view === 'film') {
+    filmRoom.render();
+    filmRoom.load().then(() => filmRoom.render());
+  }
   if (view === 'command') bindDashboardControls();
   nav.forEach(item => { const allowed = can(roleViews[item.dataset.view], activeStaff); item.hidden = !allowed; item.classList.toggle('active', item.dataset.view === view); item.toggleAttribute('aria-current', item.dataset.view === view); });
   document.querySelector('#sidebar').classList.remove('open'); document.querySelector('#scrim').classList.remove('show');
@@ -931,7 +956,7 @@ async function loadPhase1Data(teamId) {
   // `id` is the row identity used by the Edit/Delete controls; without it every
   // schedule action resolves to an undefined ID and silently no-ops.
   read('schedule', 'team_schedule_games', 'id,source_schedule_id,date,time,opponent,home_away,game_type,location,notes,linked_game_source_id', PERMISSIONS.SCHEDULE_VIEW);
-  read('games', 'team_games', 'source_game_id,season_id,date,opponent,period_length_min', PERMISSIONS.GAMES_VIEW, undefined, true);
+  read('games', 'team_games', 'id,source_game_id,season_id,date,opponent,period_length_min', PERMISSIONS.GAMES_VIEW, undefined, true);
   read('playerStats', 'team_game_player_stats', 'source_game_id,season_id,source_player_id,player_type,gp,goals,assists,shots,penalty_minutes,plus_minus,blocks,faceoff_wins,faceoff_losses,faceoff_attempts,power_play_goals,power_play_assists,power_play_points,short_handed_goals,short_handed_assists,short_handed_points,game_winning_goals,game_tying_goals,takeaways,giveaways,chances,toi_minutes,minutes,saves,goals_against,wins,losses,ties,shutouts', PERMISSIONS.STATS_VIEW, undefined, true);
   read('teamStats', 'team_game_team_stats', 'source_game_id,season_id,goals_for,goals_against,shots_for,shots_against,power_play_chances,power_play_success,penalty_kill_chances,penalty_kill_success,faceoff_wins,faceoff_losses', PERMISSIONS.STATS_VIEW, undefined, true);
   const seasonKey = seasonContext.selectedSeason?.season_key || '';
