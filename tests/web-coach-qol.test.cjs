@@ -54,6 +54,28 @@ function loadCoach(clientOptions, contextValues = {}) {
   });
 }
 
+test('Absent clears a player game row and records zero GP without changing another player', async () => {
+  const context = { window: {} };
+  vm.runInNewContext(coachSource, context);
+  let payload;
+  const coach = context.window.FoxesCoachQol.createCoachQol({
+    client: { rpc: async (_name, args) => { payload = args; return { error: null }; } },
+    getContext: () => ({ teamId: 'team-1', seasonId: 'season-1', capabilities: ['stats.edit'] }),
+    onChanged: () => {}
+  });
+  coach.openGame('game-1', [{ source_player_id: 'absent', gp: 1, goals: 2, assists: 1 }, { source_player_id: 'present', gp: 1, goals: 3 }], []);
+  coach.setAbsent('skater', 'absent', true);
+  assert.throws(() => coach.setStat('skater', 'absent', 'goals', 1), /Mark this player present/);
+  await coach.saveStats();
+  const absent = payload.skater_stats.find(row => row.source_player_id === 'absent');
+  const present = payload.skater_stats.find(row => row.source_player_id === 'present');
+  assert.equal(absent.gp, 0);
+  assert.equal(absent.goals, 0);
+  assert.equal(absent.assists, 0);
+  assert.equal(present.gp, 1);
+  assert.equal(present.goals, 3);
+});
+
 test('add game creates exactly one record and rejects a second concurrent submit', async () => {
   const inserted = [];
   const coach = loadCoach({ onInsert: row => inserted.push(row) });
@@ -253,7 +275,7 @@ test('empty states tell the coach the next action', () => {
 });
 
 test('app wires coach controls behind capabilities and the module loads before app.js', () => {
-  assert.match(indexSource, /coach-qol\.js\?v=admin-coach-qol-1/);
+  assert.match(indexSource, /coach-qol\.js\?v=web-only-beta-1/);
   assert.ok(indexSource.indexOf('coach-qol.js') < indexSource.indexOf('app.js'));
   assert.match(appSource, /FoxesCoachQol\.createCoachQol/);
   assert.match(appSource, /bindCoachGameControls/);
@@ -390,9 +412,9 @@ test('a same-view rerender preserves scroll position and no dead hash links rema
 });
 
 test('changed web assets carry a fresh cache-busting version', () => {
-  assert.ok(indexSource.includes('coach-qol.js?v=admin-coach-qol-1'), 'coach-qol.js must be cache-busted');
-  assert.ok(indexSource.includes('styles.css?v=admin-coach-qol-1'), 'styles.css must be cache-busted');
-  assert.ok(indexSource.includes('app.js?v=admin-coach-qol-1'), 'app.js must be cache-busted');
+  assert.ok(indexSource.includes('coach-qol.js?v=web-only-beta-1'), 'coach-qol.js must be cache-busted');
+  assert.ok(indexSource.includes('workspace.css?v=web-only-beta-1'), 'workspace.css must be cache-busted');
+  assert.ok(indexSource.includes('app.js?v=web-only-beta-1'), 'app.js must be cache-busted');
 });
 
 // --- 023 eager canonical game shells: Schedule -> Game Center linkage ---
@@ -615,7 +637,7 @@ test('the shell RPC is row-locked, idempotent, and authorizes server-side', () =
 test('player edit restoration is deterministic and not timer-based', () => {
   assert.doesNotMatch(appSource, /setTimeout\([^)]*restore/, 'restoration must not be scheduled on a timer');
   assert.match(appSource, /await coachQol\.submitPlayerEditForm\(event\.currentTarget\);\s*\n[^\n]*\n[^\n]*\n\s*if \(document\.body\.contains\(host\)\) restore\(\);/);
-  assert.match(appSource, /return loadPhase1Data\(authTeam\.team_id\);/, 'onChanged returns the reload promise');
+  assert.match(appSource, /await loadPhase1Data\(authTeam\.team_id\);\s*render\(view\);/, 'onChanged completes the reload before repainting the roster');
   assert.match(coachSource, /await onChanged\?\.\('roster'\)/, 'writes await the reload');
   assert.match(coachSource, /await onChanged\?\.\('schedule'\)/);
 });

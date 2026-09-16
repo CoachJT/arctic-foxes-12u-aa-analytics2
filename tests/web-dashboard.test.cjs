@@ -223,8 +223,9 @@ test('dashboard help bubbles and mobile layouts follow the Stage 6 system', () =
 
 test('Command Center exposes real roster count and capability-gated action-needed state', () => {
   assert.match(appSource, /\['Roster', String\(roster\.length\)/);
-  assert.match(appSource, /ACTION NEEDED/);
+  assert.match(appSource, /actions\.length \? `<section class="card action-needed">\$\{cardTitle\('Needs your attention'/);
   assert.match(appSource, /ActionCenter\.actionableItems/);
+  assert.match(appSource, /actions\.map\(item => `<button class="action-needed-row"[^`]*data-dashboard-action="\$\{escapeHtml\(item\.view\)\}"/);
   assert.match(indexSource, /action-center\.js\?v=admin-coach-qol-1/);
   assert.doesNotMatch(indexSource, /<em>3<\/em>/);
 });

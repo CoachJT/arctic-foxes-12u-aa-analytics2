@@ -35,7 +35,20 @@ const platformAccess = platformAccessManager.context;
 const platformAdminManager = window.FoxesPlatformAdmin.createPlatformAdmin({
   client: supabaseClient,
   platformAccess,
-  branding: PLATFORM
+  branding: PLATFORM,
+  canOpenTeamHub: teamId => teamContext.memberships.some(membership => membership.team_id === teamId && membership.status === 'active'),
+  onOpenTeamHub: teamId => {
+    if (!platformAccess.isPlatformAdmin || !teamContext.memberships.some(membership => membership.team_id === teamId && membership.status === 'active')) return;
+    try { teamContextManager.select(teamId); } catch { return; }
+    platformAdminManager.unmount();
+    const user = authUser;
+    const name = activeStaff?.name || user?.email || 'Team member';
+    activeStaff = null;
+    enterTeamWorkspace(user, name).catch(error => {
+      console.error('Could not open the authorized team hub:', error);
+      showPlatformLanding(name, teamContext.memberships.length > 0);
+    });
+  }
 });
 const filmRoom = window.FoxesFilmRoom.createFilmRoom({
   client: supabaseClient,
@@ -387,7 +400,7 @@ let selectedGameId = '';
 let gameWorkspaceTab = 'overview';
 function gameCenter() {
   const teamStats = new Map((phase1Data?.teamStats || []).map(row => [row.source_game_id, row]));
-  const games = (phase1Data?.games || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const games = window.PuckGameVisibility.activeGames(phase1Data?.schedule, phase1Data?.games).sort((a, b) => String(b.date).localeCompare(String(a.date)));
   const canEditStats = can(PERMISSIONS.STATS_EDIT, activeStaff);
   const today = new Date().toLocaleDateString('en-CA');
   const isPlayed = game => teamStats.has(game.source_game_id);
@@ -400,17 +413,20 @@ function gameCenter() {
   const eligible = String(game.date) <= today;
   const result = hasScore ? stats.goals_for > stats.goals_against ? 'WIN' : stats.goals_for < stats.goals_against ? 'LOSS' : 'TIE' : eligible ? 'NOT SCORED' : 'SCHEDULED';
   const playerRows = (phase1Data?.playerStats || []).filter(row => row.source_game_id === game.source_game_id);
+  const scheduleRow = (phase1Data?.schedule || []).find(row => row.linked_game_source_id === game.source_game_id);
+  const canRemoveDuplicate = Boolean(scheduleRow && can(PERMISSIONS.SCHEDULE_EDIT, activeStaff) && can(PERMISSIONS.STATS_VIEW, activeStaff) && can(PERMISSIONS.FILM_VIEW, activeStaff));
   const roster = window.PuckWorkspace.sortRoster(phase1Data?.roster || []);
   const rowsByPlayer = new Map(playerRows.map(row => [row.source_player_id, row]));
   const metric = (label, value) => `<div class="game-metric"><small>${label}</small><strong>${value == null ? '—' : escapeHtml(value)}</strong></div>`;
   const playerTable = type => {
     const players = roster.filter(p => (window.PuckWorkspace.position(p) === 'G') === (type === 'goalie'));
-    return `<div class="table-wrap"><table class="data-table"><thead><tr><th>Player</th>${(type === 'goalie' ? ['Saves', 'GA', 'SA', 'SV%'] : ['Position', 'G', 'A', 'S', 'PTS']).map(label => `<th>${label}</th>`).join('')}</tr></thead><tbody>${players.map(p => {
+    const headers = type === 'goalie' ? ['Saves', 'GA', 'SA', 'SV%'] : ['Position', 'G', 'A', 'S', 'PTS', '+/−'];
+    return `<div class="table-wrap"><table class="data-table game-player-table"><thead><tr>${['Player', ...headers].map((label, index) => `<th><button type="button" class="table-sort" data-game-sort="${index}" aria-label="Sort by ${escapeHtml(label)}">${escapeHtml(label)} <span aria-hidden="true">↕</span></button></th>`).join('')}</tr></thead><tbody>${players.map(p => {
       const row = rowsByPlayer.get(p.source_player_id);
       const derived = coachQol.derivedGoalie(row);
-      const values = type === 'goalie' ? [row?.saves, row?.goals_against, row ? derived.shotsAgainst : null, row && derived.savePct !== null ? (derived.savePct * 100).toFixed(1) + '%' : null] : [p.position, row?.goals, row?.assists, row?.shots, row ? phase1Number(row.goals) + phase1Number(row.assists) : null];
-      return `<tr><td><span class="jersey">#${escapeHtml(p.jersey_number)}</span> ${escapeHtml(p.name)}</td>${values.map(v => `<td>${v == null ? '—' : escapeHtml(v)}</td>`).join('')}</tr>`;
-    }).join('') || '<tr><td colspan="6">No players in this group.</td></tr>'}</tbody></table></div>`;
+      const values = type === 'goalie' ? [row?.saves, row?.goals_against, row ? derived.shotsAgainst : null, row && derived.savePct !== null ? (derived.savePct * 100).toFixed(1) + '%' : null] : [p.position, row?.goals, row?.assists, row?.shots, row ? phase1Number(row.goals) + phase1Number(row.assists) : null, row?.plus_minus];
+      return `<tr><td data-sort-value="${escapeHtml(p.name)}"><span class="jersey">#${escapeHtml(p.jersey_number)}</span> ${escapeHtml(p.name)}</td>${values.map(v => `<td data-sort-value="${v == null ? '' : escapeHtml(v)}">${v == null ? '—' : escapeHtml(v)}</td>`).join('')}</tr>`;
+    }).join('') || `<tr><td colspan="${headers.length + 1}">No players in this group.</td></tr>`}</tbody></table></div>`;
   };
   const gameLeaders = roster.filter(p => window.PuckWorkspace.position(p) !== 'G' && rowsByPlayer.has(p.source_player_id)).map(p => ({player:p, row:rowsByPlayer.get(p.source_player_id)})).sort((a,b) => (phase1Number(b.row.goals)+phase1Number(b.row.assists)) - (phase1Number(a.row.goals)+phase1Number(a.row.assists))).slice(0,3);
   const comparison = (label, ours, theirs) => {
@@ -421,7 +437,7 @@ function gameCenter() {
   const reviewPanels = `<div class="game-review-grid"><section class="card game-leaders">${cardTitle('Points leaders', 'This game')}<div class="performer-list">${gameLeaders.map(({player:p,row},index) => `<div class="performer"><span class="performer-number">${escapeHtml(p.jersey_number)}</span><div><small>${escapeHtml(p.position)} <b>·</b> ${index === 0 ? 'POINTS LEADER' : 'GAME CONTRIBUTOR'}</small><strong>${escapeHtml(p.name)}</strong><span>${phase1Number(row.goals)} G <b>·</b> ${phase1Number(row.assists)} A <b>·</b> ${phase1Number(row.shots)} SOG</span></div><div class="performer-points"><strong>${phase1Number(row.goals)+phase1Number(row.assists)}</strong><small>PTS</small></div></div>`).join('') || '<p class="sub">Player leaders appear once game stats are recorded.</p>'}</div></section><section class="card game-comparison">${cardTitle('Head to head', 'Recorded totals')}<div class="comparison-key"><span>Our team</span><span>Opponent</span></div>${comparison('Shots on goal',stats?.shots_for,stats?.shots_against)}${comparison('Goals',stats?.goals_for,stats?.goals_against)}<p class="comparison-note">${stats?.faceoff_wins != null && stats?.faceoff_losses != null && phase1Number(stats.faceoff_wins)+phase1Number(stats.faceoff_losses)>0 ? `${Math.round(phase1Number(stats.faceoff_wins)/(phase1Number(stats.faceoff_wins)+phase1Number(stats.faceoff_losses))*100)}% faceoffs won · ${escapeHtml(stats.faceoff_wins)} wins / ${escapeHtml(stats.faceoff_losses)} losses` : 'Faceoff breakdown awaits recorded data.'}</p></section></div>`;
   const scoreForm = canEditStats && eligible ? `<details class="workspace-disclosure"><summary>${hasScore ? 'Correct final score' : 'Enter final score'}</summary><form class="score-entry" data-score-form><input type="hidden" name="gameId" value="${escapeHtml(game.source_game_id)}"><label>Us<input name="goalsFor" type="number" min="0" step="1" required value="${hasScore ? escapeHtml(stats.goals_for) : ''}"></label><span>–</span><label>Them<input name="goalsAgainst" type="number" min="0" step="1" required value="${hasScore ? escapeHtml(stats.goals_against) : ''}"></label><button class="btn primary" data-score-save>Save Score</button><span class="coach-form-status" data-score-status role="status" aria-live="polite"></span></form></details>` : '';
   return shell('Game Center', `${playedCount} of ${games.length} games played`, `
-    <div class="game-toolbar"><label>Choose game<select id="gameSelect">${games.map(g => `<option value="${escapeHtml(g.source_game_id)}"${g === game ? ' selected' : ''}>${escapeHtml(phase1Date(g.date))} · ${escapeHtml(g.opponent)}</option>`).join('')}</select></label><button class="btn" data-workspace-goto="schedule">Full schedule ↗</button></div>
+    <div class="game-toolbar"><label>Choose game<select id="gameSelect">${games.map(g => `<option value="${escapeHtml(g.source_game_id)}"${g === game ? ' selected' : ''}>${escapeHtml(phase1Date(g.date))} · ${escapeHtml(g.opponent)}</option>`).join('')}</select></label><button class="btn" data-workspace-goto="schedule">Full schedule ↗</button>${canRemoveDuplicate ? `<button class="btn danger" type="button" data-remove-duplicate="${escapeHtml(scheduleRow.id)}">Remove duplicate</button>` : ''}</div>
     <article class="card game-hub arena-panel"><div class="match-meta"><span class="eyebrow">THE GAME ROOM <b>/</b> ${escapeHtml(tenantSeasonName())}</span><span>${escapeHtml(phase1Date(game.date))} · ${escapeHtml(game.period_length_min ? game.period_length_min + '-minute periods' : 'Game review')}</span></div><div class="matchup"><div class="match-team">${window.PuckWorkspace.crest(tenantName(), seasonContext.branding?.logo_url)}<div><small>YOUR TEAM</small><h2>${escapeHtml(tenantName())}</h2></div></div><div class="game-hub-score"><span class="result ${result === 'WIN' ? 'win' : result === 'LOSS' ? 'loss' : ''}">${result}</span><strong>${hasScore ? `${escapeHtml(stats.goals_for)}<span>–</span>${escapeHtml(stats.goals_against)}` : '— : —'}</strong><small>${hasScore ? 'Final score' : eligible ? 'Score unavailable' : 'Not yet played'}</small></div><div class="match-team opponent-team">${window.PuckWorkspace.crest(game.opponent)}<div><small>OPPONENT</small><h2>${escapeHtml(game.opponent)}</h2></div></div></div>
     <div class="game-hub-actions">${canEditStats && eligible ? `<button class="btn primary" data-enter-stats="${escapeHtml(game.source_game_id)}">${playerRows.length ? 'Edit Stats' : 'Enter Stats'}</button>` : `<span class="tag">${eligible ? 'Read only' : 'Stat entry opens on game day'}</span>`}${can(PERMISSIONS.FILM_VIEW, activeStaff) ? `<button class="btn" data-open-film-room="${escapeHtml(game.id)}">Film Room</button>` : ''}<span class="sub">${playerRows.length ? `${playerRows.length} player stat records` : 'Player stats not entered'}</span></div></article>
     ${canEditStats ? '<section class="card" id="coachStatsHost" hidden></section>' : ''}
@@ -443,6 +459,21 @@ function bindCoachStatsControls() {
     host.hidden = false;
     host.innerHTML = `<div class="card-title"><h2>Enter stats · ${escapeHtml(game?.opponent || gameId)} · ${phase1Date(game?.date)}</h2><button class="btn" type="button" data-close-stats>Close</button></div>${coachQol.statsWorkspaceHtml(phase1Data?.roster || [], skaters, goalies)}`;
     host.querySelector('[data-coach-goto]')?.addEventListener('click', () => render('players'));
+    host.querySelectorAll('[data-player-absent]').forEach(absentButton => absentButton.addEventListener('click', () => {
+      const absent = absentButton.getAttribute('aria-pressed') !== 'true';
+      try {
+        const row = coachQol.setAbsent(absentButton.dataset.playerType, absentButton.dataset.playerAbsent, absent);
+        absentButton.setAttribute('aria-pressed', String(absent));
+        absentButton.textContent = absent ? 'Absent ✓' : 'Absent';
+        [...host.querySelectorAll('.stat-input')].filter(input => input.dataset.statPlayer === absentButton.dataset.playerAbsent).forEach(input => {
+          if (absent) input.value = '0';
+          input.disabled = absent;
+        });
+        host.querySelector('[data-dirty-flag]').textContent = 'Unsaved changes';
+        host.querySelector('[data-save-stats]').textContent = 'SAVE GAME STATS';
+        host.dispatchEvent(new Event('input', { bubbles: true }));
+      } catch (error) { window.alert(error.message); }
+    }));
     host.querySelector('[data-close-stats]').addEventListener('click', () => {
       if (coachQol.dirty && !window.confirm('You have unsaved changes. Leave without saving?')) return;
       coachQol.openGame(null, [], []);
@@ -863,6 +894,47 @@ function render(view = 'command') {
   if (view === 'players') bindCoachRosterControls();
   if (view === 'games') {
     bindCoachStatsControls();
+    document.querySelector('[data-remove-duplicate]')?.addEventListener('click', async event => {
+      const button = event.currentTarget;
+      const game = (phase1Data?.games || []).find(row => row.source_game_id === selectedGameId);
+      if (!game || !can(PERMISSIONS.SCHEDULE_EDIT, activeStaff) || !can(PERMISSIONS.STATS_VIEW, activeStaff) || !can(PERMISSIONS.FILM_VIEW, activeStaff)) return;
+      button.disabled = true;
+      try {
+        const [scheduleCheck, playerCheck, teamCheck, filmCheck] = await Promise.all([
+          supabaseClient.from('team_schedule_games').select('id,linked_game_source_id').eq('id', button.dataset.removeDuplicate).eq('team_id', authTeam.team_id).maybeSingle(),
+          supabaseClient.from('team_game_player_stats').select('id').eq('team_id', authTeam.team_id).eq('source_game_id', game.source_game_id).limit(1),
+          supabaseClient.from('team_game_team_stats').select('id').eq('team_id', authTeam.team_id).eq('source_game_id', game.source_game_id).limit(1),
+          supabaseClient.from('team_film').select('id').eq('team_id', authTeam.team_id).eq('game_id', game.id).limit(1)
+        ]);
+        if ([scheduleCheck, playerCheck, teamCheck, filmCheck].some(result => result.error)) throw new Error('Dependent game data could not be verified. Nothing was removed.');
+        if (scheduleCheck.data?.linked_game_source_id !== game.source_game_id) throw new Error('The schedule link changed. Refresh and try again.');
+        if (playerCheck.data?.length || teamCheck.data?.length || filmCheck.data?.length) throw new Error('This game has stats or film. Review its records before removing the schedule link.');
+        if (!window.confirm(`Remove ${game.date} vs ${game.opponent} from Schedule and Game Center? This keeps the underlying game record for safety.`)) return;
+        await coachQol.deleteGame(scheduleCheck.data.id);
+        selectedGameId = '';
+      } catch (error) { window.alert(error.message || 'The duplicate could not be removed.'); }
+      finally { button.disabled = false; }
+    });
+    document.querySelectorAll('.game-player-table').forEach(table => table.querySelectorAll('[data-game-sort]').forEach(button => button.addEventListener('click', () => {
+      const column = Number(button.dataset.gameSort);
+      const heading = button.closest('th');
+      const numeric = column > 1 || (table.querySelectorAll('[data-game-sort]').length === 5 && column > 0);
+      const ascending = heading.getAttribute('aria-sort') === 'descending' || (!heading.hasAttribute('aria-sort') && !numeric);
+      const tbody = table.tBodies[0];
+      const rows = [...tbody.rows].filter(row => row.cells.length > 1);
+      rows.sort((left, right) => {
+        const a = left.cells[column]?.dataset.sortValue || '';
+        const b = right.cells[column]?.dataset.sortValue || '';
+        if (a === '') return 1;
+        if (b === '') return -1;
+        const order = numeric ? Number(a.replace('%', '')) - Number(b.replace('%', '')) : a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+        return (ascending ? 1 : -1) * order;
+      });
+      rows.forEach(row => tbody.appendChild(row));
+      table.querySelectorAll('th').forEach(th => th.removeAttribute('aria-sort'));
+      heading.setAttribute('aria-sort', ascending ? 'ascending' : 'descending');
+      button.querySelector('span').textContent = ascending ? '↑' : '↓';
+    })));
     document.querySelector('#gameSelect')?.addEventListener('change', event => {
       const previous = selectedGameId;
       selectedGameId = event.target.value;
