@@ -10,7 +10,7 @@
     return flags;
   }
 
-  function createPlatformAdmin({ client, platformAccess, branding = {}, onSignOut }) {
+  function createPlatformAdmin({ client, platformAccess, branding = {}, onSignOut, onOpenTeamHub, canOpenTeamHub }) {
     let root = null;
     let view = 'overview';
     let loading = false;
@@ -213,9 +213,10 @@
           <div class="admin-stat"><small>Teams</small><strong>${teams.length}</strong></div>
           <div class="admin-stat"><small>Members on teams</small><strong>${teams.reduce((sum, team) => sum + Number(team.member_count || 0), 0)}</strong></div>
         </div>
+        <section class="admin-card"><div class="admin-card-title"><h2>View organization</h2></div><p>Open a team below in read-only support mode. A normal team hub opens only when this account has its own active team membership.</p></section>
         <section class="admin-card"><div class="admin-card-title"><h2>Teams in this organization</h2></div>
         ${table(['Team', 'Season', 'Beta', 'Members', 'Pending invites'], teams.map(team => `
-          <tr><td><button class="admin-link" data-open-team="${esc(team.id)}" type="button">${esc(team.name)}</button><small class="admin-sub">${esc(team.slug)}</small></td>
+          <tr><td><button class="admin-link" data-open-team="${esc(team.id)}" type="button">${esc(team.name)}</button><small class="admin-sub">${esc(team.slug)}</small><button class="btn" data-open-support="${esc(team.id)}" type="button">View organization ↗</button></td>
           <td>${esc(team.default_season_key || '—')}</td><td>${betaBadge(team.beta_status) || '<span class="admin-dim">—</span>'}</td>
           <td>${team.member_count}</td><td>${team.pending_invite_count > 0 ? badge('pending', `${team.pending_invite_count} pending`) : '0'}</td></tr>`), 'This organization has no teams yet.')}</section>
         <section class="admin-card"><div class="admin-card-title"><h2>Beta access</h2><span class="admin-security">Server-authorized</span></div>
@@ -243,7 +244,7 @@
       const invitations = data.invitations || [];
       const onboarding = data.onboarding || [];
       return `${head(team.name, `${team.organization_name || 'No organization'} · season ${team.default_season_key || '—'}`)}
-        <div class="admin-support-banner"><div><strong>Team support</strong><p>Inspect roster, game completeness and reported issues without editing this team's data.</p></div><button class="btn primary" data-open-support="${esc(team.id)}" type="button">Open support view ↗</button></div>
+        <div class="admin-support-banner"><div><strong>View organization</strong><p>Inspect this team as Platform Admin in read-only support mode. Your team role is unchanged.</p></div><button class="btn primary" data-open-support="${esc(team.id)}" type="button">View organization ↗</button>${canOpenTeamHub?.(team.id) ? `<button class="btn" data-open-team-hub="${esc(team.id)}" type="button">Open organization hub as myself ↗</button>` : ''}</div>
         ${setupChecks(team, memberships, invitations, onboarding)}
         <div class="admin-stat-grid">
           <div class="admin-stat"><small>Beta</small><strong>${esc(BETA_LABELS[team.beta_status] || team.beta_status)}</strong></div>
@@ -453,6 +454,7 @@
       root.querySelectorAll('[data-open-organization]').forEach(button => button.addEventListener('click', () => setView('organization', { id: button.dataset.openOrganization })));
       root.querySelectorAll('[data-open-team]').forEach(button => button.addEventListener('click', () => setView('team', { id: button.dataset.openTeam })));
       root.querySelectorAll('[data-open-support]').forEach(button => button.addEventListener('click', () => setView('support', { id: button.dataset.openSupport })));
+      root.querySelectorAll('[data-open-team-hub]').forEach(button => button.addEventListener('click', () => onOpenTeamHub?.(button.dataset.openTeamHub)));
       root.querySelector('.admin-support-season')?.addEventListener('change', event => setView('support', { id: detail.id, seasonId: event.target.value }));
       root.querySelectorAll('[data-open-user]').forEach(button => button.addEventListener('click', () => setView('user', { id: button.dataset.openUser })));
       root.querySelectorAll('[data-resend-invite]').forEach(button => button.addEventListener('click', () => resendInvitation(button)));
