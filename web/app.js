@@ -389,7 +389,7 @@ function gameCenter() {
     const score = hasScore ? `${phase1Number(stats.goals_for)}–${phase1Number(stats.goals_against)}` : eligible ? 'Score unavailable' : 'Not yet played';
     const result = hasScore ? (stats.goals_for > stats.goals_against ? 'WIN' : stats.goals_for < stats.goals_against ? 'LOSS' : 'TIE') : eligible ? 'NOT SCORED' : 'SCHEDULED';
     const statsState = hasScore ? (playerStats.get(game.source_game_id) ? 'Stats complete' : 'Stats needed') : eligible ? 'Score needed' : 'Score pending';
-    return `<article class="card game-card"><div class="game-card-head"><div><span class="eyebrow">${escapeHtml(phase1Date(game.date))}</span><h2>${escapeHtml(game.opponent || 'Opponent unavailable')}</h2><p>${escapeHtml(game.period_length_min ? `${game.period_length_min}-minute periods` : 'Game details synced from Windows')}</p></div><span class="result ${result === 'WIN' ? 'win' : result === 'LOSS' ? 'loss' : ''}">${result}</span></div><div class="game-score">${escapeHtml(score)}</div><div class="game-card-meta"><span>${escapeHtml(statsState)}</span>${can(PERMISSIONS.FILM_VIEW, activeStaff) ? `<button class="btn" type="button" data-open-film-room>Film Room</button>` : '<span class="tag">Film restricted</span>'}${canEditStats && eligible ? `<button class="btn" type="button" data-enter-stats="${escapeHtml(game.source_game_id)}">${playerStats.get(game.source_game_id) ? 'Edit Stats' : 'Enter Stats'}</button>` : `<span class="tag">${canEditStats ? 'Not yet playable' : 'Read only'}</span>`}</div></article>`;
+    return `<article class="card game-card"><div class="game-card-head"><div><span class="eyebrow">${escapeHtml(phase1Date(game.date))}</span><h2>${escapeHtml(game.opponent || 'Opponent unavailable')}</h2><p>${escapeHtml(game.period_length_min ? `${game.period_length_min}-minute periods` : 'Game details synced from Windows')}</p></div><span class="result ${result === 'WIN' ? 'win' : result === 'LOSS' ? 'loss' : ''}">${result}</span></div><div class="game-score">${escapeHtml(score)}</div><div class="game-card-meta"><span>${escapeHtml(statsState)}</span>${can(PERMISSIONS.FILM_VIEW, activeStaff) ? `<button class="btn" type="button" data-open-film-room="${escapeHtml(game.id)}">Film Room</button>` : '<span class="tag">Film restricted</span>'}${canEditStats && eligible ? `<button class="btn" type="button" data-enter-stats="${escapeHtml(game.source_game_id)}">${playerStats.get(game.source_game_id) ? 'Edit Stats' : 'Enter Stats'}</button>` : `<span class="tag">${canEditStats ? 'Not yet playable' : 'Read only'}</span>`}</div></article>`;
   }).join('');
   return shell('Game Center', canEditStats ? 'Enter and correct game stats from one workspace.' : 'Read-only game summaries from the selected team and season.', `
     ${canEditStats ? '<section class="card" id="coachStatsHost" hidden></section>' : ''}
@@ -768,7 +768,7 @@ function render(view = 'command') {
   if (view === 'schedule') bindCoachGameControls();
   if (view === 'players') bindCoachRosterControls();
   if (view === 'games') bindCoachStatsControls();
-  if (view === 'games') document.querySelectorAll('[data-open-film-room]').forEach(button => button.addEventListener('click', () => render('film')));
+  if (view === 'games') document.querySelectorAll('[data-open-film-room]').forEach(button => button.addEventListener('click', () => { render('film'); filmRoom.openForGame(button.dataset.openFilmRoom); }));
   if (view === 'film') {
     filmRoom.render();
     filmRoom.load().then(() => filmRoom.render());
