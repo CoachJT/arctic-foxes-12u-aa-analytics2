@@ -222,7 +222,7 @@
           <select id="obStaffRole" aria-label="Staff role">${Object.entries(STAFF_ROLES).map(([id, role]) => `<option value="${id}">${esc(role.label)}</option>`).join('')}</select>
           <button class="btn" type="submit" ${busy ? 'disabled' : ''}>Send invite</button>
         </form>
-        <p class="onboarding-role-note" id="obRoleNote"><strong>Assistant Coach:</strong> Roster, schedule, games, and reports. Permission is assigned securely when the invite is accepted.</p>
+        <p class="onboarding-role-note" id="obRoleNote"><strong>${esc(STAFF_ROLES.head_coach.label)}:</strong> ${esc(STAFF_ROLES.head_coach.permissions)}. Permission is assigned securely when the invite is accepted.</p>
         <div class="onboarding-table-wrap"><table class="admin-table"><thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th></tr></thead><tbody>${rows || '<tr><td colspan="4">No staff invited yet.</td></tr>'}</tbody></table></div>
         <div class="onboarding-actions"><button class="btn" data-mark-step="staff" type="button" ${busy ? 'disabled' : ''}>${invites.length ? 'Continue' : 'Skip for now'}</button></div></section>`;
     }
@@ -282,9 +282,9 @@
       return `<section class="onboarding-card"><h2>Enter your first result</h2>
         <p>Save the final score now. Detailed player and goalie stats remain available in Game Center after setup.</p>
         <form id="obFirstStats" class="onboarding-score-form">
-          <div><span>Us</span><input id="obGoalsFor" type="number" min="0" step="1" inputmode="numeric" required value="${scored ? esc(firstGameStats.goals_for) : ''}" /></div>
+          <div><span id="obGoalsForLabel">Us</span><input id="obGoalsFor" aria-labelledby="obGoalsForLabel" type="number" min="0" step="1" inputmode="numeric" required value="${scored ? esc(firstGameStats.goals_for) : ''}" /></div>
           <strong>–</strong>
-          <div><span>Them</span><input id="obGoalsAgainst" type="number" min="0" step="1" inputmode="numeric" required value="${scored ? esc(firstGameStats.goals_against) : ''}" /></div>
+          <div><span id="obGoalsAgainstLabel">Them</span><input id="obGoalsAgainst" aria-labelledby="obGoalsAgainstLabel" type="number" min="0" step="1" inputmode="numeric" required value="${scored ? esc(firstGameStats.goals_against) : ''}" /></div>
           <button class="btn primary" type="submit" ${busy ? 'disabled' : ''}>${busy ? 'Saving…' : scored ? 'Update result' : 'Save result'}</button>
         </form>
         <div class="onboarding-actions"><button class="btn" data-mark-step="first_stats" type="button" ${busy ? 'disabled' : ''}>Enter detailed stats later</button></div></section>`;

@@ -41,3 +41,6 @@ html[data-team-backdrop=off] .app-shell .arena-panel{background-image:none;backg
 .app-shell .team-crest:before{background:linear-gradient(#0005,#000b),var(--team-primary,#e32636)}
 .app-shell .leader-tab.active{background:var(--team-primary,#e32636);color:var(--team-ink,#fff)}
 .app-shell .stat-grid>.stat-card:first-child{background:linear-gradient(130deg,#0008,#111c2ce8),var(--team-primary,#e32636)}
+/* The auth layout's flexible last child must not stretch the cropped logo frame. */
+.auth-brand>.platform-lockup:last-child{flex:0 0 230px;width:230px;max-width:100%;height:148px}
+@media(max-width:600px){.onboarding-auth-card{max-height:none}}
