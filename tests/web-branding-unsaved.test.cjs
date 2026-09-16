@@ -13,7 +13,7 @@ const renderSource = appSource.slice(appSource.indexOf("function render(view = '
 function element() {
   return { value: '', checked: false, disabled: false, dataset: {}, textContent: '',
     listeners: {}, style: { setProperty() {} }, classList: { remove() {} },
-    addEventListener(name, fn) { this.listeners[name] = fn; }, setAttribute() {} };
+    attributes: {}, addEventListener(name, fn) { this.listeners[name] = fn; }, setAttribute(name,value) { this.attributes[name]=value; } };
 }
 
 async function setup() {
@@ -24,10 +24,12 @@ async function setup() {
     settings: { visual: { tagline: 'Saved tagline' } } };
   const context = { membership: { team_id: 'team-a', status: 'active' },
     capabilities: ['admin.permissions'], userId: 'coach-a' };
-  const form = element(), previewPage = element(), preview = element(), status = element(), reset = element();
+  const form = element(), previewPage = element(), backgroundPage = element(), preview = element(), status = element(), reset = element();
   const controls = new Map();
   const devices = ['desktop', 'tablet', 'mobile'].map(device => Object.assign(element(), { dataset: { device } }));
   const presets = [Object.assign(element(), { dataset: { preset: 'Classic Red' } })];
+  const themes = ['Ice Arena','Players','Bench View'].map(theme=>Object.assign(element(),{dataset:{theme}}));
+  const hexes = ['primary','secondary','accent'].map(key=>Object.assign(element(),{dataset:{hex:key+'_color'}}));
   const host = {
     isConnected: true,
     set innerHTML(html) {
@@ -51,12 +53,13 @@ async function setup() {
       const named = selector.match(/^\[name="([^"]+)"\]$/);
       if (named) return controls.get(named[1]);
       const nodes = { form, '#brandForm': form, '#previewPage': previewPage, '#brandPreview': preview,
-        '#brandStatus': status, '#resetBranding': reset };
+        '#brandStatus': status, '#resetBranding': reset, '#backgroundPage': backgroundPage };
       assert.ok(selector in nodes, `Unexpected selector: ${selector}`);
       return nodes[selector];
     },
     querySelectorAll(selector) {
-      const lists = { '[data-device]': devices, '[data-preset]': presets, '[data-upload]': [],
+      const lists = { '[data-device]': devices, '[data-preset]': presets, '[data-upload]': [], '[data-theme]': themes, '[data-hex]': hexes,
+        'input,select,textarea': [...controls.values(),...hexes],
         'input,select,textarea,button': [...controls.values(), ...devices, ...presets, reset] };
       assert.ok(selector in lists, `Unexpected selector: ${selector}`);
       return lists[selector];
@@ -100,7 +103,7 @@ async function setup() {
   // Styling is unrelated to navigation and has no browser document in this unit harness.
   B.apply = () => {};
   vm.runInContext(renderSource, sandbox);
-  return { B, host, form, controls, devices, presets, reset, status, prompts, saved,
+  return { B, host, form, controls, devices, presets, reset, status, prompts, saved, themes, hexes, previewPage,
     answer(value) { answer = value; }, page: () => page,
     edit(value = 'Unsaved tagline') { controls.get('tagline').value = value; form.listeners.input(); },
     navigate() { return vm.runInContext("render('games')", sandbox); },
@@ -176,4 +179,30 @@ test('color preset marks branding dirty; Reset restores saved values and clears 
   assert.equal(h.B.canLeave(), true);
   assert.equal(h.prompts.length, count);
   assert.equal(h.unload().prevented, false);
+});
+
+test('thumbnail edits only the previewed page, preserves other assignments and saves through the existing patch', async () => {
+  const h = await setup();
+  h.previewPage.value='film'; h.previewPage.listeners.change();
+  assert.equal(h.B.canLeave(),true);
+  h.themes[1].onclick();
+  assert.equal(h.controls.get('theme_film').value,'Players');
+  assert.equal(h.controls.get('theme_command').value,'Ice Arena');
+  assert.equal(h.themes[1].attributes['aria-pressed'],'true');
+  assert.equal(h.unload().prevented,true);
+  await h.submit();
+  assert.equal(h.saved[0].settings.visual.page_themes.film,'Players');
+  assert.equal(h.unload().prevented,false);
+});
+
+test('valid manual hex edits update the existing color value; invalid edits never enter the patch', async () => {
+  const h=await setup(), input=h.hexes[0];
+  input.value='#00ff00'; h.form.listeners.input({target:input});
+  assert.equal(h.controls.get('primary_color').value,'#00ff00');
+  input.value='invalid'; h.form.listeners.input({target:input});
+  assert.equal(h.controls.get('primary_color').value,'#00ff00');
+  assert.equal(h.unload().prevented,true);
+  h.reset.onclick();
+  assert.equal(h.controls.get('primary_color').value,'#38bdf8');
+  assert.equal(h.unload().prevented,false);
 });
