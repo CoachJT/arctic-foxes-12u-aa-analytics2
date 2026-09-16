@@ -21,4 +21,3 @@ http.createServer((req,res)=>{
     res.writeHead(200,{'Content-Type':file.endsWith('.js')?'application/javascript':file.endsWith('.css')?'text/css':'text/html','Cache-Control':'no-store','Content-Security-Policy':"connect-src 'none'; img-src 'self' data:;"});res.end(text);
   }catch{res.writeHead(404).end('Not found');}
 }).listen(4178,'127.0.0.1',()=>console.log('Local fixture preview ready on 4178'));
-
