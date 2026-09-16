@@ -248,7 +248,7 @@ test('app routes the platform admin destination to the dashboard and unmounts on
   assert.match(appSource, /FoxesPlatformAdmin\.createPlatformAdmin/);
   assert.match(appSource, /platformAdminManager\.mount\(authScreen\.querySelector\('#platformAdminRoot'\)\)/);
   assert.match(appSource, /platformAdminManager\.unmount\(\)/);
-  assert.match(indexSource, /platform-admin\.js\?v=stage4-admin-1/);
+  assert.match(indexSource, /platform-admin\.js\?v=team-support-1/);
   assert.ok(indexSource.indexOf('platform-access.js') < indexSource.indexOf('platform-admin.js'));
   assert.ok(indexSource.indexOf('platform-admin.js') < indexSource.indexOf('app.js'));
 });
@@ -260,4 +260,47 @@ test('admin dashboard has responsive styles and no horizontal overflow on mobile
   assert.match(stylesSource, /admin-badge-founder/);
   assert.match(stylesSource, /@media\(max-width:700px\)[\s\S]{0,200}\.admin-table thead\{display:none\}/);
   assert.match(stylesSource, /@media\(max-width:420px\)[\s\S]{0,200}\.admin-stat-grid\{grid-template-columns:1fr\}/);
+});
+
+test('support diagnostics distinguish missing stats, zero scores and future games', () => {
+  const context = {window:{}}; vm.runInNewContext(adminSource, context);
+  const flags=context.window.FoxesPlatformAdmin.supportFlags;
+  assert.equal(flags({date:'2026-09-01',goals_for:0,goals_against:0,player_stat_rows:2,player_goals:0},'2026-09-16').length,0);
+  assert.equal(flags({date:'2026-10-01'},'2026-09-16').length,0);
+  assert.equal(flags({date:'2026-09-01'},'2026-09-16').length,2);
+  assert.match(flags({date:'2026-09-01',goals_for:3,goals_against:1,player_stat_rows:2,player_goals:2},'2026-09-16')[0],/verify context/);
+});
+
+test('support view scopes its request and escapes team and report content', async () => {
+  let args;
+  const manager=loadAdmin({admin_list_teams:sampleTeams,admin_team_support_snapshot: a => {
+    args=a;return {team_id:a.target_team_id,season_id:'season-1',today:'2026-09-16',checked_at:'2026-09-16T01:00:00Z',roster_count:1,game_count:1,seasons:[],roster:[{name:'<img onerror=x>',jersey_number:4}],games:[{opponent:'Rivals',date:'2026-09-01',player_stat_rows:0}],reports:[{subject:'<script>x</script>',description:'<b>problem</b>'}]};
+  }});
+  const root=elementStub();manager.mount(root);manager.setView('teams');await flush();
+  manager.setView('support',{id:'team-2',seasonId:'season-1'});await flush();
+  assert.equal(args.target_team_id,'team-2');assert.equal(args.target_season_id,'season-1');
+  assert.match(root.innerHTML,/READ ONLY/);assert.match(root.innerHTML,/Player stats not entered/);
+  assert.match(root.innerHTML,/&lt;script&gt;/);assert.doesNotMatch(root.innerHTML,/<img|<script>/);
+});
+
+test('support errors fail visibly instead of presenting empty healthy data', async () => {
+  const manager=loadAdmin({admin_team_support_snapshot:new Error('Platform Admin access required.')});
+  const root=elementStub();manager.mount(root);manager.setView('support',{id:'team-1'});await flush();
+  assert.match(root.innerHTML,/Request failed/);assert.doesNotMatch(root.innerHTML,/No game-completeness flags/);
+});
+
+test('late team requests cannot overwrite a newer support selection or remount', async () => {
+  let resolveOld;
+  const client={rpc: (name,args)=>args?.target_team_id==='old' ? new Promise(resolve=>{resolveOld=resolve;}) : Promise.resolve({data:name==='admin_team_support_snapshot'?{team_id:'new',today:'2026-09-16',checked_at:'2026-09-16',roster_count:0,game_count:0}:[]})};
+  const context={window:{}};vm.runInNewContext(adminSource,context);
+  const manager=context.window.FoxesPlatformAdmin.createPlatformAdmin({client,platformAccess:{isPlatformAdmin:true}});
+  const root=elementStub();manager.mount(root);await flush();manager.setView('support',{id:'old'});manager.setView('support',{id:'new'});await flush();
+  const html=root.innerHTML;resolveOld({data:{team_id:'old'}});await flush();assert.equal(root.innerHTML,html);
+  manager.unmount();manager.setView('support',{id:'old'});assert.equal(root.innerHTML,html);
+});
+
+test('support entry points require platform authorization before calls', async () => {
+  const client=rpcClient({});const context={window:{}};vm.runInNewContext(adminSource,context);
+  const manager=context.window.FoxesPlatformAdmin.createPlatformAdmin({client,platformAccess:{isPlatformAdmin:false}});
+  manager.mount(elementStub());manager.setView('support',{id:'team-1'});await flush();assert.equal(client.calls.length,0);
 });

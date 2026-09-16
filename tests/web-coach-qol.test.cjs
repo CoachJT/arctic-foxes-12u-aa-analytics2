@@ -392,7 +392,7 @@ test('a same-view rerender preserves scroll position and no dead hash links rema
 test('changed web assets carry a fresh cache-busting version', () => {
   assert.ok(indexSource.includes('coach-qol.js?v=coach-redesign-1'), 'coach-qol.js must be cache-busted');
   assert.ok(indexSource.includes('styles.css?v=admin-coach-qol-1'), 'styles.css must be cache-busted');
-  assert.ok(indexSource.includes('app.js?v=coach-redesign-1'), 'app.js must be cache-busted');
+  assert.ok(indexSource.includes('app.js?v=team-support-1'), 'app.js must be cache-busted');
 });
 
 // --- 023 eager canonical game shells: Schedule -> Game Center linkage ---
