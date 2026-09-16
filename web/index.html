@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#07111e" />
     <title>PuckNexus | The Connected Hockey Platform</title>
-    <link rel="stylesheet" href="./styles.css?v=onboarding2-beta-1" />
+    <link rel="stylesheet" href="./styles.css?v=admin-coach-qol-1" />
   </head>
   <body>
     <div class="auth-screen" id="authScreen" hidden></div>
@@ -47,7 +47,7 @@
             <div id="teamSwitcher" class="team-switcher" hidden></div>
             <div id="seasonSwitcher" class="season-switcher" hidden></div>
             <span class="season-pill" id="seasonPill">Live season <i></i></span>
-            <button class="icon-button" aria-label="Notifications">♢<em>3</em></button>
+            <button class="icon-button" id="actionCenterButton" type="button" aria-label="Open Action Center" aria-expanded="false" aria-controls="actionCenter">♢<em id="actionCenterBadge" hidden></em></button>
             <div class="user-menu"><div class="avatar" id="userAvatar">JK</div><span id="userName">Justin Kostosky</span><b>⌄</b></div>
           </div>
         </header>
@@ -58,6 +58,7 @@
       </main>
     </div>
     <div class="scrim" id="scrim"></div>
+    <aside class="action-center" id="actionCenter" aria-label="Action Center" aria-hidden="true" hidden tabindex="-1"></aside>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./permissions.js?v=live-auth"></script>
     <script src="./platform-branding.js?v=pucknexus-1"></script>
@@ -66,9 +67,10 @@
     <script src="./platform-access.js?v=platform-identity-1"></script>
     <script src="./platform-admin.js?v=stage4-admin-1"></script>
     <script src="./onboarding.js?v=onboarding2-beta-1"></script>
-    <script src="./coach-qol.js?v=game-score-1"></script>
+    <script src="./coach-qol.js?v=admin-coach-qol-1"></script>
     <script src="./dashboard.js?v=stage7-dashboard-1"></script>
+    <script src="./action-center.js?v=admin-coach-qol-1"></script>
     <script src="./destination-resolver.js?v=stage3-routing-1"></script>
-    <script src="./app.js?v=onboarding2-beta-1"></script>
+    <script src="./app.js?v=admin-coach-qol-1"></script>
   </body>
 </html>
