@@ -1009,14 +1009,56 @@ function showLoading() {
   authScreen.innerHTML = `<div class="auth-card"><div class="auth-brand"><div class="brand-mark">PN</div><div><strong>${PLATFORM.name}</strong><span>${PLATFORM.tagline}</span></div></div><h1>Restoring your session</h1><p class="auth-loading">Connecting to the secure team workspace…</p></div>`;
 }
 
-function showLogin(error = '') {
+function authLanding(content, activeTab = 'signin') {
+  const usaFlag = '<svg class="login-flag" viewBox="0 0 28 18" role="img" aria-label="USA flag"><path fill="#fff" d="M0 0h28v18H0z"/><path stroke="#cf243f" stroke-width="2" d="M0 1h28M0 5h28M0 9h28M0 13h28M0 17h28"/><path fill="#194878" d="M0 0h12v10H0z"/><path fill="#fff" d="M2 2h1v1H2zm4 0h1v1H6zm4 0h1v1h-1zM4 5h1v1H4zm4 0h1v1H8zM2 8h1v1H2zm4 0h1v1H6zm4 0h1v1h-1z"/></svg>';
+  const canadaFlag = '<svg class="login-flag" viewBox="0 0 28 18" role="img" aria-label="Canada flag"><path fill="#fff" d="M0 0h28v18H0z"/><path fill="#e2233d" d="M0 0h7v18H0zm21 0h7v18h-7zM14 3l1 3 2-1-1 3 3 1-4 3v3h-2v-3l-4-3 3-1-1-3 2 1z"/></svg>';
+  return `<div class="login-landing">
+    <header class="login-header"><div class="login-logo" aria-label="PuckNexus"><span class="login-logo-mark">PN</span><span class="login-logo-type"><strong>PUCK<span>NEXUS</span></strong><small>THE BEST PUCKING ANALYTICS</small></span></div>
+      <nav class="login-nav" aria-label="PuckNexus"><a href="#login-features">Features</a><span>Pricing</span><a href="#login-community">About</a><a href="#login-features">Teams</a><span>Contact</span></nav>
+      <div class="login-header-actions"><button type="button" class="login-header-signin" id="headerSignIn">Sign In</button><button type="button" class="login-header-start" id="headerGetStarted">Get Started</button></div></header>
+    <div class="login-countries">USA ${usaFlag} <span>|</span> CANADA ${canadaFlag}</div>
+    <main class="login-main"><section class="login-story" aria-label="PuckNexus community"><div class="login-story-copy"><p>HOCKEY BUILDS MORE THAN PLAYERS</p><h2>IT BUILDS <span>PEOPLE.</span></h2><div>Analytics. Development. Community. A brighter path for every player.</div></div></section>
+      <section class="login-panel" aria-label="Account access"><div class="login-tabs"><button type="button" id="loginTabSignIn" class="${activeTab === 'signin' ? 'active' : ''}" aria-current="${activeTab === 'signin' ? 'page' : 'false'}">Sign In</button><button type="button" id="loginTabSignUp" class="${activeTab === 'signup' ? 'active' : ''}" aria-current="${activeTab === 'signup' ? 'page' : 'false'}">Sign Up</button></div>${content}</section></main>
+    <div class="login-lower"><section class="login-features" id="login-features"><div><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M5 40h38M9 34v6m8-13v13m8-21v21m8-10v10m8-26v26M8 22l12-8 9 2 12-11m-8 0h8v8"/></svg><strong>TEAM ANALYTICS</strong><p>Turn data into development.</p></div><div><svg viewBox="0 0 48 48" aria-hidden="true"><rect x="5" y="12" width="27" height="24" rx="4"/><path d="M32 19l11-6v22l-11-6z"/></svg><strong>FILM ROOM</strong><p>See more. Learn more.</p></div><div><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="14" r="6"/><circle cx="10" cy="19" r="4"/><circle cx="38" cy="19" r="4"/><path d="M13 39v-6c0-6 5-10 11-10s11 4 11 10v6M2 36v-6c0-4 3-7 8-7m36 13v-6c0-4-3-7-8-7"/></svg><strong>TEAM HUB</strong><p>Everything in one place.</p></div><div><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M5 39h38M8 32l11-11 8 5L42 9m-10 0h10v10M9 40V33m10 7V27m9 13V31m10 9V20"/></svg><strong>PLAYER DEVELOPMENT</strong><p>A brighter path for every player.</p></div><div><svg viewBox="0 0 48 48" aria-hidden="true"><rect x="8" y="8" width="32" height="36" rx="3"/><path d="M17 8V5h14v3M16 20h16M16 27h16M16 34h9m3-1l3 3 6-8"/></svg><strong>SCOUTING</strong><p>Be prepared. Be better.</p></div></section><section class="login-thanks" id="login-community"><span class="login-heart">♡</span><div><strong>Thank You</strong><small>TO OUR BETA TESTERS</small><p>Your feedback, support, and belief in PuckNexus are helping shape a stronger future for hockey.<br>We couldn't do this without you.</p></div><b>SAME GAME<br>HIGHER<br>STANDARDS</b></section></div>
+    <footer class="login-footer"><div><strong>PUCK<span>NEXUS</span></strong><small>THE BEST PUCKING ANALYTICS</small></div><span>USA ${usaFlag} &nbsp; | &nbsp; CANADA ${canadaFlag}</span><span>BUILT BY THE HOCKEY COMMUNITY. FOR WHAT'S NEXT.</span></footer>
+  </div>`;
+}
+
+function bindAuthLanding() {
+  authScreen.querySelector('#headerSignIn')?.addEventListener('click', () => showLogin());
+  authScreen.querySelector('#headerGetStarted')?.addEventListener('click', () => showSignUp());
+  authScreen.querySelector('#loginTabSignIn')?.addEventListener('click', () => showLogin());
+  authScreen.querySelector('#loginTabSignUp')?.addEventListener('click', () => showSignUp());
+}
+
+function showLogin(error = '', notice = '') {
   appShell.hidden = true;
   authScreen.hidden = false;
-  authScreen.innerHTML = `<div class="auth-card"><div class="auth-brand"><div class="brand-mark">PN</div><div><strong>${PLATFORM.name}</strong><span>${PLATFORM.tagline}</span></div></div><h1>Sign in to your team hub</h1><p>Use your ${PLATFORM.name} account to access your authorized team workspace.</p><form class="auth-form" id="loginForm"><label>Email<input id="loginEmail" type="email" autocomplete="username" required /></label><label>Password<input id="loginPassword" type="password" autocomplete="current-password" required /></label>${error ? `<div class="auth-error" role="alert">${escapeHtml(error)}</div>` : ''}<button class="btn primary" type="submit">Sign in</button></form><div class="auth-switch"><span>New to ${PLATFORM.name}?</span><button class="btn" id="showSignUp" type="button">Create account</button></div></div>`;
+  authScreen.innerHTML = authLanding(`<h1>Welcome to Puck<span>Nexus</span></h1><p class="login-intro">Sign in to your account and get back to what matters.</p><form class="login-form" id="loginForm"><label class="login-field"><span class="sr-only">Email address</span><span aria-hidden="true">✉</span><input id="loginEmail" type="email" placeholder="Email address" autocomplete="username" required /></label><label class="login-field"><span class="sr-only">Password</span><span aria-hidden="true">♙</span><input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password" required /><button id="toggleLoginPassword" type="button" aria-label="Show password">◉</button></label><div class="login-options"><label><input type="checkbox" checked disabled title="This browser keeps you signed in until you sign out" /> Remember me</label><button type="button" id="forgotLoginPassword">Forgot password?</button></div>${error ? `<div class="auth-error" role="alert">${escapeHtml(error)}</div>` : ''}${notice ? `<div class="auth-success" role="status">${escapeHtml(notice)}</div>` : ''}<button class="login-submit" type="submit">Sign In</button></form><div class="login-divider"><span>OR</span></div><button class="login-google" id="googleLogin" type="button"><span aria-hidden="true">G</span> Continue with Google</button><p class="login-new">New to PuckNexus?</p><button class="login-create" id="showSignUp" type="button">Create an Account</button><p class="login-belong">Coaches. Teams. Players. Communities.<br>All belong here.</p>`, 'signin');
+  bindAuthLanding();
   authScreen.querySelector('#showSignUp').addEventListener('click', () => showSignUp());
+  authScreen.querySelector('#toggleLoginPassword').addEventListener('click', () => {
+    const input = authScreen.querySelector('#loginPassword');
+    input.type = input.type === 'password' ? 'text' : 'password';
+    authScreen.querySelector('#toggleLoginPassword').setAttribute('aria-label', input.type === 'password' ? 'Show password' : 'Hide password');
+  });
+  authScreen.querySelector('#forgotLoginPassword').addEventListener('click', async () => {
+    const email = authScreen.querySelector('#loginEmail').value.trim();
+    if (!email) { showLogin('Enter your email address first, then choose Forgot password.'); return; }
+    try {
+      const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo: `${location.origin}${location.pathname}` });
+      showLogin(error ? formatAuthError(error) : '', error ? '' : 'If this email has an account, a password reset link has been sent.');
+    } catch (error) { showLogin(formatAuthError(error)); }
+  });
+  authScreen.querySelector('#googleLogin').addEventListener('click', async () => {
+    try {
+      const { error } = await supabaseClient.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${location.origin}${location.pathname}` } });
+      if (error) showLogin(formatAuthError(error));
+    } catch (error) { showLogin(formatAuthError(error)); }
+  });
   authScreen.querySelector('#loginForm').addEventListener('submit', async event => {
     event.preventDefault();
-    const button = event.currentTarget.querySelector('button');
+    const button = event.currentTarget.querySelector('button[type="submit"]');
     button.disabled = true;
     button.textContent = 'Signing in…';
     try {
@@ -1038,7 +1080,8 @@ function showLogin(error = '') {
 function showSignUp(error = '', noticeText = '') {
   appShell.hidden = true;
   authScreen.hidden = false;
-  authScreen.innerHTML = `<div class="auth-card"><div class="auth-brand"><div class="brand-mark">PN</div><div><strong>${PLATFORM.name}</strong><span>${PLATFORM.tagline}</span></div></div><h1>Create your coach account</h1><p>Start a new organization and team. Setup progress saves automatically.</p>${noticeText ? `<div class="auth-success" role="status">${escapeHtml(noticeText)}</div>` : ''}<form class="auth-form" id="signUpForm"><label>Your name<input id="signUpName" type="text" autocomplete="name" maxlength="120" required /></label><label>Email<input id="signUpEmail" type="email" autocomplete="username" required /></label><label>Password<input id="signUpPassword" type="password" autocomplete="new-password" minlength="8" required /></label><label>Confirm password<input id="signUpPasswordConfirm" type="password" autocomplete="new-password" minlength="8" required /></label>${error ? `<div class="auth-error" role="alert">${escapeHtml(error)}</div>` : ''}<button class="btn primary" type="submit">Create account</button></form><div class="auth-switch"><span>Already have an account?</span><button class="btn" id="showSignIn" type="button">Sign in</button></div></div>`;
+  authScreen.innerHTML = authLanding(`<h1>Create your Puck<span>Nexus</span> account</h1><p class="login-intro">Start a new organization and team. Setup progress saves automatically.</p>${noticeText ? `<div class="auth-success" role="status">${escapeHtml(noticeText)}</div>` : ''}<form class="auth-form login-signup-form" id="signUpForm"><label>Your name<input id="signUpName" type="text" autocomplete="name" maxlength="120" required /></label><label>Email address<input id="signUpEmail" type="email" autocomplete="username" required /></label><label>Password<input id="signUpPassword" type="password" autocomplete="new-password" minlength="8" required /></label><label>Confirm password<input id="signUpPasswordConfirm" type="password" autocomplete="new-password" minlength="8" required /></label>${error ? `<div class="auth-error" role="alert">${escapeHtml(error)}</div>` : ''}<button class="login-submit" type="submit">Create account</button></form><p class="login-new">Already have an account?</p><button class="login-create" id="showSignIn" type="button">Sign In</button>`, 'signup');
+  bindAuthLanding();
   authScreen.querySelector('#showSignIn').addEventListener('click', () => showLogin());
   authScreen.querySelector('#signUpForm').addEventListener('submit', async event => {
     event.preventDefault();
