@@ -58,7 +58,7 @@ test('signed-out landing offers explicit self-service sign up without granting w
   assert.match(appSource, /id="showSignUp"/);
   assert.match(appSource, /function showSignUp\(/);
   assert.match(appSource, /supabaseClient\.auth\.signUp\(/);
-  assert.match(appSource, /Create your coach account/);
+  assert.match(appSource, /Create your Puck<span>Nexus<\/span> account/);
   assert.match(appSource, /data: \{ display_name: name \}/);
   assert.doesNotMatch(appSource, /signInAnonymously/);
 });
