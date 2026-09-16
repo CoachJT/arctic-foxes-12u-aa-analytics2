@@ -5,9 +5,11 @@
 (function () {
   const VIDEO_TYPES = Object.freeze(['video/mp4', 'video/quicktime', 'video/webm', 'video/x-matroska']);
   const LARGE_FILE_AUDIT = Object.freeze({
-    browserUpload: 'Supabase JS storage.upload streams the File/Blob through the browser; it does not require reading the whole video into page memory.',
-    risk: 'Multi-GB full-game uploads can still fail due to browser tab lifecycle, network interruption, reverse-proxy limits, or request timeouts.',
-    recommendation: 'Use Supabase Storage resumable/TUS uploads before BETA for reliable full-game film ingestion.'
+    protocol: 'Supabase Storage resumable uploads use the TUS protocol through tus-js-client.',
+    endpoint: 'Use the direct storage hostname: https://<project-ref>.storage.supabase.co/storage/v1/upload/resumable.',
+    chunkSize: 'Supabase requires 6 MiB TUS chunks.',
+    recovery: 'tus-js-client can find previous uploads for the same File fingerprint and resume after transient interruption.',
+    caveat: 'Upload URLs expire after roughly 24 hours; after that the coach must restart the upload.'
   });
   const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -24,11 +26,13 @@
   const formatSize = bytes => bytes ? `${(Number(bytes) / 1073741824).toFixed(2)} GB` : 'Size unavailable';
   const sortByPosition = (a, b) => Number(a.position) - Number(b.position);
 
-  function createFilmRoom({ client, getContext }) {
+  function createFilmRoom({ client, supabaseUrl, publishableKey, projectRef, getContext }) {
     const state = {
       films: [], clips: [], playlists: [], playlistClips: [], shares: [], staff: [],
       loading: false, error: '', success: '', selectedFilmId: '', signedUrls: new Map(),
       inPoint: null, outPoint: null, scopedGameId: '', uploadOpen: false, uploading: false,
+      upload: { status: 'idle', message: '', filename: '', size: 0, progress: 0, bytesUploaded: 0, bytesTotal: 0, filmId: '', assetId: '', canResume: false, canCancel: false },
+      currentUpload: null, lastUploadRequest: null,
       playback: { playlistId: '', index: 0, playing: false }
     };
 
@@ -48,6 +52,7 @@
     const clipById = id => state.clips.find(clip => clip.id === id);
     const filmById = id => state.films.find(film => film.id === id);
     const scopedGame = () => findGame(state.scopedGameId);
+    const tusEndpoint = () => `https://${projectRef || new URL(supabaseUrl).hostname.split('.')[0]}.storage.supabase.co/storage/v1/upload/resumable`;
 
     function visibleFilms() {
       const active = state.films.filter(film => film.upload_state !== 'deleted');
@@ -102,7 +107,7 @@
     }
 
     async function signFilm(film) {
-      if (!film?.storage_path) return '';
+      if (!film?.storage_path || film.upload_state !== 'uploaded') return '';
       if (state.signedUrls.has(film.id)) return state.signedUrls.get(film.id);
       const result = await client.storage.from('game-film').createSignedUrl(film.storage_path, 3600);
       if (result.error) throw new Error(`Playback access failed: ${result.error.message}`);
@@ -275,42 +280,180 @@
       await load(); render();
     }
 
+    function setUploadStatus(next) {
+      state.upload = { ...state.upload, ...next };
+      const status = document.querySelector('#filmUploadStatus');
+      const bar = document.querySelector('#filmUploadProgress');
+      if (status) status.textContent = state.upload.message || state.upload.status;
+      if (bar) {
+        bar.hidden = state.upload.status === 'idle' || state.upload.status === 'preparing';
+        bar.max = state.upload.bytesTotal || 1;
+        bar.value = state.upload.bytesUploaded || 0;
+      }
+    }
+
+    function validateUploadFile(file) {
+      if (!file) throw new Error('Choose a video file.');
+      if (!VIDEO_TYPES.includes(file.type)) throw new Error('Choose MP4, MOV, WebM, or MKV video.');
+      return {
+        supported: true,
+        warning: file.type === 'video/mp4'
+          ? ''
+          : 'MP4 is preferred. This file type may depend on browser playback support after upload.',
+        large: file.size >= 2 * 1024 * 1024 * 1024
+      };
+    }
+
+    async function createUploadRecords(form, file) {
+      const targetGameId = form.game_id.value || state.scopedGameId || null;
+      const asset = await client.rpc('create_media_asset', {
+        target_organization_id: context().organizationId, target_team_id: teamId(), target_season_id: seasonId(),
+        requested_asset_type: 'game_film', requested_filename: file.name, requested_mime_type: file.type,
+        requested_size_bytes: file.size, target_game_id: targetGameId
+      });
+      if (asset.error || !asset.data?.[0]) throw asset.error || new Error('The private media asset could not be created.');
+      const meta = asset.data[0];
+      const filmResult = await client.from('team_film').insert({
+        team_id: teamId(), season_id: seasonId(), game_id: targetGameId,
+        title: form.title.value.trim() || file.name, storage_path: meta.object_path, media_asset_id: meta.asset_id,
+        mime_type: file.type, file_size_bytes: file.size, upload_state: 'uploading',
+        created_by: currentUser()
+      }).select('id').single();
+      if (filmResult.error) {
+        await client.rpc('set_media_asset_status', { target_asset_id: meta.asset_id, next_status: 'failed' });
+        throw filmResult.error;
+      }
+      return { ...meta, filmId: filmResult.data.id, targetGameId };
+    }
+
+    async function markUploadFailed(meta, message) {
+      if (meta?.asset_id) await client.rpc('set_media_asset_status', { target_asset_id: meta.asset_id, next_status: 'failed' });
+      if (meta?.filmId) await client.from('team_film').update({ upload_state: 'failed' }).eq('id', meta.filmId).eq('team_id', teamId());
+      setUploadStatus({ status: 'failed', message, canResume: Boolean(state.lastUploadRequest), canCancel: false });
+      await load();
+    }
+
+    async function finalizeUpload(meta) {
+      setUploadStatus({ status: 'processing', progress: 100, message: 'Processing/finalizing private film…', canResume: false, canCancel: false });
+      const filmResult = await client.from('team_film').update({ upload_state: 'uploaded', uploaded_at: new Date().toISOString() }).eq('id', meta.filmId).eq('team_id', teamId());
+      if (filmResult.error) throw filmResult.error;
+      const mediaResult = await client.rpc('set_media_asset_status', { target_asset_id: meta.asset_id, next_status: 'uploaded' });
+      if (mediaResult.error) throw mediaResult.error;
+      state.success = 'Film upload complete.';
+      setUploadStatus({ status: 'complete', progress: 100, message: 'Complete', filmId: meta.filmId, assetId: meta.asset_id });
+      state.uploadOpen = false;
+      state.lastUploadRequest = null;
+      await load();
+    }
+
+    async function runTusUpload({ file, meta }) {
+      if (!window.tus?.Upload) throw new Error('Resumable upload support did not load. Refresh and try again.');
+      const { data, error } = await client.auth.getSession();
+      if (error) throw error;
+      const token = data?.session?.access_token;
+      if (!token) throw new Error('Sign in again before uploading film.');
+      setUploadStatus({ status: 'uploading', message: 'Uploading with resumable private storage…', canCancel: true });
+      await new Promise((resolve, reject) => {
+        const upload = new window.tus.Upload(file, {
+          endpoint: tusEndpoint(),
+          retryDelays: [0, 3000, 5000, 10000, 20000],
+          headers: {
+            authorization: `Bearer ${token}`,
+            apikey: publishableKey,
+            'x-upsert': 'false'
+          },
+          uploadDataDuringCreation: true,
+          removeFingerprintOnSuccess: true,
+          chunkSize: 6 * 1024 * 1024,
+          metadata: {
+            bucketName: meta.bucket_name,
+            objectName: meta.object_path,
+            contentType: file.type,
+            cacheControl: '3600',
+            metadata: JSON.stringify({ asset_id: meta.asset_id, film_id: meta.filmId, team_id: teamId(), season_id: seasonId(), game_id: meta.targetGameId })
+          },
+          onError(error) {
+            setUploadStatus({ status: 'interrupted', message: 'Paused/interrupted. Retry resumes where supported.', canResume: true, canCancel: false });
+            reject(error);
+          },
+          onProgress(bytesUploaded, bytesTotal) {
+            const progress = bytesTotal ? Math.floor((bytesUploaded / bytesTotal) * 100) : 0;
+            setUploadStatus({
+              status: 'uploading', bytesUploaded, bytesTotal, progress,
+              message: `Uploading ${progress}% (${formatSize(bytesUploaded)} of ${formatSize(bytesTotal)})`,
+              canCancel: true
+            });
+          },
+          onSuccess() { resolve(); }
+        });
+        state.currentUpload = upload;
+        upload.findPreviousUploads().then(previousUploads => {
+          if (previousUploads.length) {
+            setUploadStatus({ status: 'resuming', message: 'Retrying/resuming previous upload…', canCancel: true });
+            upload.resumeFromPreviousUpload(previousUploads[0]);
+          }
+          upload.start();
+        }).catch(reject);
+      });
+    }
+
+    async function resumeUpload() {
+      if (!state.lastUploadRequest || state.uploading) return;
+      state.uploading = true;
+      try {
+        await runTusUpload(state.lastUploadRequest);
+        await finalizeUpload(state.lastUploadRequest.meta);
+      } catch (error) {
+        await markUploadFailed(state.lastUploadRequest.meta, error.message || 'Upload failed. Retry can resume while the TUS upload URL is valid.');
+      } finally {
+        state.currentUpload = null;
+        state.uploading = false;
+        render();
+      }
+    }
+
+    async function cancelUpload() {
+      if (!state.currentUpload) return;
+      const request = state.lastUploadRequest;
+      await state.currentUpload.abort(false);
+      if (request?.meta) await markUploadFailed(request.meta, 'Upload cancelled. The incomplete film is marked failed and is not playable.');
+      state.currentUpload = null;
+      state.uploading = false;
+      render();
+    }
+
+    async function cleanFailedFilm(id) {
+      if (!window.confirm('Remove this failed upload entry? The source video was never made playable.')) return;
+      const result = await client.from('team_film').update({ upload_state: 'deleted' }).eq('id', id).eq('team_id', teamId());
+      if (result.error) throw result.error;
+      state.success = 'Failed upload entry removed.';
+      await load(); render();
+    }
+
     async function upload(form) {
       const submit = form.querySelector('[type="submit"]');
       if (state.uploading) return;
       const file = form.file.files[0];
-      if (!file) throw new Error('Choose a video file.');
-      if (!VIDEO_TYPES.includes(file.type)) throw new Error('Choose MP4, MOV, WebM, or MKV video.');
+      const validation = validateUploadFile(file);
       if (!seasonId()) throw new Error('Select a season before uploading film.');
       state.uploading = true; state.error = ''; state.success = '';
+      setUploadStatus({
+        status: 'preparing', filename: file.name, size: file.size, progress: 0, bytesUploaded: 0, bytesTotal: file.size,
+        message: `Preparing ${file.name} (${formatSize(file.size)})${validation.large ? ' · Very large file: keep this tab open.' : ''}`,
+        canResume: false, canCancel: false
+      });
       if (submit) submit.disabled = true;
-      render();
       try {
-        const targetGameId = form.game_id.value || state.scopedGameId || null;
-        const asset = await client.rpc('create_media_asset', {
-          target_organization_id: context().organizationId, target_team_id: teamId(), target_season_id: seasonId(),
-          requested_asset_type: 'game_film', requested_filename: file.name, requested_mime_type: file.type,
-          requested_size_bytes: file.size, target_game_id: targetGameId
-        });
-        if (asset.error || !asset.data?.[0]) throw asset.error || new Error('The private media asset could not be created.');
-        const meta = asset.data[0];
-        const uploadResult = await client.storage.from(meta.bucket_name).upload(meta.object_path, file, { contentType: file.type, upsert: false });
-        if (uploadResult.error) {
-          await client.rpc('set_media_asset_status', { target_asset_id: meta.asset_id, next_status: 'failed' });
-          throw uploadResult.error;
-        }
-        const filmResult = await client.from('team_film').insert({
-          team_id: teamId(), season_id: seasonId(), game_id: targetGameId,
-          title: form.title.value.trim() || file.name, storage_path: meta.object_path, media_asset_id: meta.asset_id,
-          mime_type: file.type, file_size_bytes: file.size, upload_state: 'uploaded',
-          uploaded_at: new Date().toISOString(), created_by: currentUser()
-        }).select('id').single();
-        if (filmResult.error) throw filmResult.error;
-        await client.rpc('set_media_asset_status', { target_asset_id: meta.asset_id, next_status: 'uploaded' });
-        state.success = 'Film uploaded to private storage.';
-        state.uploadOpen = false;
+        const meta = await createUploadRecords(form, file);
+        state.lastUploadRequest = { file, meta };
+        await runTusUpload(state.lastUploadRequest);
+        await finalizeUpload(meta);
         await load();
+      } catch (error) {
+        await markUploadFailed(state.lastUploadRequest?.meta, error.message || 'Upload failed. Retry can resume while the TUS upload URL is valid.');
+        throw error;
       } finally {
+        state.currentUpload = null;
         state.uploading = false;
       }
       render();
@@ -380,11 +523,14 @@
         const clips = filmClips(film.id);
         const refs = state.playlistClips.filter(item => clips.some(clip => clip.id === item.clip_id)).length;
         const scoped = state.scopedGameId && film.game_id === state.scopedGameId;
+        const ready = film.upload_state === 'uploaded';
+        const failed = film.upload_state === 'failed';
+        const uploading = film.upload_state === 'uploading' || film.upload_state === 'pending';
         return `<article class="film-card card${scoped ? ' scoped' : ''}" data-film-card="${esc(film.id)}">
           <div class="film-card-art"><span>▶</span><small>${esc(film.upload_state || 'uploaded')}</small></div>
           <div class="film-card-body"><div class="film-card-top"><div><span class="eyebrow">${scoped ? 'ASSOCIATED GAME FILM' : 'FILM'}</span><h2>${esc(film.title)}</h2><p>${esc(game?.opponent || film.opponent || 'Practice / unassociated')} · ${esc(formatDate(game?.date || film.game_date))}</p></div><span class="tag">${esc(film.mime_type || 'video')}</span></div>
           <div class="film-meta"><span>${film.duration_seconds ? stamp(film.duration_seconds) : 'Duration pending'}</span><span>${formatSize(film.file_size_bytes)}</span><span>${clips.length} clips</span><span>${refs} playlist refs</span><span>Uploaded ${esc(formatDate((film.uploaded_at || film.created_at || '').slice(0, 10)))}</span></div>
-          <div class="film-actions"><button class="btn primary" data-film-open="${esc(film.id)}">Open Film</button><button class="btn" data-film-clips="${esc(film.id)}">View Clips</button>${canEdit() ? `<button class="btn danger" data-film-delete="${esc(film.id)}">Delete Film</button>` : ''}</div></div>
+          <div class="film-actions">${ready ? `<button class="btn primary" data-film-open="${esc(film.id)}">Open Film</button><button class="btn" data-film-clips="${esc(film.id)}">View Clips</button>` : `<span class="tag">${uploading ? 'Upload in progress — not playable yet' : 'Failed upload — not playable'}</span>`}${failed && canEdit() ? `<button class="btn" data-film-resume-upload>Retry / Resume</button><button class="btn danger" data-film-clean-failed="${esc(film.id)}">Clean Up Failed Upload</button>` : ''}${canEdit() ? `<button class="btn danger" data-film-delete="${esc(film.id)}">Delete Film</button>` : ''}</div></div>
         </article>`;
       }).join('');
       const uploadLabel = state.scopedGameId ? 'Upload Film for This Game' : 'Upload Film';
@@ -430,7 +576,7 @@
     function renderUploadDialog() {
       const scope = scopedGame();
       const options = games().filter(game => !seasonId() || game.season_id === seasonId()).map(game => `<option value="${esc(game.id)}" ${game.id === state.scopedGameId ? 'selected' : ''}>${esc(game.opponent)} · ${esc(formatDate(game.date))}</option>`).join('');
-      return `<dialog id="filmUploadDialog" class="film-dialog" ${state.uploadOpen ? 'open' : ''}><form method="dialog" id="filmUploadForm"><div class="card-title"><h2>${scope ? 'Upload Film for This Game' : 'Upload Film'}</h2><button class="btn" value="cancel" data-film-cancel-upload>Close</button></div>${scope ? `<div class="callout"><strong>${esc(scope.opponent || 'Game')}</strong><br>${esc(formatDate(scope.date))}</div>` : ''}<label>Title<input name="title" required maxlength="160" placeholder="vs. opponent · 2026-09-15"></label><label>Associate with game<select name="game_id"><option value="">Practice / no game</option>${options}</select></label><label>Video file<input name="file" type="file" accept="${VIDEO_TYPES.join(',')}" required></label><p class="sub" id="filmFileState">Choose MP4 first. MOV/WebM/MKV may depend on browser playback support.</p><p class="sub">No fake percentage is shown: Supabase JS does not expose reliable byte progress for this upload path.</p><p id="filmUploadStatus" role="status">${state.uploading ? 'Uploading to private storage…' : ''}</p><div class="actions"><button class="btn primary" type="submit" ${state.uploading ? 'disabled' : ''}>${state.uploading ? 'Uploading…' : 'Upload Film'}</button></div></form></dialog>`;
+      return `<dialog id="filmUploadDialog" class="film-dialog" ${state.uploadOpen ? 'open' : ''}><form method="dialog" id="filmUploadForm"><div class="card-title"><h2>${scope ? 'Upload Film for This Game' : 'Upload Film'}</h2><button class="btn" value="cancel" data-film-cancel-upload ${state.uploading ? 'disabled' : ''}>Close</button></div>${scope ? `<div class="callout"><strong>${esc(scope.opponent || 'Game')}</strong><br>${esc(formatDate(scope.date))}</div>` : ''}<label>Title<input name="title" required maxlength="160" placeholder="vs. opponent · 2026-09-15" ${state.uploading ? 'disabled' : ''}></label><label>Associate with game<select name="game_id" ${state.uploading ? 'disabled' : ''}><option value="">Practice / no game</option>${options}</select></label><label>Video file<input name="file" type="file" accept="${VIDEO_TYPES.join(',')}" required ${state.uploading ? 'disabled' : ''}></label><p class="sub" id="filmFileState">${state.upload.filename ? `${esc(state.upload.filename)} · ${formatSize(state.upload.size)}` : 'Choose MP4 first. MOV/WebM/MKV may depend on browser playback support.'}</p><p class="sub">Resumable uploads use Supabase Storage TUS with real byte progress when available. No fake progress is shown.</p><progress id="filmUploadProgress" max="${state.upload.bytesTotal || 1}" value="${state.upload.bytesUploaded || 0}" ${state.upload.status === 'idle' || state.upload.status === 'preparing' ? 'hidden' : ''}></progress><p id="filmUploadStatus" role="status">${esc(state.upload.message || '')}</p><div class="actions">${state.upload.canResume ? '<button class="btn" type="button" data-film-resume-upload>Retry / Resume</button>' : ''}${state.upload.canCancel ? '<button class="btn danger" type="button" data-film-cancel-active-upload>Cancel Upload</button>' : ''}<button class="btn primary" type="submit" ${state.uploading ? 'disabled' : ''}>${state.uploading ? 'Uploading…' : 'Upload Film'}</button></div></form></dialog>`;
     }
 
     function renderPlaylistStatus() {
@@ -473,6 +619,9 @@
       });
       document.querySelectorAll('[data-film-open], [data-film-clips]').forEach(button => button.addEventListener('click', () => openFilm(button.dataset.filmOpen || button.dataset.filmClips)));
       document.querySelectorAll('[data-film-delete]').forEach(button => button.addEventListener('click', () => deleteFilm(button.dataset.filmDelete).catch(error => window.alert(error.message))));
+      document.querySelectorAll('[data-film-clean-failed]').forEach(button => button.addEventListener('click', () => cleanFailedFilm(button.dataset.filmCleanFailed).catch(error => window.alert(error.message))));
+      document.querySelectorAll('[data-film-resume-upload]').forEach(button => button.addEventListener('click', () => resumeUpload().catch(error => window.alert(error.message))));
+      document.querySelector('[data-film-cancel-active-upload]')?.addEventListener('click', () => cancelUpload().catch(error => window.alert(error.message)));
       document.querySelector('[data-film-close]')?.addEventListener('click', () => { state.selectedFilmId = ''; render(); });
       document.querySelector('[data-film-mark-in]')?.addEventListener('click', () => { const video = document.querySelector('#filmVideo'); if (video) { state.inPoint = video.currentTime; render(); } });
       document.querySelector('[data-film-mark-out]')?.addEventListener('click', () => { const video = document.querySelector('#filmVideo'); if (video) { state.outPoint = video.currentTime; render(); } });

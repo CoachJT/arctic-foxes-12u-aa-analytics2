@@ -4,9 +4,12 @@ const app = document.querySelector('#app');
 const nav = document.querySelectorAll('.nav-item');
 const authScreen = document.querySelector('#authScreen');
 const appShell = document.querySelector('#appShell');
+const SUPABASE_URL = 'https://yshbvrumzusmwlprfcnr.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_PFK2d1or62DYpk3VxarJwA_Anazyv7D';
+const SUPABASE_PROJECT_REF = new URL(SUPABASE_URL).hostname.split('.')[0];
 const supabaseClient = window.supabase.createClient(
-  'https://yshbvrumzusmwlprfcnr.supabase.co',
-  'sb_publishable_PFK2d1or62DYpk3VxarJwA_Anazyv7D'
+  SUPABASE_URL,
+  SUPABASE_PUBLISHABLE_KEY
 );
 const INVITE_FUNCTION = 'invite-staff';
 let activeStaff = null;
@@ -36,6 +39,9 @@ const platformAdminManager = window.FoxesPlatformAdmin.createPlatformAdmin({
 });
 const filmRoom = window.FoxesFilmRoom.createFilmRoom({
   client: supabaseClient,
+  supabaseUrl: SUPABASE_URL,
+  publishableKey: SUPABASE_PUBLISHABLE_KEY,
+  projectRef: SUPABASE_PROJECT_REF,
   getContext: () => ({
     teamId: authTeam?.team_id || '',
     organizationId: authTeam?.teams?.organization_id || authTeam?.organization_id || '',

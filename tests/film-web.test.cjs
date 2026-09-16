@@ -2,7 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 
-const migration = fs.readFileSync('supabase/migrations/20260915040425_032_film_web_associations.sql', 'utf8');
+const migrationFile = '20260916000711_032_film_web_associations.sql';
+const migration = fs.readFileSync(`supabase/migrations/${migrationFile}`, 'utf8');
 const room = fs.readFileSync('web/film-room.js', 'utf8');
 const app = fs.readFileSync('web/app.js', 'utf8');
 const index = fs.readFileSync('web/index.html', 'utf8');
@@ -23,6 +24,7 @@ test('Film Room uses private storage and timestamp references instead of externa
   assert.match(room, /start_seconds/);
   assert.match(room, /end_seconds/);
   assert.doesNotMatch(room, /getPublicUrl/);
+  assert.doesNotMatch(room, /storage\.from\(meta\.bucket_name\)\.upload/);
   assert.match(room, /film\.view/);
   assert.match(room, /film\.edit/);
 });
@@ -37,6 +39,9 @@ test('Film Room is capability-gated and present in primary web navigation', () =
 });
 
 test('Film migration remains forward-only and does not apply production changes', () => {
+  assert.equal(migrationFile > '20260916000710_031_private_team_film_clips_playlists.sql', true);
+  assert.equal(fs.existsSync('supabase/migrations/20260915040425_032_film_web_associations.sql'), false);
+  assert.equal(fs.existsSync(`supabase/migrations/${migrationFile}`), true);
   assert.doesNotMatch(migration, /\bdrop table\b/i);
   assert.doesNotMatch(migration, /\btruncate\b/i);
   assert.match(migration, /queued migration/i);
@@ -77,14 +82,35 @@ test('film deletion and upload flows protect coach work and duplicate submission
   assert.match(room, /playlist references/i);
   assert.match(room, /if \(state\.uploading\) return/);
   assert.match(room, /submit\.disabled = true/);
-  assert.match(room, /No fake percentage is shown/);
+  assert.match(room, /No fake progress is shown/);
   assert.match(room, /VIDEO_TYPES/);
 });
 
-test('large-file upload audit documents resumable upload requirement before beta', () => {
+test('resumable upload initializes Supabase Storage TUS with authenticated private media metadata', () => {
   assert.match(room, /LARGE_FILE_AUDIT/);
-  assert.match(room, /Multi-GB full-game uploads/);
-  assert.match(room, /resumable\/TUS uploads before BETA/);
+  assert.match(room, /new window\.tus\.Upload\(file/);
+  assert.match(room, /storage\.supabase\.co\/storage\/v1\/upload\/resumable/);
+  assert.match(room, /chunkSize: 6 \* 1024 \* 1024/);
+  assert.match(room, /authorization: `Bearer \$\{token\}`/);
+  assert.match(room, /apikey: publishableKey/);
+  assert.match(room, /bucketName: meta\.bucket_name/);
+  assert.match(room, /objectName: meta\.object_path/);
+  assert.match(room, /team_id: teamId\(\), season_id: seasonId\(\), game_id: meta\.targetGameId/);
+});
+
+test('resumable upload progress, retry, cancel, failure, and finalization states are explicit', () => {
+  assert.match(room, /onProgress\(bytesUploaded, bytesTotal\)/);
+  assert.match(room, /Uploading \$\{progress\}%/);
+  assert.match(room, /findPreviousUploads/);
+  assert.match(room, /resumeFromPreviousUpload/);
+  assert.match(room, /Paused\/interrupted/);
+  assert.match(room, /Retrying\/resuming previous upload/);
+  assert.match(room, /Processing\/finalizing private film/);
+  assert.match(room, /Upload cancelled/);
+  assert.match(room, /upload_state: 'uploading'/);
+  assert.match(room, /upload_state: 'failed'/);
+  assert.match(room, /upload_state: 'uploaded'/);
+  assert.match(room, /data-film-clean-failed/);
 });
 
 test('mobile and tablet film contracts avoid fixed-width overflow', () => {
