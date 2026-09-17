@@ -82,6 +82,34 @@ literal only database score writer because existing `save_game_stats` also write
 score fields. This new RPC is score-isolated and does not write score, period
 goals, player/goalie rows, or season-record rollups.
 
+### Score-write architecture note (verified, unchanged in Phase A)
+
+Real-PostgreSQL inspection of the existing migrations confirms the dual-writer
+condition was already present before Phase A and is **not** introduced or
+worsened by this work:
+
+- `save_game_stats` (`20260908073105_016_game_stat_entry.sql`) accepts an
+  arbitrary payload and writes `team_game_team_stats.goals_for` /
+  `goals_against` directly from caller-supplied JSON, alongside player/goalie
+  rows, in one transaction.
+- `save_game_score` (`20260915000100_027_game_score_entry.sql`) is a narrower,
+  dedicated score-only writer that also writes the same `goals_for` /
+  `goals_against` columns and recomputes the season record.
+- Both are `SECURITY DEFINER`, both are grantable to `authenticated`, and both
+  can write the same score columns on the same row for the same game. This is
+  a genuine pre-existing dual-writer condition, confirmed by direct migration
+  inspection (not inferred).
+- Phase A's new `save_game_team_stats` RPC deliberately does **not** touch
+  either code path or either column, proven by an automated real-PostgreSQL
+  test (`score isolation`, see `tests/game-center-stats-phase-a-postgres.test.cjs`).
+- **No change was made** to `save_game_stats` or `save_game_score` in this
+  pass. Consolidating them onto a single authoritative score writer is a
+  separate, higher-risk change (it requires auditing every existing caller of
+  `save_game_stats` for score-field usage) and is out of scope for Phase A.
+  `save_game_score` is **not yet** the sole authoritative score path in the
+  running system; it is only guaranteed to be the sole score path reachable
+  through Phase A's new RPC.
+
 ## Total-shot behavior
 
 Totals are derived server-side only when all applicable periods for that side are

@@ -14,7 +14,8 @@
   },
   "devDependencies": {
     "electron": "^39.0.0",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "pg": "^8.23.0"
   },
   "build": {
     "appId": "com.foxes.hockeyanalytics",

@@ -142,7 +142,7 @@ begin
     raise exception 'A team and season are required.';
   end if;
 
-  if length(pg_catalog.btrim(pg_catalog.coalesce(target_source_game_id, ''))) = 0 then
+  if length(pg_catalog.btrim(coalesce(target_source_game_id, ''))) = 0 then
     raise exception 'A game is required.';
   end if;
 
