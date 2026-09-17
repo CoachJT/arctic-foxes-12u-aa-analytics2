@@ -26,29 +26,49 @@ test('Analytics loads a single shared filter boundary and all seven tabs', () =>
   assert.doesNotMatch(analyticsSource, /supabaseClient\.from/);
 });
 
-test('temporary shared helper preserves zero and excludes missing values from averages', () => {
+test('stub exposes exactly the assumed Session B interface shape and no more', () => {
   const filter = loadStub();
-  const rows = [{ shots_for: 0 }, { shots_for: 10 }, { shots_for: null }, {}];
-  assert.equal(filter.average(rows, 'shots_for'), 5);
-  assert.equal(filter.sum(rows, 'shots_for'), 10);
-  assert.equal(filter.recordedCount(rows, 'shots_for'), 2);
-  assert.equal(filter.average([{ shots_for: null }], 'shots_for'), null);
-  assert.equal(filter.ratio([{ power_play_success: 0, power_play_chances: 0 }], 'power_play_success', 'power_play_chances'), 0);
-  assert.equal(filter.ratio([{ power_play_success: 1, power_play_chances: null }], 'power_play_success', 'power_play_chances'), null);
+  assert.equal(typeof filter.getActiveFilterContext, 'function');
+  assert.equal(typeof filter.resolveSelectedGames, 'function');
+  assert.equal(typeof filter.getRecordedValue, 'function');
+  assert.equal(typeof filter.aggregateField, 'function');
+  // Analytics UI must call only through these four functions plus the
+  // temporaryStub marker — it must never invent its own selector/aggregate
+  // helper names on this module.
+  assert.deepEqual(Object.keys(filter).sort(), ['aggregateField', 'getActiveFilterContext', 'getRecordedValue', 'resolveSelectedGames', 'temporaryStub']);
 });
 
-test('temporary context selects loaded games without fabricating records', () => {
+test('getRecordedValue preserves explicit zero and treats null/undefined/empty as missing', () => {
   const filter = loadStub();
-  const context = filter.createContext({
-    games: [
-      { source_game_id: 'old', date: '2026-09-01' },
-      { source_game_id: 'new', date: '2026-09-10' }
-    ]
-  });
-  assert.deepEqual(Array.from(context.selectedGameIds), ['new', 'old']);
-  assert.equal(context.mode, 'all-season');
-  assert.equal(context.actualCount, 2);
-  assert.equal(context.availableCount, 2);
+  assert.deepEqual({ ...filter.getRecordedValue({ shots_for: 0 }, 'shots_for') }, { recorded: true, value: 0 });
+  assert.deepEqual({ ...filter.getRecordedValue({ shots_for: 10 }, 'shots_for') }, { recorded: true, value: 10 });
+  assert.deepEqual({ ...filter.getRecordedValue({ shots_for: null }, 'shots_for') }, { recorded: false, value: null });
+  assert.deepEqual({ ...filter.getRecordedValue({}, 'shots_for') }, { recorded: false, value: null });
+});
+
+test('aggregateField excludes missing values from the denominator per spec §2', () => {
+  const filter = loadStub();
+  const rows = [{ shots_for: 0 }, { shots_for: 10 }, { shots_for: null }, {}];
+  assert.deepEqual({ ...filter.aggregateField(rows, 'shots_for') }, { sum: 10, count: 2, average: 5 });
+  assert.deepEqual({ ...filter.aggregateField([{ shots_for: null }], 'shots_for') }, { sum: null, count: 0, average: null });
+  // 10 selected rows, 4 recorded -> denominator is 4, never 10 (binding example from spec §2).
+  const tenRows = [...Array(6).fill({}), { shots_for: 1 }, { shots_for: 1 }, { shots_for: 1 }, { shots_for: 1 }];
+  const result = filter.aggregateField(tenRows, 'shots_for');
+  assert.equal(tenRows.length, 10);
+  assert.equal(result.count, 4);
+  assert.equal(result.average, 1);
+});
+
+test('resolveSelectedGames dedupes by source_game_id and orders by date descending, ignoring filterContext (all-season only)', () => {
+  const filter = loadStub();
+  const filterContext = filter.getActiveFilterContext();
+  assert.equal(filterContext.mode, 'all-season');
+  const games = filter.resolveSelectedGames(filterContext, [
+    { source_game_id: 'old', date: '2026-09-01' },
+    { source_game_id: 'new', date: '2026-09-10' },
+    { source_game_id: 'new', date: '2026-09-10' }
+  ]);
+  assert.deepEqual(Array.from(games, game => game.source_game_id), ['new', 'old']);
 });
 
 test('Analytics renderer remains a browser script without CommonJS assumptions', () => {
