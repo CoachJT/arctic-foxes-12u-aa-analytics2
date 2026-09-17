@@ -92,7 +92,7 @@ const prototypeMode = prototypeHost
   && !authCallbackPresent
   && queryParams.get('prototype') === '1';
 
-const viewNames = { command: 'Command Center', schedule: 'Schedule', stats: 'Team Stats', players: 'Player Profiles', games: 'Game Center', film: 'Film Room', scouting: 'Scouting', reports: 'Coach Reports', development: 'Player Development', admin: 'Admin', settings: 'Team Settings' };
+const viewNames = { command: 'Command Center', schedule: 'Schedule', stats: 'Analytics', players: 'Player Profiles', games: 'Game Center', film: 'Film Room', scouting: 'Scouting', reports: 'Coach Reports', development: 'Player Development', admin: 'Admin', settings: 'Team Settings' };
 const roleViews = { command: PERMISSIONS.DASHBOARD_VIEW, schedule: PERMISSIONS.SCHEDULE_VIEW, stats: PERMISSIONS.STATS_VIEW, players: PERMISSIONS.PLAYERS_VIEW, games: PERMISSIONS.GAMES_VIEW, film: PERMISSIONS.FILM_VIEW, scouting: PERMISSIONS.SCOUTING_VIEW, reports: PERMISSIONS.REPORTS_VIEW, development: PERMISSIONS.PLAYERS_VIEW, admin: PERMISSIONS.ADMIN_USERS, settings: PERMISSIONS.DASHBOARD_VIEW };
 
 // The trailing text is a descriptive note, not a destination. It previously
@@ -141,6 +141,39 @@ const coachQol = window.FoxesCoachQol.createCoachQol({
 });
 const D = window.FoxesDashboard;
 const ActionCenter = window.FoxesActionCenter;
+const FE = window.FoxesStatsFilterEngine;
+// The single shared active filter context (spec §3.2). Game Center, the
+// Analytics tabs below, and any future consumer must read the currently
+// selected game set from here rather than filtering `phase1Data.games`
+// independently. Exposed on window so Session C's Analytics tabs (and any
+// other future consumer) can read/drive the same context without a second
+// instance.
+const statsFilterContext = FE.createFilterContext({
+  getGames: () => phase1Data?.games || [],
+  getScheduleGames: () => phase1Data?.schedule || []
+});
+// Navigation wiring (spec §4) that depends on the filter context: a game
+// or player selected anywhere reuses the exact same view + selection-state
+// convention the app already uses (selectedGameId + render('games')).
+function goToGameCenter(gameId) {
+  selectedGameId = gameId;
+  render('games');
+}
+function goToPlayerProfile(playerId) {
+  selectedPlayerId = playerId;
+  render('players');
+}
+// Command Center action -> Team Stats (Game Center tab). Game Center's own
+// tab strip (Session A's ownership) does not yet expose a distinct "Team
+// Stats" tab id -- today `gameWorkspaceTab` only has overview/players/
+// goalies -- so this opens Game Center for the game generically. Revisit
+// once Session A lands its tab structure so this can target that tab id
+// directly instead of only the default (overview) tab.
+function goToTeamStats(gameId) {
+  selectedGameId = gameId;
+  render('games');
+}
+window.FoxesFilterContext = Object.assign(statsFilterContext, { goToGameCenter, goToPlayerProfile, goToTeamStats });
 let dashboardLeaderCategory = 'points';
 let dashboardTrendWindow = 'season';
 // Tracks the last painted view so a same-view rerender (leader tabs, trend
@@ -331,13 +364,110 @@ function bindCoachGameControls() {
     }
   }));
 }
-function stats() { const edit = can(PERMISSIONS.STATS_EDIT_OFFICIAL, activeStaff); const record = phase1Record(); const teamStats = phase1Data?.teamStats || []; const totals = teamStats.reduce((sum, row) => ({ shots: sum.shots + phase1Number(row.shots_for), pp: sum.pp + phase1Number(row.power_play_success), ppChances: sum.ppChances + phase1Number(row.power_play_chances), foW: sum.foW + phase1Number(row.faceoff_wins), foL: sum.foL + phase1Number(row.faceoff_losses) }), { shots: 0, pp: 0, ppChances: 0, foW: 0, foL: 0 }); return shell('Team Stats','Read-only statistics from the synced team game data.',`<div class="grid stat-grid">${[['RECORD',`${record.wins}–${record.losses}–${record.ties}`,`${record.games_played} games`],['SHOTS / GAME',(totals.shots / Math.max(teamStats.length,1)).toFixed(1),'From team game stats'],['FACE-OFFS',`${((totals.foW / Math.max(totals.foW + totals.foL,1)) * 100).toFixed(1)}%`,'From team game stats'],['PLAYER-STAT ROWS',String(phase1Data?.playerStats?.length || 0),'Synced player-stat rows']].map(x=>`<div class="card stat-card"><small>${x[0]}</small><strong>${x[1]}</strong><span>${x[2]}</span></div>`).join('')}</div><section class="card">${cardTitle('Season overview','Supabase read-only')}${edit ? '<span class="permission-lock">Official stat editing remains disabled in this web read-only phase.</span>' : '<span class="permission-lock">Statistics are read-only for this phase.</span>'}<div class="table-wrap"><table class="data-table"><thead><tr><th>Metric</th><th>Total</th><th>Average / rate</th></tr></thead><tbody>${[['Goals for',record.goals_for, (record.goals_for / Math.max(record.games_played,1)).toFixed(2)],['Goals against',record.goals_against,(record.goals_against / Math.max(record.games_played,1)).toFixed(2)],['Shots on goal',totals.shots,(totals.shots / Math.max(teamStats.length,1)).toFixed(1)],['Power-play successes',totals.pp,`${totals.ppChances ? ((totals.pp / totals.ppChances) * 100).toFixed(1) : '0.0'}%`],['Face-off wins',totals.foW,`${((totals.foW / Math.max(totals.foW + totals.foL,1)) * 100).toFixed(1)}%`]].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('')}</tbody></table></div></section>`); }
+// Stats 2.0: one global filter bar + tabs for Overview, Trends, Special
+// Teams, Periods, Players, Goalies, Games (spec §5). This function owns
+// the filter bar + tab shell only (Session B); the 6 non-Overview tabs are
+// deliberately left as marked mount points for Session C's Analytics UI,
+// which must read the same shared `statsFilterContext` rather than
+// filtering games or averaging stats on its own (spec §3, §6).
+const STATS_TABS = [
+  ['overview', 'Overview'],
+  ['trends', 'Trends'],
+  ['specialTeams', 'Special Teams'],
+  ['periods', 'Periods'],
+  ['players', 'Players'],
+  ['goalies', 'Goalies'],
+  ['games', 'Games']
+];
+const STATS_MODES = [
+  ['season', 'All Season'],
+  ['last5', 'Last 5'],
+  ['last10', 'Last 10'],
+  ['last20', 'Last 20'],
+  ['custom', 'Custom range'],
+  ['single', 'Single Game']
+];
+function statsFilterBar(state, gameSet) {
+  const games = (phase1Data?.games || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const gameTypeOptions = [...new Set((phase1Data?.schedule || []).map(row => row.game_type).filter(Boolean))].sort();
+  const opponentOptions = [...new Set((phase1Data?.games || []).map(game => game.opponent).filter(Boolean))].sort();
+  return `<div class="card stats-filter-bar">
+    <div class="filter-row">
+      <label>Range<select id="statsFilterMode">${STATS_MODES.map(([value, label]) => `<option value="${value}"${state.mode === value ? ' selected' : ''}>${label}</option>`).join('')}</select></label>
+      ${state.mode === 'single' ? `<label>Game<select id="statsFilterGame">${games.map(g => `<option value="${escapeHtml(g.source_game_id)}"${state.params.gameId === g.source_game_id ? ' selected' : ''}>${escapeHtml(phase1Date(g.date))} · ${escapeHtml(g.opponent)}</option>`).join('')}</select></label>` : ''}
+      ${state.mode === 'custom' ? `<label>From<input type="date" id="statsFilterStart" value="${escapeHtml(state.params.start || '')}"></label><label>To<input type="date" id="statsFilterEnd" value="${escapeHtml(state.params.end || '')}"></label>` : ''}
+      <label>Game Type<select id="statsFilterGameType"><option value="">All types</option>${gameTypeOptions.map(type => `<option value="${escapeHtml(type)}"${state.modifiers.gameType === type ? ' selected' : ''}>${escapeHtml(type)}</option>`).join('')}</select></label>
+      <label>Opponent<select id="statsFilterOpponent"><option value="">All opponents</option>${opponentOptions.map(name => `<option value="${escapeHtml(name)}"${state.modifiers.opponent === name ? ' selected' : ''}>${escapeHtml(name)}</option>`).join('')}</select></label>
+    </div>
+    <p class="sub">${gameSet.note ? `${escapeHtml(gameSet.note)} · ` : ''}${gameSet.available} game${gameSet.available === 1 ? '' : 's'} selected</p>
+  </div>`;
+}
+function statsOverviewTab(gameSet, teamStatsByGame) {
+  const fields = ['goals_for', 'goals_against', 'shots_for', 'shots_against', 'power_play_success', 'power_play_chances', 'penalty_kill_success', 'penalty_kill_chances', 'faceoff_wins', 'faceoff_losses'];
+  const agg = FE.aggregateFields(gameSet.games, teamStatsByGame, fields);
+  const fmt = value => value === null ? '—' : Number.isInteger(value) ? String(value) : value.toFixed(2);
+  const rate = (madeSum, totalSum, recordedCount) => recordedCount > 0 && totalSum > 0 ? `${((madeSum / totalSum) * 100).toFixed(1)}%` : '—';
+  return `<section class="card">${cardTitle('Team overview', `${gameSet.available} selected game${gameSet.available === 1 ? '' : 's'} · averages exclude games without a recorded value (see below)`)}
+  <div class="table-wrap"><table class="data-table"><thead><tr><th>Metric</th><th>Total</th><th>Average / rate</th><th>Recorded in</th></tr></thead><tbody>
+  <tr><td>Goals for</td><td>${agg.goals_for.sum}</td><td>${fmt(agg.goals_for.average)}</td><td>${agg.goals_for.recordedCount} of ${gameSet.available}</td></tr>
+  <tr><td>Goals against</td><td>${agg.goals_against.sum}</td><td>${fmt(agg.goals_against.average)}</td><td>${agg.goals_against.recordedCount} of ${gameSet.available}</td></tr>
+  <tr><td>Shots for</td><td>${agg.shots_for.sum}</td><td>${fmt(agg.shots_for.average)}</td><td>${agg.shots_for.recordedCount} of ${gameSet.available}</td></tr>
+  <tr><td>Shots against</td><td>${agg.shots_against.sum}</td><td>${fmt(agg.shots_against.average)}</td><td>${agg.shots_against.recordedCount} of ${gameSet.available}</td></tr>
+  <tr><td>Power play</td><td>${agg.power_play_success.sum} / ${agg.power_play_chances.sum}</td><td>${rate(agg.power_play_success.sum, agg.power_play_chances.sum, agg.power_play_chances.recordedCount)}</td><td>${agg.power_play_chances.recordedCount} of ${gameSet.available}</td></tr>
+  <tr><td>Penalty kill</td><td>${agg.penalty_kill_success.sum} / ${agg.penalty_kill_chances.sum}</td><td>${rate(agg.penalty_kill_success.sum, agg.penalty_kill_chances.sum, agg.penalty_kill_chances.recordedCount)}</td><td>${agg.penalty_kill_chances.recordedCount} of ${gameSet.available}</td></tr>
+  <tr><td>Face-offs</td><td>${agg.faceoff_wins.sum} / ${agg.faceoff_wins.sum + agg.faceoff_losses.sum}</td><td>${rate(agg.faceoff_wins.sum, agg.faceoff_wins.sum + agg.faceoff_losses.sum, agg.faceoff_wins.recordedCount)}</td><td>${agg.faceoff_wins.recordedCount} of ${gameSet.available}</td></tr>
+  </tbody></table></div></section>`;
+}
+function statsStubTab(label) {
+  return `<section class="card empty-view"><div class="empty-icon">✦</div><h2>${label}</h2><p>This tab reads the shared filter context above (<code>window.FoxesFilterContext.getGameSet()</code>) but its content is Analytics UI (Session C) scope and is not built here.</p></section>`;
+}
+function stats() {
+  const teamStatsByGame = new Map((phase1Data?.teamStats || []).map(row => [row.source_game_id, row]));
+  const state = statsFilterContext.getState();
+  const gameSet = statsFilterContext.getGameSet();
+  const tabStrip = `<nav class="workspace-tabs" aria-label="Analytics sections">${STATS_TABS.map(([id, label]) => `<button type="button" data-stats-tab="${id}" aria-pressed="${statsActiveTab === id}" class="${statsActiveTab === id ? 'active' : ''}">${label}</button>`).join('')}</nav>`;
+  const tabContent = statsActiveTab === 'overview' ? statsOverviewTab(gameSet, teamStatsByGame) : statsStubTab(STATS_TABS.find(([id]) => id === statsActiveTab)?.[1] || 'Analytics');
+  return shell('Analytics', 'One shared filter — every Analytics tab reads the same selected games.', `${statsFilterBar(state, gameSet)}${tabStrip}${tabContent}`);
+}
+function bindStatsControls() {
+  document.querySelector('#statsFilterMode')?.addEventListener('change', event => {
+    const mode = event.target.value;
+    const games = (phase1Data?.games || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const params = mode === 'single' ? { gameId: games[0]?.source_game_id || '' } : mode === 'custom' ? { start: '', end: '' } : {};
+    statsFilterContext.setMode(mode, params);
+    render('stats');
+  });
+  document.querySelector('#statsFilterGame')?.addEventListener('change', event => {
+    statsFilterContext.setMode('single', { gameId: event.target.value });
+    render('stats');
+  });
+  document.querySelector('#statsFilterStart')?.addEventListener('change', event => {
+    statsFilterContext.setMode('custom', { ...statsFilterContext.getState().params, start: event.target.value });
+    render('stats');
+  });
+  document.querySelector('#statsFilterEnd')?.addEventListener('change', event => {
+    statsFilterContext.setMode('custom', { ...statsFilterContext.getState().params, end: event.target.value });
+    render('stats');
+  });
+  document.querySelector('#statsFilterGameType')?.addEventListener('change', event => {
+    statsFilterContext.setModifiers({ gameType: event.target.value || null });
+    render('stats');
+  });
+  document.querySelector('#statsFilterOpponent')?.addEventListener('change', event => {
+    statsFilterContext.setModifiers({ opponent: event.target.value || null });
+    render('stats');
+  });
+  document.querySelectorAll('[data-stats-tab]').forEach(button => button.addEventListener('click', () => {
+    statsActiveTab = button.dataset.statsTab;
+    render('stats');
+  }));
+}
 function players() {
   const totals = playerStatTotals();
   const canEditRoster = can(PERMISSIONS.PLAYERS_EVALUATE, activeStaff);
   return shell('Player Profiles', canEditRoster ? 'Your team, organized by position and jersey number.' : 'Your team, organized by position and jersey number.', `
     ${canEditRoster ? `<details class="card workspace-disclosure roster-management" ${phase1Data?.roster?.length ? '' : 'open'}><summary>Manage roster · add, edit or remove players</summary><div id="coachRosterHost">${coachQol.rosterWorkspaceHtml(window.PuckWorkspace.sortRoster(phase1Data?.roster || []))}</div></details>` : ''}
-    <section class="card roster-overview">${cardTitle(`Roster · ${phase1Data?.roster?.length || 0} players`, 'Forwards → Defense → Goalies · jersey order')}<div class="table-wrap"><table class="data-table"><thead><tr><th>Player</th><th>Position</th><th>Games</th><th>Goals</th><th>Points</th><th>+ / −</th><th>Status</th></tr></thead><tbody>${window.PuckWorkspace.sortRoster(phase1Data?.roster || []).map(player => { const stat = totals.get(player.source_player_id) || {}; return `<tr><td><div class="player-cell"><span class="player-photo">${escapeHtml(player.jersey_number)}</span><strong>${escapeHtml(player.name)}</strong></div></td><td data-label="Position" class="role">${escapeHtml(player.position)}</td><td data-label="GP">${phase1Number(stat.games)}</td><td data-label="G">${phase1Number(stat.goals)}</td><td data-label="PTS">${phase1Number(stat.goals) + phase1Number(stat.assists)}</td><td data-label="+/−" class="trend-up">${phase1Number(stat.plus_minus)}</td><td><span class="tag">${canEditRoster ? 'Editable' : 'View only'}</span></td></tr>`; }).join('') || `<tr><td colspan="7">${canEditRoster ? 'Your roster is empty. Add players above before entering game stats.' : 'No roster data is available.'}</td></tr>`}</tbody></table></div></section>`);
+    <section class="card roster-overview">${cardTitle(`Roster · ${phase1Data?.roster?.length || 0} players`, 'Forwards → Defense → Goalies · jersey order')}<div class="table-wrap"><table class="data-table"><thead><tr><th>Player</th><th>Position</th><th>Games</th><th>Goals</th><th>Points</th><th>+ / −</th><th>Status</th></tr></thead><tbody>${window.PuckWorkspace.sortRoster(phase1Data?.roster || []).map(player => { const stat = totals.get(player.source_player_id) || {}; const isSelected = selectedPlayerId && player.source_player_id === selectedPlayerId; return `<tr data-player-row="${escapeHtml(player.source_player_id)}"${isSelected ? ' class="player-row-selected"' : ''}><td><div class="player-cell"><span class="player-photo">${escapeHtml(player.jersey_number)}</span><strong>${escapeHtml(player.name)}</strong></div></td><td data-label="Position" class="role">${escapeHtml(player.position)}</td><td data-label="GP">${phase1Number(stat.games)}</td><td data-label="G">${phase1Number(stat.goals)}</td><td data-label="PTS">${phase1Number(stat.goals) + phase1Number(stat.assists)}</td><td data-label="+/−" class="trend-up">${phase1Number(stat.plus_minus)}</td><td><span class="tag">${canEditRoster ? 'Editable' : 'View only'}</span></td></tr>`; }).join('') || `<tr><td colspan="7">${canEditRoster ? 'Your roster is empty. Add players above before entering game stats.' : 'No roster data is available.'}</td></tr>`}</tbody></table></div></section>`);
 }
 
 function bindCoachRosterControls() {
@@ -398,6 +528,8 @@ function bindCoachRosterControls() {
 }
 let selectedGameId = '';
 let gameWorkspaceTab = 'overview';
+let selectedPlayerId = '';
+let statsActiveTab = 'overview';
 function gameCenter() {
   const teamStats = new Map((phase1Data?.teamStats || []).map(row => [row.source_game_id, row]));
   const games = window.PuckGameVisibility.activeGames(phase1Data?.schedule, phase1Data?.games).sort((a, b) => String(b.date).localeCompare(String(a.date)));
@@ -908,7 +1040,13 @@ function render(view = 'command') {
   });
   if (view === 'admin') bindAdminControls();
   if (view === 'schedule') bindCoachGameControls();
-  if (view === 'players') bindCoachRosterControls();
+  if (view === 'players') {
+    bindCoachRosterControls();
+    if (selectedPlayerId) {
+      document.querySelector(`[data-player-row="${CSS.escape(selectedPlayerId)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+  if (view === 'stats') bindStatsControls();
   if (view === 'games') {
     bindCoachStatsControls();
     document.querySelector('[data-remove-duplicate]')?.addEventListener('click', async event => {
