@@ -143,6 +143,7 @@ const D = window.FoxesDashboard;
 const ActionCenter = window.FoxesActionCenter;
 let dashboardLeaderCategory = 'points';
 let dashboardTrendWindow = 'season';
+let analyticsTab = 'overview';
 // Tracks the last painted view so a same-view rerender (leader tabs, trend
 // window, data refresh) keeps the reader's scroll position instead of
 // snapping the page back to the top.
@@ -331,7 +332,18 @@ function bindCoachGameControls() {
     }
   }));
 }
-function stats() { const edit = can(PERMISSIONS.STATS_EDIT_OFFICIAL, activeStaff); const record = phase1Record(); const teamStats = phase1Data?.teamStats || []; const totals = teamStats.reduce((sum, row) => ({ shots: sum.shots + phase1Number(row.shots_for), pp: sum.pp + phase1Number(row.power_play_success), ppChances: sum.ppChances + phase1Number(row.power_play_chances), foW: sum.foW + phase1Number(row.faceoff_wins), foL: sum.foL + phase1Number(row.faceoff_losses) }), { shots: 0, pp: 0, ppChances: 0, foW: 0, foL: 0 }); return shell('Team Stats','Read-only statistics from the synced team game data.',`<div class="grid stat-grid">${[['RECORD',`${record.wins}–${record.losses}–${record.ties}`,`${record.games_played} games`],['SHOTS / GAME',(totals.shots / Math.max(teamStats.length,1)).toFixed(1),'From team game stats'],['FACE-OFFS',`${((totals.foW / Math.max(totals.foW + totals.foL,1)) * 100).toFixed(1)}%`,'From team game stats'],['PLAYER-STAT ROWS',String(phase1Data?.playerStats?.length || 0),'Synced player-stat rows']].map(x=>`<div class="card stat-card"><small>${x[0]}</small><strong>${x[1]}</strong><span>${x[2]}</span></div>`).join('')}</div><section class="card">${cardTitle('Season overview','Supabase read-only')}${edit ? '<span class="permission-lock">Official stat editing remains disabled in this web read-only phase.</span>' : '<span class="permission-lock">Statistics are read-only for this phase.</span>'}<div class="table-wrap"><table class="data-table"><thead><tr><th>Metric</th><th>Total</th><th>Average / rate</th></tr></thead><tbody>${[['Goals for',record.goals_for, (record.goals_for / Math.max(record.games_played,1)).toFixed(2)],['Goals against',record.goals_against,(record.goals_against / Math.max(record.games_played,1)).toFixed(2)],['Shots on goal',totals.shots,(totals.shots / Math.max(teamStats.length,1)).toFixed(1)],['Power-play successes',totals.pp,`${totals.ppChances ? ((totals.pp / totals.ppChances) * 100).toFixed(1) : '0.0'}%`],['Face-off wins',totals.foW,`${((totals.foW / Math.max(totals.foW + totals.foL,1)) * 100).toFixed(1)}%`]].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('')}</tbody></table></div></section>`); }
+function stats() {
+  return window.FoxesAnalyticsUI.render({
+    data: {
+      games: phase1Data?.games || [],
+      roster: phase1Data?.roster || [],
+      playerStats: phase1Data?.playerStats || [],
+      teamStats: phase1Data?.teamStats || [],
+      teamName: tenantName()
+    },
+    tab: analyticsTab
+  });
+}
 function players() {
   const totals = playerStatTotals();
   const canEditRoster = can(PERMISSIONS.PLAYERS_EVALUATE, activeStaff);
@@ -972,6 +984,10 @@ function render(view = 'command') {
     filmRoom.load().then(() => filmRoom.render());
   }
   if (view === 'command') bindDashboardControls();
+  if (view === 'stats') document.querySelectorAll('[data-analytics-tab]').forEach(button => button.addEventListener('click', () => {
+    analyticsTab = button.dataset.analyticsTab;
+    render('stats');
+  }));
   nav.forEach(item => { const allowed = can(roleViews[item.dataset.view], activeStaff); item.hidden = !allowed; item.classList.toggle('active', item.dataset.view === view); if (item.dataset.view === view) item.setAttribute('aria-current', 'page'); else item.removeAttribute('aria-current'); });
   document.querySelector('.nav-item.active')?.closest('details')?.setAttribute('open', '');
   document.querySelector('#sidebar').classList.remove('open'); document.querySelector('#scrim').classList.remove('show');
@@ -1225,7 +1241,7 @@ async function loadPhase1Data(teamId) {
   read('schedule', 'team_schedule_games', 'id,source_schedule_id,date,time,opponent,home_away,game_type,location,notes,linked_game_source_id', PERMISSIONS.SCHEDULE_VIEW);
   read('games', 'team_games', 'id,source_game_id,season_id,date,opponent,period_length_min', PERMISSIONS.GAMES_VIEW, undefined, true);
   read('playerStats', 'team_game_player_stats', 'source_game_id,season_id,source_player_id,player_type,gp,goals,assists,shots,penalty_minutes,plus_minus,blocks,faceoff_wins,faceoff_losses,faceoff_attempts,power_play_goals,power_play_assists,power_play_points,short_handed_goals,short_handed_assists,short_handed_points,game_winning_goals,game_tying_goals,takeaways,giveaways,chances,toi_minutes,minutes,saves,goals_against,wins,losses,ties,shutouts', PERMISSIONS.STATS_VIEW, undefined, true);
-  read('teamStats', 'team_game_team_stats', 'source_game_id,season_id,goals_for,goals_against,shots_for,shots_against,power_play_chances,power_play_success,penalty_kill_chances,penalty_kill_success,faceoff_wins,faceoff_losses', PERMISSIONS.STATS_VIEW, undefined, true);
+  read('teamStats', 'team_game_team_stats', 'source_game_id,season_id,goals_for,goals_against,shots_for,shots_against,shots_for_p1,shots_for_p2,shots_for_p3,shots_for_ot,shots_against_p1,shots_against_p2,shots_against_p3,shots_against_ot,power_play_chances,power_play_success,penalty_kill_chances,penalty_kill_success,faceoff_wins,faceoff_losses', PERMISSIONS.STATS_VIEW, undefined, true);
   const seasonKey = seasonContext.selectedSeason?.season_key || '';
   const seasonRequest = can(PERMISSIONS.REPORTS_VIEW, activeStaff)
     ? (seasonKey
