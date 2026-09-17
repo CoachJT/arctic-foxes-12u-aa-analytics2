@@ -7,6 +7,12 @@ const dashboardSource = fs.readFileSync('web/dashboard.js', 'utf8');
 const appSource = fs.readFileSync('web/app.js', 'utf8');
 const indexSource = fs.readFileSync('web/index.html', 'utf8');
 const stylesSource = fs.readFileSync('web/styles.css', 'utf8');
+test('points leaders exclude incomplete goal/assist pairs', () => {
+  const dashboard=loadDashboard();
+  const rows=dashboard.playerTotals([{source_player_id:'p',position:'C',name:'Test'}],[{source_player_id:'p',source_game_id:'g',player_type:'skater',goals:null,assists:2}]);
+  assert.equal(rows[0].points,null);
+  assert.equal(dashboard.leaders(rows,'points').length,0);
+});
 
 function loadDashboard() {
   const context = { window: {} };

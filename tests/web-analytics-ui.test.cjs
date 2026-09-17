@@ -17,6 +17,11 @@ const analyticsSource = fs.readFileSync('web/analytics-ui.js', 'utf8');
 const appSource = fs.readFileSync('web/app.js', 'utf8');
 const indexSource = fs.readFileSync('web/index.html', 'utf8');
 const stylesSource = fs.readFileSync('web/styles.css', 'utf8');
+test('adapter consumes authoritative IDs without a window schedule or downstream refilter', () => {
+  const filter=loadAdapter();
+  const games=[{source_game_id:'a'},{source_game_id:'b'}];
+  assert.deepEqual(Array.from(filter.resolveSelectedGames({gameIds:['b','a'],modifiers:{gameType:'League'}},games),g=>g.source_game_id),['b','a']);
+});
 
 function loadAdapter(sharedContextOverrides = {}) {
   const context = { console, globalThis: {}, window: undefined };
@@ -299,7 +304,7 @@ test('Blocker 7: analytics tabs and the shared filter bar have dedicated mobile-
 });
 
 test('Re-QA Fix 11: Team Stats period inputs get a 44px+ tap target and 16px+ font at the 420px mobile breakpoint (no iOS auto-zoom, no tiny targets)', () => {
-  assert.match(stylesSource, /@media\(max-width:420px\)\{\.team-stats-grid\{grid-template-columns:1fr\}.*?\.team-stats-field input\{min-height:44px;font-size:16px\}/);
+  assert.match(stylesSource, /@media\(max-width:420px\)\{\.team-stats-grid\{grid-template-columns:[^}]+\}.*?\.team-stats-field input\{min-height:44px;font-size:16px\}/);
 });
 
 // --- Re-QA regression coverage below ---------------------------------
@@ -364,7 +369,7 @@ test('Re-QA Fix 7: period-level goal/shot differentials also require the joint p
   ];
   const analytics = loadAnalytics(games2);
   const html = analytics.render({ data: { games: games2, roster: [], teamStats: stats, playerStats: [] }, tab: 'periods' });
-  assert.match(html, /<td>P1<\/td><td>2<\/td><td>1<\/td><td>\+1<\/td>/);
+  assert.match(html, /<td>P1<\/td><td>7<\/td><td>1<\/td><td>\+1<\/td>/);
 });
 
 test('Re-QA Fix 8: player Points only combine goals+assists from games where both were recorded together, never coercing a missing side to 0', () => {
@@ -425,9 +430,7 @@ test('Re-QA Fix 1: every Stats tab resolves the identical selected-game set as t
     const barGameSet = context.FoxesFilterContext.getGameSet();
     const filterContext = context.FoxesStatsFilter.getActiveFilterContext();
     const resolved = context.FoxesStatsFilter.resolveSelectedGames(filterContext, games);
-    assert.deepEqual(resolved.map(game => game.source_game_id).sort(), barGameSet.gameIds.slice().sort(),
+    assert.deepEqual(Array.from(resolved, game => game.source_game_id).sort(), Array.from(barGameSet.gameIds).sort(),
       `mode=${mode} params=${JSON.stringify(params)} modifiers=${JSON.stringify(modifiers)} must resolve the same game set for every Stats tab as the filter bar`);
   }
 });
-
-

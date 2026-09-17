@@ -220,15 +220,15 @@
     const rows = PERIODS.map(([suffix, label]) => {
       const goalPair = pairedAggregate(filter, mergedGames, `goals_for_${suffix}`, `goals_against_${suffix}`);
       const shotPair = pairedAggregate(filter, mergedGames, `shots_for_${suffix}`, `shots_against_${suffix}`);
-      const gf = { sum: goalPair.count ? goalPair.sumA : null, count: goalPair.count };
-      const ga = { sum: goalPair.count ? goalPair.sumB : null, count: goalPair.count };
-      const sf = { sum: shotPair.count ? shotPair.sumA : null, count: shotPair.count };
-      const sa = { sum: shotPair.count ? shotPair.sumB : null, count: shotPair.count };
+      const gf = filter.aggregateField(mergedGames, `goals_for_${suffix}`);
+      const ga = filter.aggregateField(mergedGames, `goals_against_${suffix}`);
+      const sf = filter.aggregateField(mergedGames, `shots_for_${suffix}`);
+      const sa = filter.aggregateField(mergedGames, `shots_against_${suffix}`);
       const goalDiff = goalPair.count ? goalPair.sumA - goalPair.sumB : null;
       const shotDiff = shotPair.count ? shotPair.sumA - shotPair.sumB : null;
       return { label, gf, ga, sf, sa, goalDiff, shotDiff };
     });
-    return `<p class="sub">OT applicability is not inferred: a game without a recorded OT period is treated as missing, never as zero.</p>
+    return `<p class="sub">OT applicability is not inferred: a game without a recorded OT period is treated as missing, never as zero. Each total uses its recorded observations; differentials use only games with both values recorded.</p>
       <div class="analytics-chart-block"><h3>Goals by period</h3>${periodBarChart(rows, 'gf', 'ga', 'Goals')}</div>
       <div class="analytics-chart-block"><h3>Shots by period</h3>${periodBarChart(rows, 'sf', 'sa', 'Shots')}</div>
       ${table(['Period', 'GF', 'GA', 'Goal diff', 'SF', 'SA', 'Shot diff'], rows.map(row => `<tr><td>${esc(row.label)}</td><td>${display(row.gf.sum)}</td><td>${display(row.ga.sum)}</td><td>${signed(row.goalDiff)}</td><td>${display(row.sf.sum)}</td><td>${display(row.sa.sum)}</td><td>${signed(row.shotDiff)}</td></tr>`))}`;

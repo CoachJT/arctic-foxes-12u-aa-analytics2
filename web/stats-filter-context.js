@@ -40,19 +40,11 @@
     return { mode: state.mode, params: state.params, modifiers: state.modifiers, gameIds: resolved.gameIds };
   }
 
-  // Delegates to Session B's real engine using the current shared filter
-  // state, restricted to whatever `allGames` the caller supplied (the same
-  // phase1Data.games source the shared context itself reads). This keeps
-  // Analytics consistent with whatever Game Center / Stats currently show,
-  // without Analytics computing its own filtering logic.
+  // Reuse the authoritative selected IDs and order; schedule data is lexical
+  // in app.js and must not be looked up or filtered again through window.
   function resolveSelectedGames(filterContext, allGames) {
-    const engine = root.FoxesStatsFilterEngine;
-    if (!engine) {
-      throw new Error('window.FoxesStatsFilterEngine is not available. Session B\'s shared filter engine script must load before Analytics UI.');
-    }
-    const base = engine.computeGameSet({ games: allGames || [], mode: filterContext.mode, params: filterContext.params });
-    const withModifiers = engine.applyModifiers(base, root.phase1Data?.schedule || [], filterContext.modifiers || {});
-    return withModifiers.games;
+    const byId = new Map((allGames || []).map(game => [game.source_game_id, game]));
+    return [...new Set(filterContext.gameIds || [])].map(id => byId.get(id)).filter(Boolean);
   }
 
   // A value is "recorded" per spec §2 when it is present and not

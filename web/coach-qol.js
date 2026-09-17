@@ -377,6 +377,10 @@
     }
 
     function derivedGoalie(row) {
+      if (row?.saves === null || row?.saves === undefined || row?.saves === '' ||
+          row?.goals_against === null || row?.goals_against === undefined || row?.goals_against === '') {
+        return { shotsAgainst: null, savePct: null };
+      }
       const saves = Number(row?.saves || 0);
       const ga = Number(row?.goals_against || 0);
       const sa = saves + ga;

@@ -109,14 +109,16 @@
       current.blocks += num(row.blocks);
       current.fow += num(row.faceoff_wins);
       current.fol += num(row.faceoff_losses);
-      current.byGame.push({ gameId: row.source_game_id, points: num(row.goals) + num(row.assists) });
+      if (row.goals != null && row.goals !== '' && row.assists != null && row.assists !== '') {
+        current.byGame.push({ gameId: row.source_game_id, points: num(row.goals) + num(row.assists) });
+      }
       totals.set(row.source_player_id, current);
     });
     return (roster || [])
       .filter(player => player.position !== 'G')
       .map(player => {
         const stats = totals.get(player.source_player_id) || { gp: 0, goals: 0, assists: 0, shots: 0, pim: 0, plusMinus: 0, blocks: 0, fow: 0, fol: 0, byGame: [] };
-        return { player, ...stats, points: stats.goals + stats.assists, faceoffs: stats.fow + stats.fol };
+        return { player, ...stats, points: stats.byGame.length ? stats.byGame.reduce((sum, game) => sum + game.points, 0) : null, faceoffs: stats.fow + stats.fol };
       });
   }
 

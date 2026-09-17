@@ -553,6 +553,7 @@ function teamStatsPatch() {
     .map(([field]) => [field, teamStatsEditor.draft[field].trim() === '' ? null : Number(teamStatsEditor.draft[field])]));
 }
 function confirmTeamStatsDiscard() {
+  if (teamStatsEditor.saving) return false;
   if (!teamStatsEditor.dirty) return true;
   if (!window.confirm('You have unsaved Team Stats changes. Leave without saving?')) return false;
   // Actually restore the draft to the last-saved baseline -- previously this
@@ -647,11 +648,11 @@ function gameCenter() {
     return `<div class="table-wrap"><table class="data-table game-player-table"><thead><tr>${['Player', ...headers].map((label, index) => `<th><button type="button" class="table-sort" data-game-sort="${index}" aria-label="Sort by ${escapeHtml(label)}">${escapeHtml(label)} <span aria-hidden="true">↕</span></button></th>`).join('')}</tr></thead><tbody>${players.map(p => {
       const row = rowsByPlayer.get(p.source_player_id);
       const derived = coachQol.derivedGoalie(row);
-      const values = type === 'goalie' ? [row?.saves, row?.goals_against, row ? derived.shotsAgainst : null, row && derived.savePct !== null ? (derived.savePct * 100).toFixed(1) + '%' : null] : [p.position, row?.goals, row?.assists, row?.shots, row ? phase1Number(row.goals) + phase1Number(row.assists) : null, row?.plus_minus];
+      const values = type === 'goalie' ? [row?.saves, row?.goals_against, row ? derived.shotsAgainst : null, row && derived.savePct !== null ? (derived.savePct * 100).toFixed(1) + '%' : null] : [p.position, row?.goals, row?.assists, row?.shots, row?.goals != null && row.goals !== '' && row?.assists != null && row.assists !== '' ? phase1Number(row.goals) + phase1Number(row.assists) : null, row?.plus_minus];
       return `<tr><td data-sort-value="${escapeHtml(p.name)}"><span class="jersey">#${escapeHtml(p.jersey_number)}</span> ${escapeHtml(p.name)}</td>${values.map(v => `<td data-sort-value="${v == null ? '' : escapeHtml(v)}">${v == null ? '—' : escapeHtml(v)}</td>`).join('')}</tr>`;
     }).join('') || `<tr><td colspan="${headers.length + 1}">No players in this group.</td></tr>`}</tbody></table></div>`;
   };
-  const gameLeaders = roster.filter(p => window.PuckWorkspace.position(p) !== 'G' && rowsByPlayer.has(p.source_player_id)).map(p => ({player:p, row:rowsByPlayer.get(p.source_player_id)})).sort((a,b) => (phase1Number(b.row.goals)+phase1Number(b.row.assists)) - (phase1Number(a.row.goals)+phase1Number(a.row.assists))).slice(0,3);
+  const gameLeaders = roster.filter(p => window.PuckWorkspace.position(p) !== 'G' && rowsByPlayer.has(p.source_player_id)).map(p => ({player:p, row:rowsByPlayer.get(p.source_player_id)})).filter(({row}) => row.goals != null && row.goals !== '' && row.assists != null && row.assists !== '').sort((a,b) => (phase1Number(b.row.goals)+phase1Number(b.row.assists)) - (phase1Number(a.row.goals)+phase1Number(a.row.assists))).slice(0,3);
   const comparison = (label, ours, theirs) => {
     const known = ours != null && theirs != null;
     const sum = known ? phase1Number(ours) + phase1Number(theirs) : 0;
@@ -677,8 +678,21 @@ function bindTeamStatsEditor() {
     teamStatsEditor.dirty = Object.keys(teamStatsPatch()).length > 0;
     const status = editor.querySelector('[data-team-stats-status]');
     if (status) { status.textContent = teamStatsEditor.dirty ? 'Unsaved changes' : ''; status.className = 'coach-form-status'; }
+    const row = phase1Data.teamStats.find(row => row.source_game_id === teamStatsEditor.gameId);
+    ['for', 'against'].forEach((side, index) => {
+      const total = teamStatsTotalFromDraft(teamStatsEditor.draft, side);
+      const card = editor.querySelectorAll('.team-stats-total-grid > div')[index];
+      const fallback = teamStatsDisplayTotal(row, side);
+      card.querySelector('strong').textContent = total ?? fallback ?? 'Not enough data yet';
+      card.querySelector('span').textContent = total === null
+        ? 'Period breakdown incomplete · previous total retained'
+        : 'Live total from your unsaved entries';
+    });
   }));
   editor.querySelector('[data-save-team-stats]')?.addEventListener('click', async event => {
+    if (teamStatsEditor.saving) return;
+    const saveButton = event.currentTarget;
+    const inputs = editor.querySelectorAll('[data-team-stat-field]');
     const status = editor.querySelector('[data-team-stats-status]');
     try {
       validateTeamStatsDraft();
@@ -689,8 +703,9 @@ function bindTeamStatsEditor() {
         return;
       }
       teamStatsEditor.saving = true;
-      event.currentTarget.disabled = true;
-      event.currentTarget.textContent = 'Saving…';
+      inputs.forEach(input => { input.disabled = true; });
+      saveButton.disabled = true;
+      saveButton.textContent = 'Saving…';
       status.textContent = '';
       const { error } = await supabaseClient.rpc('save_game_team_stats', {
         target_team_id: authTeam.team_id,
@@ -716,8 +731,9 @@ function bindTeamStatsEditor() {
       teamStatsEditor.status = error.message || 'Team Stats could not be saved.';
       status.textContent = teamStatsEditor.status;
       status.className = 'coach-form-status err';
-      event.currentTarget.disabled = false;
-      event.currentTarget.textContent = 'Save Team Stats';
+      inputs.forEach(input => { input.disabled = false; });
+      saveButton.disabled = false;
+      saveButton.textContent = 'Save Team Stats';
     }
   });
 }

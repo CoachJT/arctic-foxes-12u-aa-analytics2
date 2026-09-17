@@ -7,6 +7,15 @@ const coachSource = fs.readFileSync('web/coach-qol.js', 'utf8');
 const appSource = fs.readFileSync('web/app.js', 'utf8');
 const indexSource = fs.readFileSync('web/index.html', 'utf8');
 const stylesSource = fs.readFileSync('web/styles.css', 'utf8');
+test('Game Center goalie derivatives require both saves and GA, preserving zero', () => {
+  const coach = loadCoach({});
+  for (const row of [{saves:null,goals_against:4},{saves:10,goals_against:null},{saves:'',goals_against:2}]) {
+    assert.equal(coach.derivedGoalie(row).shotsAgainst, null);
+    assert.equal(coach.derivedGoalie(row).savePct, null);
+  }
+  assert.equal(coach.derivedGoalie({saves:0,goals_against:0}).shotsAgainst,0);
+  assert.equal(coach.derivedGoalie({saves:0,goals_against:0}).savePct,null);
+});
 const migrationSource = fs.readFileSync('supabase/migrations/20260908073105_016_game_stat_entry.sql', 'utf8');
 const scoreMigrationSource = fs.readFileSync('supabase/migrations/20260915000100_027_game_score_entry.sql', 'utf8');
 
