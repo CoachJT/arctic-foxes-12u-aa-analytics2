@@ -217,6 +217,7 @@ body{background:radial-gradient(circle at 72% -15%,#34363a 0,#0d0e10 39%)}
 .stats-filter-bar .filter-row{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end}
 .stats-filter-bar label{display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--muted)}
 .stats-filter-bar select,.stats-filter-bar input{background:#111318;color:var(--ink,#fff);border:1px solid var(--line);border-radius:6px;padding:7px 9px;font-size:12px}
+@media(max-width:480px){.stats-filter-bar label{flex:1 1 100%}.stats-filter-bar select,.stats-filter-bar input{width:100%;box-sizing:border-box}}
 .player-row-selected{background:#1c2b3a}
 
 .goalie-row:last-of-type{border-bottom:0}
@@ -228,3 +229,29 @@ body{background:radial-gradient(circle at 72% -15%,#34363a 0,#0d0e10 39%)}
 .trend-compare{font-size:12px;color:var(--muted)}
 .dash-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
 @media(max-width:700px){.leader-tabs{overflow-x:auto;flex-wrap:nowrap;padding-bottom:4px}.leader-tab{white-space:nowrap}.goalie-row{grid-template-columns:auto 1fr}.goalie-row .leader-value{grid-column:1/-1}.sparkline{max-width:100%}}
+.analytics-tabs{display:flex;gap:4px;overflow-x:auto;margin-bottom:16px}
+.analytics-tabs button{white-space:nowrap;flex:0 0 auto}
+.analytics-chart-block{margin-bottom:24px}
+.analytics-chart-block h3{font:600 13px "Space Grotesk";margin:0 0 10px;color:var(--muted)}
+.analytics-bar-chart{height:140px;display:flex;align-items:flex-end;gap:8px;padding:10px 4px 24px;overflow-x:auto}
+.analytics-bar-chart .bar-col{flex:1 0 26px;min-width:26px;height:100%;display:flex;align-items:flex-end;position:relative}
+.analytics-bar-chart .bar-col.dual .bar-pair{display:flex;gap:2px;align-items:flex-end;width:100%;height:100%}
+.analytics-bar-chart .bar-col i{display:block;flex:1;border-radius:3px 3px 1px 1px;min-height:4px}
+.analytics-bar-chart .bar-col i.bar-for{background:linear-gradient(#55cef0,#247ea9)}
+.analytics-bar-chart .bar-col i.bar-against{background:linear-gradient(#ed5960,#a80f15)}
+.analytics-bar-chart .bar-col i.bar-missing{background:none;border:1px dashed #3a4048;min-height:4px;flex:1}
+.analytics-bar-chart .bar-col:not(.dual) i{width:100%}
+.analytics-bar-chart .bar-col b{position:absolute;bottom:-20px;left:0;right:0;text-align:center;color:var(--dim);font-size:9px;font-weight:400;white-space:nowrap}
+.chart-legend{display:flex;gap:14px;align-items:center;color:var(--muted);font-size:11px;margin:0 0 18px}
+.legend-dot{display:inline-flex;align-items:center;gap:5px}
+.legend-dot:before{content:"";display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;background:linear-gradient(#55cef0,#247ea9)}
+.legend-dot.against:before{background:linear-gradient(#ed5960,#a80f15)}
+.recent-form .form-chip{width:26px;height:26px;display:inline-grid;place-items:center;padding:0;border-radius:6px;font-weight:700}
+.form-chip.result-win{color:#8ce0ae;background:#193126;border-color:#245c3f}
+.form-chip.result-loss{color:#ff9da2;background:#3b2023;border-color:#5c2a30}
+.form-chip.result-tie{color:var(--muted);background:#20242a}
+.form-chip.result-unrecorded{color:var(--dim);background:#16181c}
+.analytics-player-link,.analytics-game-link{background:none;border:0;padding:0;color:var(--ice);font:inherit;font-weight:600;cursor:pointer;text-align:left}
+.analytics-player-link:hover,.analytics-game-link:hover{text-decoration:underline}
+.analytics-game-link{background:#173149;border:1px solid #2c4c67;padding:6px 10px;border-radius:6px;font-weight:600;font-size:11px;white-space:nowrap}
+@media(max-width:420px){.analytics-tabs button{padding-inline:11px}.analytics-bar-chart{height:120px}.analytics-bar-chart .bar-col{flex:1 0 20px;min-width:20px}}

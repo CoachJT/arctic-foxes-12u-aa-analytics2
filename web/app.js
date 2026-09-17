@@ -172,6 +172,16 @@ function goToTeamStats(gameId) {
   gameWorkspaceTab = 'team-stats';
   render('games');
 }
+// Single centralized adapter for Command Center / Action Center navigation
+// (spec: "missing stats" must open Game Center -> Team Stats, not Overview).
+// Both the dashboard's "Needs your attention" strip and the Action Center
+// panel call this instead of each re-deriving where a game-scoped action
+// should land, so the routing rule lives in exactly one place.
+function navigateToActionItem({ kind, view, gameId }) {
+  if (kind === 'missing-stats' && gameId) { goToTeamStats(gameId); return; }
+  if (gameId) selectedGameId = gameId;
+  render(view);
+}
 window.FoxesFilterContext = Object.assign(statsFilterContext, { goToGameCenter, goToPlayerProfile, goToTeamStats });
 let dashboardLeaderCategory = 'points';
 let dashboardTrendWindow = 'season';
@@ -242,7 +252,7 @@ function command() {
   return shell(`Command Center`, `Your team. Your next move.`, `
     <section class="command-hero arena-panel"><div class="command-identity">${window.PuckWorkspace.crest(tenantName(), seasonContext.branding?.logo_url)}<div><span class="eyebrow">${escapeHtml(tenantSeasonName())} / TEAM WORKSPACE</span><h2>${escapeHtml(tenantName())}</h2><p>${escapeHtml(window.PuckTeamBranding.appearance(seasonContext.branding, 'command').tagline || 'Every game. Every player. One connected team.')}</p>${window.PuckTeamBranding.appearance(seasonContext.branding, 'command').bio ? `<p class="team-bio">${escapeHtml(window.PuckTeamBranding.appearance(seasonContext.branding, 'command').bio)}</p>` : ''}</div></div><div class="command-next"><span class="eyebrow">${next ? 'UP NEXT' : 'SEASON IN FOCUS'}</span><h3>${next ? 'vs ' + escapeHtml(next.opponent) : 'Build the next win.'}</h3><p>${next ? `${phase1Date(next.date)} · ${escapeHtml(next.time || 'Time TBD')}<br>${escapeHtml(next.location || 'Location TBD')}` : 'Review your team. Prepare for what comes next.'}</p><button class="btn primary" data-dashboard-goto="schedule">${next ? 'Game preparation' : 'View schedule'} <span aria-hidden="true">↗</span></button></div></section>
     <div class="coach-action-strip"><div class="dash-actions">${quickActions.map(([view,label]) => `<button class="btn${label === 'Enter Stats' ? ' primary' : ''}" type="button" data-dashboard-goto="${view}">${label === 'Enter Stats' ? '<span aria-hidden="true">＋</span> ' : ''}${label}</button>`).join('')}</div><span class="coach-action-caption">THE WORK STARTS HERE</span></div>
-    ${actions.length ? `<section class="card action-needed">${cardTitle('Needs your attention', `${actions.length} item${actions.length === 1 ? '' : 's'}`)}${actions.map(item => `<button class="action-needed-row" type="button" data-dashboard-action="${escapeHtml(item.view)}" data-action-game="${escapeHtml(item.gameId || '')}"><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(item.detail)}</span></button>`).join('')}</section>` : ''}
+    ${actions.length ? `<section class="card action-needed">${cardTitle('Needs your attention', `${actions.length} item${actions.length === 1 ? '' : 's'}`)}${actions.map(item => `<button class="action-needed-row" type="button" data-dashboard-action="${escapeHtml(item.view)}" data-action-game="${escapeHtml(item.gameId || '')}" data-action-kind="${escapeHtml(item.kind || '')}"><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(item.detail)}</span></button>`).join('')}</section>` : ''}
 
     <div class="grid stat-grid">
       ${[['Record', snap.hasRecord ? `${snap.w}–${snap.l}–${snap.t}` : '—', `${snap.gp} games played`],
@@ -290,7 +300,7 @@ function command() {
 function bindDashboardControls() {
   document.querySelectorAll('[data-recent-game]').forEach(button => button.addEventListener('click', () => { selectedGameId = button.dataset.recentGame; render('games'); }));
   document.querySelectorAll('[data-dashboard-goto]').forEach(button => button.addEventListener('click', () => { render(button.dataset.dashboardGoto); if (button.textContent === 'Add Game') document.querySelector('#scheduleCreate')?.setAttribute('open', ''); if (button.textContent === 'Manage Roster') document.querySelector('.roster-management')?.setAttribute('open', ''); }));
-  document.querySelectorAll('[data-dashboard-action]').forEach(button => button.addEventListener('click', () => { if (button.dataset.actionGame) selectedGameId = button.dataset.actionGame; render(button.dataset.dashboardAction); }));
+  document.querySelectorAll('[data-dashboard-action]').forEach(button => button.addEventListener('click', () => { navigateToActionItem({ kind: button.dataset.actionKind, view: button.dataset.dashboardAction, gameId: button.dataset.actionGame }); }));
   document.querySelectorAll('[data-leader-cat]').forEach(button => button.addEventListener('click', () => { dashboardLeaderCategory = button.dataset.leaderCat; render('command'); }));
   document.querySelectorAll('[data-trend-window]').forEach(button => button.addEventListener('click', () => { dashboardTrendWindow = button.dataset.trendWindow; render('command'); }));
 }
@@ -434,6 +444,14 @@ function bindStatsControls() {
     statsFilterContext.setModifiers({ opponent: event.target.value || null });
     render('stats');
   });
+  // Blockers 2/3: Analytics player/game rows navigate through the existing
+  // Player Profile / Game Center systems rather than a second implementation.
+  document.querySelectorAll('[data-analytics-player-link]').forEach(button => button.addEventListener('click', () => {
+    goToPlayerProfile(button.dataset.analyticsPlayerLink);
+  }));
+  document.querySelectorAll('[data-analytics-game-link]').forEach(button => button.addEventListener('click', () => {
+    goToGameCenter(button.dataset.analyticsGameLink);
+  }));
 }
 function players() {
   const totals = playerStatTotals();
@@ -1094,14 +1112,14 @@ function openActionCenter() {
   const items = actionItems();
   if (!panel || !items.length) return;
   actionCenterReturnFocus = button;
-  panel.innerHTML = `<div class="action-center-head"><h2>Action Center</h2><button class="btn" type="button" data-close-action-center>Close</button></div>${items.map(item => `<button class="action-center-item" type="button" data-action-center-view="${escapeHtml(item.view)}"><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(item.detail)}</span></button>`).join('')}`;
+  panel.innerHTML = `<div class="action-center-head"><h2>Action Center</h2><button class="btn" type="button" data-close-action-center>Close</button></div>${items.map(item => `<button class="action-center-item" type="button" data-action-center-view="${escapeHtml(item.view)}" data-action-center-game="${escapeHtml(item.gameId || '')}" data-action-center-kind="${escapeHtml(item.kind || '')}"><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(item.detail)}</span></button>`).join('')}`;
   panel.hidden = false;
   panel.setAttribute('aria-hidden', 'false');
   button?.setAttribute('aria-expanded', 'true');
   panel.querySelector('[data-close-action-center]').addEventListener('click', closeActionCenter);
   panel.querySelectorAll('[data-action-center-view]').forEach(item => item.addEventListener('click', () => {
     closeActionCenter();
-    render(item.dataset.actionCenterView);
+    navigateToActionItem({ kind: item.dataset.actionCenterKind, view: item.dataset.actionCenterView, gameId: item.dataset.actionCenterGame });
   }));
   panel.querySelector('[data-close-action-center]').focus();
 }
@@ -1471,7 +1489,7 @@ async function loadPhase1Data(teamId) {
   read('schedule', 'team_schedule_games', 'id,source_schedule_id,date,time,opponent,home_away,game_type,location,notes,linked_game_source_id', PERMISSIONS.SCHEDULE_VIEW);
   read('games', 'team_games', 'id,source_game_id,season_id,date,opponent,period_length_min', PERMISSIONS.GAMES_VIEW, undefined, true);
   read('playerStats', 'team_game_player_stats', 'source_game_id,season_id,source_player_id,player_type,gp,goals,assists,shots,penalty_minutes,plus_minus,blocks,faceoff_wins,faceoff_losses,faceoff_attempts,power_play_goals,power_play_assists,power_play_points,short_handed_goals,short_handed_assists,short_handed_points,game_winning_goals,game_tying_goals,takeaways,giveaways,chances,toi_minutes,minutes,saves,goals_against,wins,losses,ties,shutouts', PERMISSIONS.STATS_VIEW, undefined, true);
-  read('teamStats', 'team_game_team_stats', 'source_game_id,season_id,goals_for,goals_against,shots_for,shots_against,shots_for_p1,shots_for_p2,shots_for_p3,shots_for_ot,shots_against_p1,shots_against_p2,shots_against_p3,shots_against_ot,power_play_chances,power_play_success,penalty_kill_chances,penalty_kill_success,faceoff_wins,faceoff_losses', PERMISSIONS.STATS_VIEW, undefined, true);
+  read('teamStats', 'team_game_team_stats', 'source_game_id,season_id,goals_for,goals_against,shots_for,shots_against,goals_for_p1,goals_for_p2,goals_for_p3,goals_for_ot,goals_against_p1,goals_against_p2,goals_against_p3,goals_against_ot,shots_for_p1,shots_for_p2,shots_for_p3,shots_for_ot,shots_against_p1,shots_against_p2,shots_against_p3,shots_against_ot,power_play_chances,power_play_success,penalty_kill_chances,penalty_kill_success,faceoff_wins,faceoff_losses', PERMISSIONS.STATS_VIEW, undefined, true);
   const seasonKey = seasonContext.selectedSeason?.season_key || '';
   const seasonRequest = can(PERMISSIONS.REPORTS_VIEW, activeStaff)
     ? (seasonKey
