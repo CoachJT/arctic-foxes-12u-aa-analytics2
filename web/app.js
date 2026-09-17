@@ -398,6 +398,88 @@ function bindCoachRosterControls() {
 }
 let selectedGameId = '';
 let gameWorkspaceTab = 'overview';
+const teamStatsFields = [
+  ['shots_for_p1', 'Shots for · P1'],
+  ['shots_for_p2', 'Shots for · P2'],
+  ['shots_for_p3', 'Shots for · P3'],
+  ['shots_for_ot', 'Shots for · OT'],
+  ['shots_against_p1', 'Shots against · P1'],
+  ['shots_against_p2', 'Shots against · P2'],
+  ['shots_against_p3', 'Shots against · P3'],
+  ['shots_against_ot', 'Shots against · OT'],
+  ['power_play_chances', 'Power-play opportunities'],
+  ['power_play_success', 'Power-play successes'],
+  ['penalty_kill_chances', 'Penalty-kill opportunities'],
+  ['penalty_kill_success', 'Penalty-kill successes'],
+  ['faceoff_wins', 'Faceoff wins'],
+  ['faceoff_losses', 'Faceoff losses']
+];
+const teamStatsEditor = { gameId: '', original: null, draft: {}, dirty: false, saving: false, status: '' };
+function teamStatsValue(row, field) {
+  return row?.[field] === null || row?.[field] === undefined ? '' : String(row[field]);
+}
+function resetTeamStatsEditor(gameId, row) {
+  teamStatsEditor.gameId = gameId;
+  teamStatsEditor.original = Object.fromEntries(teamStatsFields.map(([field]) => [field, teamStatsValue(row, field)]));
+  teamStatsEditor.draft = { ...teamStatsEditor.original };
+  teamStatsEditor.dirty = false;
+  teamStatsEditor.saving = false;
+  teamStatsEditor.status = '';
+}
+function teamStatsPatch() {
+  return Object.fromEntries(teamStatsFields
+    .filter(([field]) => teamStatsEditor.draft[field] !== teamStatsEditor.original[field])
+    .map(([field]) => [field, teamStatsEditor.draft[field].trim() === '' ? null : Number(teamStatsEditor.draft[field])]));
+}
+function confirmTeamStatsDiscard() {
+  if (!teamStatsEditor.dirty) return true;
+  if (!window.confirm('You have unsaved Team Stats changes. Leave without saving?')) return false;
+  teamStatsEditor.dirty = false;
+  return true;
+}
+function validateTeamStatsDraft() {
+  const values = teamStatsEditor.draft;
+  for (const [field, value] of Object.entries(values)) {
+    if (value.trim() !== '' && !/^\d+$/.test(value.trim())) throw new Error(`${field.replace(/_/g, ' ')} must be a whole number or blank.`);
+    if (value.trim() !== '' && Number(value) > 2147483647) throw new Error(`${field.replace(/_/g, ' ')} is too large.`);
+  }
+  for (const [attempts, success, label] of [['power_play_chances', 'power_play_success', 'Power play'], ['penalty_kill_chances', 'penalty_kill_success', 'Penalty kill']]) {
+    const attemptsValue = values[attempts].trim();
+    const successValue = values[success].trim();
+    if ((attemptsValue === '') !== (successValue === '')) throw new Error(`${label} opportunities and successes must both be recorded or both be blank.`);
+    if (attemptsValue !== '' && Number(successValue) > Number(attemptsValue)) throw new Error(`${label} successes cannot exceed opportunities.`);
+  }
+}
+function teamStatsTotal(row, side) {
+  const periods = [`shots_${side}_p1`, `shots_${side}_p2`, `shots_${side}_p3`];
+  return periods.every(field => row?.[field] !== null && row?.[field] !== undefined)
+    ? periods.reduce((sum, field) => sum + Number(row[field]), 0)
+    : null;
+}
+function teamStatsDisplayTotal(row, side) {
+  const derived = teamStatsTotal(row, side);
+  return derived === null ? (row?.[`shots_${side}`] ?? null) : derived;
+}
+function teamStatsInput(field, label, value, disabled = '') {
+  return `<label class="team-stats-field">${escapeHtml(label)}<input type="number" min="0" step="1" inputmode="numeric" data-team-stat-field="${field}" aria-label="${escapeHtml(label)}" value="${escapeHtml(value)}"${disabled} /></label>`;
+}
+function teamStatsForm(game, row, canEditStats) {
+  if (teamStatsEditor.gameId !== game.source_game_id) resetTeamStatsEditor(game.source_game_id, row);
+  const totalFor = teamStatsDisplayTotal(row, 'for');
+  const totalAgainst = teamStatsDisplayTotal(row, 'against');
+  const totalForDerived = teamStatsTotal(row, 'for') !== null;
+  const totalAgainstDerived = teamStatsTotal(row, 'against') !== null;
+  const disabled = !canEditStats || teamStatsEditor.saving ? ' disabled' : '';
+  return `<section class="team-stats-editor" data-team-stats-editor>
+    <div class="card-title"><h2>Team Stats</h2><span class="tag">${canEditStats ? 'Editable' : 'View only'}</span></div>
+    <p class="sub">Enter only what was recorded. Blank means unrecorded; <strong>0</strong> means an explicit zero.</p>
+    <div class="team-stats-total-grid"><div><small>Shots for</small><strong>${totalFor === null ? 'Not enough data yet' : totalFor}</strong><span>${totalForDerived ? 'Server-derived from P1 + P2 + P3' : 'Historical total preserved by server'}</span></div><div><small>Shots against</small><strong>${totalAgainst === null ? 'Not enough data yet' : totalAgainst}</strong><span>${totalAgainstDerived ? 'Server-derived from P1 + P2 + P3' : 'Historical total preserved by server'}</span></div></div>
+    <div class="team-stats-grid">${teamStatsFields.slice(0, 8).map(([field, label]) => teamStatsInput(field, label, teamStatsEditor.draft[field], disabled)).join('')}</div>
+    <div class="callout team-stats-ot-note"><strong>OT applicability is unresolved.</strong> Optional OT shots are stored as raw period entries only and never make a total authoritative or prove that overtime occurred.</div>
+    <div class="team-stats-grid">${teamStatsFields.slice(8, 14).map(([field, label]) => teamStatsInput(field, label, teamStatsEditor.draft[field], disabled)).join('')}</div>
+    <div class="team-stats-actions">${canEditStats ? `<button class="btn primary" type="button" data-save-team-stats${disabled}>Save Team Stats</button>` : ''}<span class="coach-form-status" data-team-stats-status role="status" aria-live="polite">${escapeHtml(teamStatsEditor.status)}</span></div>
+  </section>`;
+}
 function gameCenter() {
   const teamStats = new Map((phase1Data?.teamStats || []).map(row => [row.source_game_id, row]));
   const games = window.PuckGameVisibility.activeGames(phase1Data?.schedule, phase1Data?.games).sort((a, b) => String(b.date).localeCompare(String(a.date)));
@@ -435,16 +517,62 @@ function gameCenter() {
     return `<div class="match-comparison"><div><strong>${ours == null ? '—' : escapeHtml(ours)}</strong><span>${label}</span><strong>${theirs == null ? '—' : escapeHtml(theirs)}</strong></div><div class="comparison-track" aria-hidden="true" ${known ? '' : 'hidden'}><i style="width:${sum ? Math.max(0, Math.min(100, phase1Number(ours)/sum*100)) : 50}%"></i></div></div>`;
   };
   const reviewPanels = `<div class="game-review-grid"><section class="card game-leaders">${cardTitle('Points leaders', 'This game')}<div class="performer-list">${gameLeaders.map(({player:p,row},index) => `<div class="performer"><span class="performer-number">${escapeHtml(p.jersey_number)}</span><div><small>${escapeHtml(p.position)} <b>·</b> ${index === 0 ? 'POINTS LEADER' : 'GAME CONTRIBUTOR'}</small><strong>${escapeHtml(p.name)}</strong><span>${phase1Number(row.goals)} G <b>·</b> ${phase1Number(row.assists)} A <b>·</b> ${phase1Number(row.shots)} SOG</span></div><div class="performer-points"><strong>${phase1Number(row.goals)+phase1Number(row.assists)}</strong><small>PTS</small></div></div>`).join('') || '<p class="sub">Player leaders appear once game stats are recorded.</p>'}</div></section><section class="card game-comparison">${cardTitle('Head to head', 'Recorded totals')}<div class="comparison-key"><span>Our team</span><span>Opponent</span></div>${comparison('Shots on goal',stats?.shots_for,stats?.shots_against)}${comparison('Goals',stats?.goals_for,stats?.goals_against)}<p class="comparison-note">${stats?.faceoff_wins != null && stats?.faceoff_losses != null && phase1Number(stats.faceoff_wins)+phase1Number(stats.faceoff_losses)>0 ? `${Math.round(phase1Number(stats.faceoff_wins)/(phase1Number(stats.faceoff_wins)+phase1Number(stats.faceoff_losses))*100)}% faceoffs won · ${escapeHtml(stats.faceoff_wins)} wins / ${escapeHtml(stats.faceoff_losses)} losses` : 'Faceoff breakdown awaits recorded data.'}</p></section></div>`;
+  const filmPanel = `<section class="game-film-panel"><div class="card-title"><h2>Film</h2><span class="tag">Game-scoped film room</span></div><p class="sub">Review clips and uploads linked to this game in the existing Film Room workspace.</p><button class="btn" type="button" data-open-film-room="${escapeHtml(game.id)}">Open Film Room</button></section>`;
   const scoreForm = canEditStats && eligible ? `<details class="workspace-disclosure"><summary>${hasScore ? 'Correct final score' : 'Enter final score'}</summary><form class="score-entry" data-score-form><input type="hidden" name="gameId" value="${escapeHtml(game.source_game_id)}"><label>Us<input name="goalsFor" type="number" min="0" step="1" required value="${hasScore ? escapeHtml(stats.goals_for) : ''}"></label><span>–</span><label>Them<input name="goalsAgainst" type="number" min="0" step="1" required value="${hasScore ? escapeHtml(stats.goals_against) : ''}"></label><button class="btn primary" data-score-save>Save Score</button><span class="coach-form-status" data-score-status role="status" aria-live="polite"></span></form></details>` : '';
   return shell('Game Center', `${playedCount} of ${games.length} games played`, `
     <div class="game-toolbar"><label>Choose game<select id="gameSelect">${games.map(g => `<option value="${escapeHtml(g.source_game_id)}"${g === game ? ' selected' : ''}>${escapeHtml(phase1Date(g.date))} · ${escapeHtml(g.opponent)}</option>`).join('')}</select></label><button class="btn" data-workspace-goto="schedule">Full schedule ↗</button>${canRemoveDuplicate ? `<button class="btn danger" type="button" data-remove-duplicate="${escapeHtml(scheduleRow.id)}">Remove duplicate</button>` : ''}</div>
     <article class="card game-hub arena-panel"><div class="match-meta"><span class="eyebrow">THE GAME ROOM <b>/</b> ${escapeHtml(tenantSeasonName())}</span><span>${escapeHtml(phase1Date(game.date))} · ${escapeHtml(game.period_length_min ? game.period_length_min + '-minute periods' : 'Game review')}</span></div><div class="matchup"><div class="match-team">${window.PuckWorkspace.crest(tenantName(), seasonContext.branding?.logo_url)}<div><small>YOUR TEAM</small><h2>${escapeHtml(tenantName())}</h2></div></div><div class="game-hub-score"><span class="result ${result === 'WIN' ? 'win' : result === 'LOSS' ? 'loss' : ''}">${result}</span><strong>${hasScore ? `${escapeHtml(stats.goals_for)}<span>–</span>${escapeHtml(stats.goals_against)}` : '— : —'}</strong><small>${hasScore ? 'Final score' : eligible ? 'Score unavailable' : 'Not yet played'}</small></div><div class="match-team opponent-team">${window.PuckWorkspace.crest(game.opponent)}<div><small>OPPONENT</small><h2>${escapeHtml(game.opponent)}</h2></div></div></div>
     <div class="game-hub-actions">${canEditStats && eligible ? `<button class="btn primary" data-enter-stats="${escapeHtml(game.source_game_id)}">${playerRows.length ? 'Edit Stats' : 'Enter Stats'}</button>` : `<span class="tag">${eligible ? 'Read only' : 'Stat entry opens on game day'}</span>`}${can(PERMISSIONS.FILM_VIEW, activeStaff) ? `<button class="btn" data-open-film-room="${escapeHtml(game.id)}">Film Room</button>` : ''}<span class="sub">${playerRows.length ? `${playerRows.length} player stat records` : 'Player stats not entered'}</span></div></article>
     ${canEditStats ? '<section class="card" id="coachStatsHost" hidden></section>' : ''}
-    <nav class="workspace-tabs" aria-label="Game sections">${[['overview', 'Overview'], ['players', 'Skaters'], ['goalies', 'Goalies']].map(([id, label]) => `<button type="button" data-game-tab="${id}" aria-pressed="${gameWorkspaceTab === id}" class="${gameWorkspaceTab === id ? 'active' : ''}">${label}</button>`).join('')}</nav>
-    <section class="card game-detail">${gameWorkspaceTab === 'players' ? cardTitle('Skaters', 'Position → jersey number') + playerTable('skater') : gameWorkspaceTab === 'goalies' ? cardTitle('Goalies', 'Game totals') + playerTable('goalie') : `${cardTitle('Game at a glance', hasScore ? 'Recorded totals' : 'Awaiting game data')}<div class="game-metrics">${metric('Shots for', stats?.shots_for)}${metric('Shots against', stats?.shots_against)}${metric('Power play', stats?.power_play_chances != null ? `${stats.power_play_success ?? '—'} / ${stats.power_play_chances}` : null)}${metric('Faceoffs won', stats?.faceoff_wins)}</div>${!hasScore || !playerRows.length ? '<p class="game-data-note">Finish this game: '+ (!hasScore ? 'add the final score. ' : '') + (!playerRows.length ? 'Enter player stats to complete the review.' : '') + '</p>' : ''}${scoreForm}<details class="workspace-disclosure"><summary>About this game data</summary><p class="sub">A dash means a value has not been recorded. Player stats and the final score save separately. Detailed shifts, shot locations, faceoff locations and game notes remain available in the Windows workspace.</p></details>`}</section>${gameWorkspaceTab === 'overview' ? reviewPanels : ''}`);
+    <nav class="workspace-tabs game-center-tabs" aria-label="Game sections">${[['overview', 'Overview'], ['team-stats', 'Team Stats'], ['players', 'Players'], ['goalies', 'Goalies'], ['film', 'Film']].map(([id, label]) => `<button type="button" data-game-tab="${id}" aria-pressed="${gameWorkspaceTab === id}" class="${gameWorkspaceTab === id ? 'active' : ''}">${label}</button>`).join('')}</nav>
+    <section class="card game-detail">${gameWorkspaceTab === 'team-stats' ? teamStatsForm(game, stats, canEditStats) : gameWorkspaceTab === 'players' ? cardTitle('Players', 'Position → jersey number') + playerTable('skater') : gameWorkspaceTab === 'goalies' ? cardTitle('Goalies', 'Game totals') + playerTable('goalie') : gameWorkspaceTab === 'film' ? filmPanel : `${cardTitle('Game at a glance', hasScore ? 'Recorded totals' : 'Awaiting game data')}<div class="game-metrics">${metric('Shots for', stats?.shots_for)}${metric('Shots against', stats?.shots_against)}${metric('Power play', stats?.power_play_chances != null ? `${stats.power_play_success ?? '—'} / ${stats.power_play_chances}` : null)}${metric('Faceoffs won', stats?.faceoff_wins)}</div>${!hasScore || !playerRows.length ? '<p class="game-data-note">Finish this game: '+ (!hasScore ? 'add the final score. ' : '') + (!playerRows.length ? 'Enter player stats to complete the review.' : '') + '</p>' : ''}${scoreForm}<details class="workspace-disclosure"><summary>About this game data</summary><p class="sub">A dash means a value has not been recorded. Player stats and the final score save separately. Detailed shifts, shot locations, faceoff locations and game notes remain available in the Windows workspace.</p></details>`}</section>${gameWorkspaceTab === 'overview' ? reviewPanels : ''}`);
 }
 
+function bindTeamStatsEditor() {
+  const editor = document.querySelector('[data-team-stats-editor]');
+  if (!editor) return;
+  editor.querySelectorAll('[data-team-stat-field]').forEach(input => input.addEventListener('input', event => {
+    teamStatsEditor.draft[event.currentTarget.dataset.teamStatField] = event.currentTarget.value;
+    teamStatsEditor.dirty = Object.keys(teamStatsPatch()).length > 0;
+    const status = editor.querySelector('[data-team-stats-status]');
+    if (status) { status.textContent = teamStatsEditor.dirty ? 'Unsaved changes' : ''; status.className = 'coach-form-status'; }
+  }));
+  editor.querySelector('[data-save-team-stats]')?.addEventListener('click', async event => {
+    const status = editor.querySelector('[data-team-stats-status]');
+    try {
+      validateTeamStatsDraft();
+      const payload = teamStatsPatch();
+      if (!Object.keys(payload).length) {
+        teamStatsEditor.status = 'No changes to save.';
+        status.textContent = teamStatsEditor.status;
+        return;
+      }
+      teamStatsEditor.saving = true;
+      event.currentTarget.disabled = true;
+      event.currentTarget.textContent = 'Saving…';
+      status.textContent = '';
+      const { error } = await supabaseClient.rpc('save_game_team_stats', {
+        target_team_id: authTeam.team_id,
+        target_season_id: seasonContext.selectedSeasonId,
+        target_source_game_id: teamStatsEditor.gameId,
+        payload
+      });
+      if (error) throw new Error(error.message || 'Team Stats could not be saved.');
+      teamStatsEditor.dirty = false;
+      teamStatsEditor.status = 'Team Stats saved.';
+      await loadPhase1Data(authTeam.team_id);
+      teamStatsEditor.saving = false;
+      render('games');
+    } catch (error) {
+      teamStatsEditor.saving = false;
+      teamStatsEditor.status = error.message || 'Team Stats could not be saved.';
+      status.textContent = teamStatsEditor.status;
+      status.className = 'coach-form-status err';
+      event.currentTarget.disabled = false;
+      event.currentTarget.textContent = 'Save Team Stats';
+    }
+  });
+}
 function bindCoachStatsControls() {
   const host = document.querySelector('#coachStatsHost');
   if (!host) return;
@@ -744,6 +872,7 @@ function renderTenantBranding() {
 async function selectTeam(teamId) {
   if (!window.PuckTeamBranding.canLeave()) { renderTeamSwitcher(); return; }
   if (coachQol.saveState === coachQol.SAVE_STATES.SAVING) { renderTeamSwitcher(); return; }
+  if (!confirmTeamStatsDiscard()) { renderTeamSwitcher(); return; }
   if (coachQol.dirty && !window.confirm('You have unsaved stats. Leave without saving?')) { renderTeamSwitcher(); return; }
   coachQol.openGame(null, [], []);
   selectedGameId = '';
@@ -766,6 +895,7 @@ function renderSeasonSwitcher() {
 
 async function selectSeason(seasonId) {
   if (coachQol.saveState === coachQol.SAVE_STATES.SAVING) { renderSeasonSwitcher(); return; }
+  if (!confirmTeamStatsDiscard()) { renderSeasonSwitcher(); return; }
   if (coachQol.dirty && !window.confirm('You have unsaved stats. Leave without saving?')) { renderSeasonSwitcher(); return; }
   coachQol.openGame(null, [], []);
   selectedGameId = '';
@@ -874,6 +1004,7 @@ function openActionCenter() {
 function render(view = 'command') {
   if (lastRenderedView === 'settings' && !window.PuckTeamBranding.canLeave()) return false;
   if (coachQol.saveState === coachQol.SAVE_STATES.SAVING) return false;
+  if (lastRenderedView === 'games' && !confirmTeamStatsDiscard()) return false;
   if (coachQol.dirty && lastRenderedView === 'games') {
     if (!window.confirm('You have unsaved stats. Leave without saving?')) return false;
     coachQol.openGame(null, [], []);
@@ -911,6 +1042,7 @@ function render(view = 'command') {
   if (view === 'players') bindCoachRosterControls();
   if (view === 'games') {
     bindCoachStatsControls();
+    if (typeof bindTeamStatsEditor === 'function') bindTeamStatsEditor();
     document.querySelector('[data-remove-duplicate]')?.addEventListener('click', async event => {
       const button = event.currentTarget;
       const game = (phase1Data?.games || []).find(row => row.source_game_id === selectedGameId);
@@ -981,7 +1113,7 @@ function render(view = 'command') {
   // Only a real view change resets the page to the top.
   window.scrollTo(0, sameView ? preservedScroll : 0);
 }
-window.addEventListener('beforeunload', event => { if (coachQol.dirty) { event.preventDefault(); event.returnValue = ''; } });
+window.addEventListener('beforeunload', event => { if (coachQol.dirty || teamStatsEditor.dirty) { event.preventDefault(); event.returnValue = ''; } });
 nav.forEach(item => item.addEventListener('click', () => render(item.dataset.view)));
 function setNavigation(open) {
   const sidebar = document.querySelector('#sidebar');
@@ -1225,7 +1357,7 @@ async function loadPhase1Data(teamId) {
   read('schedule', 'team_schedule_games', 'id,source_schedule_id,date,time,opponent,home_away,game_type,location,notes,linked_game_source_id', PERMISSIONS.SCHEDULE_VIEW);
   read('games', 'team_games', 'id,source_game_id,season_id,date,opponent,period_length_min', PERMISSIONS.GAMES_VIEW, undefined, true);
   read('playerStats', 'team_game_player_stats', 'source_game_id,season_id,source_player_id,player_type,gp,goals,assists,shots,penalty_minutes,plus_minus,blocks,faceoff_wins,faceoff_losses,faceoff_attempts,power_play_goals,power_play_assists,power_play_points,short_handed_goals,short_handed_assists,short_handed_points,game_winning_goals,game_tying_goals,takeaways,giveaways,chances,toi_minutes,minutes,saves,goals_against,wins,losses,ties,shutouts', PERMISSIONS.STATS_VIEW, undefined, true);
-  read('teamStats', 'team_game_team_stats', 'source_game_id,season_id,goals_for,goals_against,shots_for,shots_against,power_play_chances,power_play_success,penalty_kill_chances,penalty_kill_success,faceoff_wins,faceoff_losses', PERMISSIONS.STATS_VIEW, undefined, true);
+  read('teamStats', 'team_game_team_stats', 'source_game_id,season_id,goals_for,goals_against,shots_for,shots_against,shots_for_p1,shots_for_p2,shots_for_p3,shots_for_ot,shots_against_p1,shots_against_p2,shots_against_p3,shots_against_ot,power_play_chances,power_play_success,penalty_kill_chances,penalty_kill_success,faceoff_wins,faceoff_losses', PERMISSIONS.STATS_VIEW, undefined, true);
   const seasonKey = seasonContext.selectedSeason?.season_key || '';
   const seasonRequest = can(PERMISSIONS.REPORTS_VIEW, activeStaff)
     ? (seasonKey
@@ -1456,6 +1588,7 @@ async function loadAuthenticatedWorkspace(sessionUser = null) {
 async function signOut() {
   if (!window.PuckTeamBranding.canLeave()) return;
   if (coachQol.saveState === coachQol.SAVE_STATES.SAVING) return;
+  if (!confirmTeamStatsDiscard()) return;
   if (coachQol.dirty && !window.confirm('You have unsaved stats. Leave without saving?')) return;
   coachQol.openGame(null, [], []);
   selectedGameId = '';
