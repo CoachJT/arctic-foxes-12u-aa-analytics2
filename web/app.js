@@ -555,6 +555,12 @@ function teamStatsPatch() {
 function confirmTeamStatsDiscard() {
   if (!teamStatsEditor.dirty) return true;
   if (!window.confirm('You have unsaved Team Stats changes. Leave without saving?')) return false;
+  // Actually restore the draft to the last-saved baseline -- previously this
+  // only cleared the `dirty` flag while leaving the edited draft values in
+  // place, so returning to the same game (without a gameId change, which is
+  // the only trigger for resetTeamStatsEditor) kept showing the discarded,
+  // never-persisted edits instead of the real saved data.
+  teamStatsEditor.draft = { ...teamStatsEditor.original };
   teamStatsEditor.dirty = false;
   return true;
 }
@@ -581,20 +587,33 @@ function teamStatsDisplayTotal(row, side) {
   const derived = teamStatsTotal(row, side);
   return derived === null ? (row?.[`shots_${side}`] ?? null) : derived;
 }
+function teamStatsTotalFromDraft(draft, side) {
+  const periods = [`shots_${side}_p1`, `shots_${side}_p2`, `shots_${side}_p3`];
+  return periods.every(field => String(draft[field] ?? '').trim() !== '')
+    ? periods.reduce((sum, field) => sum + Number(draft[field]), 0)
+    : null;
+}
 function teamStatsInput(field, label, value, disabled = '') {
   return `<label class="team-stats-field">${escapeHtml(label)}<input type="number" min="0" step="1" inputmode="numeric" data-team-stat-field="${field}" aria-label="${escapeHtml(label)}" value="${escapeHtml(value)}"${disabled} /></label>`;
 }
 function teamStatsForm(game, row, canEditStats) {
   if (teamStatsEditor.gameId !== game.source_game_id) resetTeamStatsEditor(game.source_game_id, row);
-  const totalFor = teamStatsDisplayTotal(row, 'for');
-  const totalAgainst = teamStatsDisplayTotal(row, 'against');
-  const totalForDerived = teamStatsTotal(row, 'for') !== null;
-  const totalAgainstDerived = teamStatsTotal(row, 'against') !== null;
+  // Prefer a live total computed from the unsaved draft's P1-P3 entries over
+  // the historical stored/server-derived total, so a coach finishing period
+  // entry sees the real total immediately instead of a stale pre-save value.
+  const draftTotalFor = teamStatsTotalFromDraft(teamStatsEditor.draft, 'for');
+  const draftTotalAgainst = teamStatsTotalFromDraft(teamStatsEditor.draft, 'against');
+  const totalFor = draftTotalFor !== null ? draftTotalFor : teamStatsDisplayTotal(row, 'for');
+  const totalAgainst = draftTotalAgainst !== null ? draftTotalAgainst : teamStatsDisplayTotal(row, 'against');
+  const totalForDerived = draftTotalFor !== null || teamStatsTotal(row, 'for') !== null;
+  const totalAgainstDerived = draftTotalAgainst !== null || teamStatsTotal(row, 'against') !== null;
+  const totalForLabel = draftTotalFor !== null ? 'Live total from your unsaved entries' : totalForDerived ? 'Server-derived from P1 + P2 + P3' : 'Historical total preserved by server';
+  const totalAgainstLabel = draftTotalAgainst !== null ? 'Live total from your unsaved entries' : totalAgainstDerived ? 'Server-derived from P1 + P2 + P3' : 'Historical total preserved by server';
   const disabled = !canEditStats || teamStatsEditor.saving ? ' disabled' : '';
   return `<section class="team-stats-editor" data-team-stats-editor>
     <div class="card-title"><h2>Team Stats</h2><span class="tag">${canEditStats ? 'Editable' : 'View only'}</span></div>
     <p class="sub">Enter only what was recorded. Blank means unrecorded; <strong>0</strong> means an explicit zero.</p>
-    <div class="team-stats-total-grid"><div><small>Shots for</small><strong>${totalFor === null ? 'Not enough data yet' : totalFor}</strong><span>${totalForDerived ? 'Server-derived from P1 + P2 + P3' : 'Historical total preserved by server'}</span></div><div><small>Shots against</small><strong>${totalAgainst === null ? 'Not enough data yet' : totalAgainst}</strong><span>${totalAgainstDerived ? 'Server-derived from P1 + P2 + P3' : 'Historical total preserved by server'}</span></div></div>
+    <div class="team-stats-total-grid"><div><small>Shots for</small><strong>${totalFor === null ? 'Not enough data yet' : totalFor}</strong><span>${totalForLabel}</span></div><div><small>Shots against</small><strong>${totalAgainst === null ? 'Not enough data yet' : totalAgainst}</strong><span>${totalAgainstLabel}</span></div></div>
     <div class="team-stats-grid">${teamStatsFields.slice(0, 8).map(([field, label]) => teamStatsInput(field, label, teamStatsEditor.draft[field], disabled)).join('')}</div>
     <div class="callout team-stats-ot-note"><strong>OT applicability is unresolved.</strong> Optional OT shots are stored as raw period entries only and never make a total authoritative or prove that overtime occurred.</div>
     <div class="team-stats-grid">${teamStatsFields.slice(8, 14).map(([field, label]) => teamStatsInput(field, label, teamStatsEditor.draft[field], disabled)).join('')}</div>
@@ -680,6 +699,13 @@ function bindTeamStatsEditor() {
         payload
       });
       if (error) throw new Error(error.message || 'Team Stats could not be saved.');
+      // Refresh the baseline to exactly what was just persisted before the
+      // reload/re-render below. Without this, `original` stayed pinned to
+      // the pre-save values (resetTeamStatsEditor only fires on a gameId
+      // change, not after a successful save), so the next edit's dirty
+      // check/patch diffed against stale data and could re-send fields that
+      // were already saved, or fail to recognize a real new change as dirty.
+      teamStatsEditor.original = { ...teamStatsEditor.draft };
       teamStatsEditor.dirty = false;
       teamStatsEditor.status = 'Team Stats saved.';
       await loadPhase1Data(authTeam.team_id);
@@ -1487,7 +1513,10 @@ async function loadPhase1Data(teamId) {
   // `id` is the row identity used by the Edit/Delete controls; without it every
   // schedule action resolves to an undefined ID and silently no-ops.
   read('schedule', 'team_schedule_games', 'id,source_schedule_id,date,time,opponent,home_away,game_type,location,notes,linked_game_source_id', PERMISSIONS.SCHEDULE_VIEW);
-  read('games', 'team_games', 'id,source_game_id,season_id,date,opponent,period_length_min', PERMISSIONS.GAMES_VIEW, undefined, true);
+  // `created_at` is required by stats-filter-engine.js's same-date tiebreak
+  // (date -> created_at -> source_game_id); without it every same-date pair
+  // silently degrades to source_game_id-only ordering.
+  read('games', 'team_games', 'id,source_game_id,season_id,date,opponent,period_length_min,created_at', PERMISSIONS.GAMES_VIEW, undefined, true);
   read('playerStats', 'team_game_player_stats', 'source_game_id,season_id,source_player_id,player_type,gp,goals,assists,shots,penalty_minutes,plus_minus,blocks,faceoff_wins,faceoff_losses,faceoff_attempts,power_play_goals,power_play_assists,power_play_points,short_handed_goals,short_handed_assists,short_handed_points,game_winning_goals,game_tying_goals,takeaways,giveaways,chances,toi_minutes,minutes,saves,goals_against,wins,losses,ties,shutouts', PERMISSIONS.STATS_VIEW, undefined, true);
   read('teamStats', 'team_game_team_stats', 'source_game_id,season_id,goals_for,goals_against,shots_for,shots_against,goals_for_p1,goals_for_p2,goals_for_p3,goals_for_ot,goals_against_p1,goals_against_p2,goals_against_p3,goals_against_ot,shots_for_p1,shots_for_p2,shots_for_p3,shots_for_ot,shots_against_p1,shots_against_p2,shots_against_p3,shots_against_ot,power_play_chances,power_play_success,penalty_kill_chances,penalty_kill_success,faceoff_wins,faceoff_losses', PERMISSIONS.STATS_VIEW, undefined, true);
   const seasonKey = seasonContext.selectedSeason?.season_key || '';

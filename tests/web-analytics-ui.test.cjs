@@ -298,3 +298,136 @@ test('Blocker 7: analytics tabs and the shared filter bar have dedicated mobile-
   assert.match(stylesSource, /@media\(max-width:420px\)\{\.analytics-tabs/);
 });
 
+test('Re-QA Fix 11: Team Stats period inputs get a 44px+ tap target and 16px+ font at the 420px mobile breakpoint (no iOS auto-zoom, no tiny targets)', () => {
+  assert.match(stylesSource, /@media\(max-width:420px\)\{\.team-stats-grid\{grid-template-columns:1fr\}.*?\.team-stats-field input\{min-height:44px;font-size:16px\}/);
+});
+
+// --- Re-QA regression coverage below ---------------------------------
+
+test('Re-QA Fix 6: PP%/PK% require the success+chances pair recorded together for the same game, and never fabricate a rate from a mismatched sample', () => {
+  const games3 = [
+    { source_game_id: 'a', date: '2026-09-01' },
+    { source_game_id: 'b', date: '2026-09-03' },
+    { source_game_id: 'c', date: '2026-09-05' }
+  ];
+  // g a: chances recorded but success missing (a genuine single-field gap).
+  // g b: both recorded (2/4). g c: neither recorded.
+  const partialPairStats = [
+    { source_game_id: 'a', power_play_chances: 4 },
+    { source_game_id: 'b', power_play_success: 2, power_play_chances: 4 }
+  ];
+  const analytics = loadAnalytics(games3);
+  const html = analytics.render({ data: { games: games3, roster: [], teamStats: partialPairStats, playerStats: [] }, tab: 'overview' });
+  // Only game b has BOTH fields recorded, so the rate must be 2/4 = 50.0%,
+  // not (2 success)/(4+? chances) mixing game a's unpaired chances in.
+  assert.match(html, /50\.0%/);
+  assert.match(html, /Power-play %<\/td><td>1 games<\/td>/);
+});
+
+test('Re-QA Fix 6: an explicit 0/0 recorded pair shows — rather than a fabricated 0.0%', () => {
+  const games1 = [{ source_game_id: 'a', date: '2026-09-01' }];
+  const zeroPair = [{ source_game_id: 'a', power_play_success: 0, power_play_chances: 0 }];
+  const analytics = loadAnalytics(games1);
+  const html = analytics.render({ data: { games: games1, roster: [], teamStats: zeroPair, playerStats: [] }, tab: 'special-teams' });
+  assert.doesNotMatch(html, /0\.0%/);
+});
+
+test('Re-QA Fix 7: goal/shot differential only uses games where both sides of the pair are recorded (differential sample integrity)', () => {
+  const games3 = [
+    { source_game_id: 'a', date: '2026-09-01' },
+    { source_game_id: 'b', date: '2026-09-03' },
+    { source_game_id: 'c', date: '2026-09-05' }
+  ];
+  // g a: only goals_for recorded (goals_against missing) -- must be excluded
+  // from the differential entirely, not treated as goals_against = 0.
+  const mismatchedStats = [
+    { source_game_id: 'a', goals_for: 9 },
+    { source_game_id: 'b', goals_for: 3, goals_against: 1 }
+  ];
+  const analytics = loadAnalytics(games3);
+  const html = analytics.render({ data: { games: games3, roster: [], teamStats: mismatchedStats, playerStats: [] }, tab: 'overview' });
+  // Only game b is a valid pair: diff = 3 - 1 = +2, from 1 of 3 games, not
+  // (9+3) - 1 = +11 from mixing game a's unpaired goals_for in.
+  assert.match(html, /\+2/);
+  assert.match(html, /Goal differential/);
+  assert.match(html, /1 of 3 games recorded/);
+  assert.doesNotMatch(html, /\+11/);
+});
+
+test('Re-QA Fix 7: period-level goal/shot differentials also require the joint pair, not independent per-field sums', () => {
+  const games2 = [{ source_game_id: 'a', date: '2026-09-01' }, { source_game_id: 'b', date: '2026-09-03' }];
+  // g a: goals_for_p1 recorded, goals_against_p1 missing.
+  // g b: both recorded (2 for, 1 against).
+  const stats = [
+    { source_game_id: 'a', goals_for_p1: 5 },
+    { source_game_id: 'b', goals_for_p1: 2, goals_against_p1: 1 }
+  ];
+  const analytics = loadAnalytics(games2);
+  const html = analytics.render({ data: { games: games2, roster: [], teamStats: stats, playerStats: [] }, tab: 'periods' });
+  assert.match(html, /<td>P1<\/td><td>2<\/td><td>1<\/td><td>\+1<\/td>/);
+});
+
+test('Re-QA Fix 8: player Points only combine goals+assists from games where both were recorded together, never coercing a missing side to 0', () => {
+  const roster = [{ source_player_id: 'p1', jersey_number: '9', name: 'Jamie Fox', player_type: 'skater' }];
+  const games2 = [{ source_game_id: 'a', date: '2026-09-01' }, { source_game_id: 'b', date: '2026-09-03' }];
+  // g a: goals recorded but assists missing entirely for this player-game.
+  const playerStats = [
+    { source_game_id: 'a', source_player_id: 'p1', player_type: 'skater', goals: 4 },
+    { source_game_id: 'b', source_player_id: 'p1', player_type: 'skater', goals: 1, assists: 2 }
+  ];
+  const analytics = loadAnalytics(games2);
+  const html = analytics.render({ data: { games: games2, roster, teamStats: [], playerStats }, tab: 'players' });
+  const row = html.match(/<tbody>(<tr>.*?<\/tr>)<\/tbody>/s)[1];
+  // Only game b is a valid goals+assists pair: PTS = 1 + 2 = 3, not
+  // (4+1) + (0+2) = 7 from coercing game a's missing assists to 0.
+  assert.match(row, /<td>3<\/td>/);
+  assert.doesNotMatch(row, /<td>7<\/td>/);
+});
+
+test('Re-QA Fix 1: every Stats tab resolves the identical selected-game set as the shared filter bar across mode/modifier combinations', () => {
+  const engineSource = fs.readFileSync('web/stats-filter-engine.js', 'utf8');
+  const adapterSource = fs.readFileSync('web/stats-filter-context.js', 'utf8');
+  const games = [];
+  for (let i = 1; i <= 24; i += 1) {
+    games.push({ source_game_id: `g${i}`, date: `2026-09-${String(i).padStart(2, '0')}`, opponent: i % 3 === 0 ? 'Rivals' : 'Wolves' });
+  }
+  const schedule = games.map(game => ({ linked_game_source_id: game.source_game_id, game_type: game.opponent === 'Rivals' ? 'league' : 'exhibition' }));
+
+  function buildContext() {
+    const context = { console, globalThis: {} };
+    context.globalThis = context;
+    vm.runInNewContext(engineSource, context);
+    context.phase1Data = { games, schedule };
+    context.FoxesFilterContext = context.FoxesStatsFilterEngine.createFilterContext({
+      getGames: () => context.phase1Data.games,
+      getScheduleGames: () => context.phase1Data.schedule
+    });
+    vm.runInNewContext(adapterSource, context);
+    return context;
+  }
+
+  const combos = [
+    ['season', {}, {}],
+    ['last5', {}, {}],
+    ['last10', {}, {}],
+    ['last20', {}, {}],
+    ['single', { gameId: 'g10' }, {}],
+    ['custom', { start: '2026-09-05', end: '2026-09-18' }, {}],
+    ['season', {}, { gameType: 'league' }],
+    ['season', {}, { opponent: 'Rivals' }],
+    ['last10', {}, { opponent: 'Rivals' }],
+    ['custom', { start: '2026-09-01', end: '2026-09-20' }, { gameType: 'league', opponent: 'Rivals' }]
+  ];
+  for (const [mode, params, modifiers] of combos) {
+    const context = buildContext();
+    context.FoxesFilterContext.setMode(mode, params);
+    context.FoxesFilterContext.setModifiers(modifiers);
+    const barGameSet = context.FoxesFilterContext.getGameSet();
+    const filterContext = context.FoxesStatsFilter.getActiveFilterContext();
+    const resolved = context.FoxesStatsFilter.resolveSelectedGames(filterContext, games);
+    assert.deepEqual(resolved.map(game => game.source_game_id).sort(), barGameSet.gameIds.slice().sort(),
+      `mode=${mode} params=${JSON.stringify(params)} modifiers=${JSON.stringify(modifiers)} must resolve the same game set for every Stats tab as the filter bar`);
+  }
+});
+
+

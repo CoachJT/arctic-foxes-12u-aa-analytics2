@@ -52,22 +52,13 @@
     return display(recorded ? value : null);
   }
 
-  // Ratio of two paired fields (e.g. PP success/chances) across the given
-  // games. Per Phase A contract these fields are always recorded together
-  // (unrecorded pair = both null), so summing each field independently via
-  // aggregateField yields the correct paired totals.
-  function ratioPct(filter, games, numeratorField, denominatorField) {
-    const numerator = filter.aggregateField(games, numeratorField).sum;
-    const denominator = filter.aggregateField(games, denominatorField).sum;
-    if (denominator === null || denominator === 0) return null;
-    return (numerator / denominator) * 100;
-  }
-  const pct = value => value === null ? '—' : `${value.toFixed(1)}%`;
-
   // Only includes a game's pair of fields in the totals when BOTH were
   // actually recorded for that game (spec §2's per-field rule, applied
-  // jointly so a ratio never mixes an independently-recorded numerator
-  // with an independently-recorded denominator from different games).
+  // jointly so a ratio/differential never mixes an independently-recorded
+  // numerator with an independently-recorded denominator/counterpart from a
+  // different set of games -- a real single-game gap in either field must
+  // drop that game from the pair, not silently borrow the other field's
+  // sample).
   function pairedAggregate(filter, rows, fieldA, fieldB) {
     let sumA = 0, sumB = 0, count = 0;
     (rows || []).forEach(row => {
@@ -77,6 +68,17 @@
     });
     return count ? { sumA, sumB, count } : { sumA: null, sumB: null, count: 0 };
   }
+
+  // Ratio of two paired fields (e.g. PP success/chances) across the given
+  // games. Uses pairedAggregate rather than two independent aggregateField
+  // calls so a game missing only one side of the pair never contributes a
+  // mismatched numerator/denominator to the rate.
+  function pairedRatio(filter, games, numeratorField, denominatorField) {
+    const paired = pairedAggregate(filter, games, numeratorField, denominatorField);
+    if (!paired.count || !paired.sumB) return { rate: null, count: paired.count, sumA: paired.sumA, sumB: paired.sumB };
+    return { rate: (paired.sumA / paired.sumB) * 100, count: paired.count, sumA: paired.sumA, sumB: paired.sumB };
+  }
+  const pct = value => value === null ? '—' : `${value.toFixed(1)}%`;
 
   function computeRecord(filter, games) {
     let w = 0, l = 0, t = 0, recorded = 0;
@@ -147,30 +149,29 @@
       return card(label, average === null ? null : average.toFixed(1), `${count} of ${mergedGames.length} recorded`);
     };
     const record = computeRecord(filter, mergedGames);
-    const gf = filter.aggregateField(mergedGames, 'goals_for');
-    const ga = filter.aggregateField(mergedGames, 'goals_against');
-    const sf = filter.aggregateField(mergedGames, 'shots_for');
-    const sa = filter.aggregateField(mergedGames, 'shots_against');
-    const goalDiff = gf.sum === null || ga.sum === null ? null : gf.sum - ga.sum;
-    const shotDiff = sf.sum === null || sa.sum === null ? null : sf.sum - sa.sum;
-    const goalDiffGames = Math.min(gf.count, ga.count);
-    const shotDiffGames = Math.min(sf.count, sa.count);
+    // Differentials use the joint (paired) sample: a game recorded on only
+    // one side of GF/GA (or SF/SA) can't contribute a real differential, so
+    // it must not be silently included via two independent sums.
+    const goalPair = pairedAggregate(filter, mergedGames, 'goals_for', 'goals_against');
+    const shotPair = pairedAggregate(filter, mergedGames, 'shots_for', 'shots_against');
+    const goalDiff = goalPair.count ? goalPair.sumA - goalPair.sumB : null;
+    const shotDiff = shotPair.count ? shotPair.sumA - shotPair.sumB : null;
     const cards = [
       card('Record', record.recorded ? `${record.w}-${record.l}-${record.t}` : null, `${record.recorded} of ${mergedGames.length} games recorded`),
       metric('GF/G', 'goals_for'),
       metric('GA/G', 'goals_against'),
       metric('SF/G', 'shots_for'),
       metric('SA/G', 'shots_against'),
-      card('Goal differential', goalDiff === null ? null : signed(goalDiff), `${goalDiffGames} of ${mergedGames.length} games recorded`),
-      card('Shot differential', shotDiff === null ? null : signed(shotDiff), `${shotDiffGames} of ${mergedGames.length} games recorded`)
+      card('Goal differential', goalDiff === null ? null : signed(goalDiff), `${goalPair.count} of ${mergedGames.length} games recorded`),
+      card('Shot differential', shotDiff === null ? null : signed(shotDiff), `${shotPair.count} of ${mergedGames.length} games recorded`)
     ].join('');
-    const ppCount = filter.aggregateField(mergedGames, 'power_play_success').count;
-    const pkCount = filter.aggregateField(mergedGames, 'penalty_kill_success').count;
+    const pp = pairedRatio(filter, mergedGames, 'power_play_success', 'power_play_chances');
+    const pk = pairedRatio(filter, mergedGames, 'penalty_kill_success', 'penalty_kill_chances');
     return `<div class="grid stat-grid">${cards}</div>
       ${table(['Metric', 'Recorded', 'Value'], [
         `<tr><td>Games in selection</td><td>${mergedGames.length}</td><td>—</td></tr>`,
-        `<tr><td>Power-play %</td><td>${ppCount} games</td><td>${pct(ratioPct(filter, mergedGames, 'power_play_success', 'power_play_chances'))}</td></tr>`,
-        `<tr><td>Penalty-kill %</td><td>${pkCount} games</td><td>${pct(ratioPct(filter, mergedGames, 'penalty_kill_success', 'penalty_kill_chances'))}</td></tr>`
+        `<tr><td>Power-play %</td><td>${pp.count} games</td><td>${pct(pp.rate)}</td></tr>`,
+        `<tr><td>Penalty-kill %</td><td>${pk.count} games</td><td>${pct(pk.rate)}</td></tr>`
       ])}`;
   }
 
@@ -184,13 +185,13 @@
   }
 
   function specialTeams(filter, mergedGames) {
-    const ppRate = ratioPct(filter, mergedGames, 'power_play_success', 'power_play_chances');
-    const pkRate = ratioPct(filter, mergedGames, 'penalty_kill_success', 'penalty_kill_chances');
+    const pp = pairedRatio(filter, mergedGames, 'power_play_success', 'power_play_chances');
+    const pk = pairedRatio(filter, mergedGames, 'penalty_kill_success', 'penalty_kill_chances');
     const ppChances = filter.aggregateField(mergedGames, 'power_play_chances');
     const pkChances = filter.aggregateField(mergedGames, 'penalty_kill_chances');
     const cards = [
-      card('Power-play %', ppRate === null ? null : pct(ppRate), `${ppChances.count} of ${mergedGames.length} games recorded`),
-      card('Penalty-kill %', pkRate === null ? null : pct(pkRate), `${pkChances.count} of ${mergedGames.length} games recorded`),
+      card('Power-play %', pp.rate === null ? null : pct(pp.rate), `${pp.count} of ${mergedGames.length} games recorded`),
+      card('Penalty-kill %', pk.rate === null ? null : pct(pk.rate), `${pk.count} of ${mergedGames.length} games recorded`),
       card('PP opportunities', ppChances.sum, `${ppChances.count} of ${mergedGames.length} games recorded`),
       card('Times shorthanded', pkChances.sum, `${pkChances.count} of ${mergedGames.length} games recorded`)
     ].join('');
@@ -217,12 +218,14 @@
 
   function periods(filter, mergedGames) {
     const rows = PERIODS.map(([suffix, label]) => {
-      const gf = filter.aggregateField(mergedGames, `goals_for_${suffix}`);
-      const ga = filter.aggregateField(mergedGames, `goals_against_${suffix}`);
-      const sf = filter.aggregateField(mergedGames, `shots_for_${suffix}`);
-      const sa = filter.aggregateField(mergedGames, `shots_against_${suffix}`);
-      const goalDiff = gf.sum === null || ga.sum === null ? null : gf.sum - ga.sum;
-      const shotDiff = sf.sum === null || sa.sum === null ? null : sf.sum - sa.sum;
+      const goalPair = pairedAggregate(filter, mergedGames, `goals_for_${suffix}`, `goals_against_${suffix}`);
+      const shotPair = pairedAggregate(filter, mergedGames, `shots_for_${suffix}`, `shots_against_${suffix}`);
+      const gf = { sum: goalPair.count ? goalPair.sumA : null, count: goalPair.count };
+      const ga = { sum: goalPair.count ? goalPair.sumB : null, count: goalPair.count };
+      const sf = { sum: shotPair.count ? shotPair.sumA : null, count: shotPair.count };
+      const sa = { sum: shotPair.count ? shotPair.sumB : null, count: shotPair.count };
+      const goalDiff = goalPair.count ? goalPair.sumA - goalPair.sumB : null;
+      const shotDiff = shotPair.count ? shotPair.sumA - shotPair.sumB : null;
       return { label, gf, ga, sf, sa, goalDiff, shotDiff };
     });
     return `<p class="sub">OT applicability is not inferred: a game without a recorded OT period is treated as missing, never as zero.</p>
@@ -244,7 +247,12 @@
       const assists = filter.aggregateField(playerRows, 'assists');
       const shots = filter.aggregateField(playerRows, 'shots');
       const plusMinus = filter.aggregateField(playerRows, 'plus_minus');
-      const points = goals.sum === null && assists.sum === null ? null : (goals.sum || 0) + (assists.sum || 0);
+      // Points must only combine goals+assists from games where BOTH were
+      // actually recorded together (spec §2) -- a game recording goals but
+      // missing assists (or vice versa) must not have the missing side
+      // silently coerced to 0 and folded into the total.
+      const goalsAssists = pairedAggregate(filter, playerRows, 'goals', 'assists');
+      const points = goalsAssists.count ? goalsAssists.sumA + goalsAssists.sumB : null;
       return `<tr><td>${player.source_player_id ? playerLink(player) : `#${esc(player.jersey_number)} ${esc(player.name)}`}</td><td>${display(gp.sum)}</td><td>${display(goals.sum)}</td><td>${display(assists.sum)}</td><td>${display(points)}</td><td>${display(shots.sum)}</td><td>${display(plusMinus.sum)}</td></tr>`;
     });
     return table(['Player', 'GP', 'G', 'A', 'PTS', 'SOG', '+/-'], rows, 'No skater records are available for this selection.');

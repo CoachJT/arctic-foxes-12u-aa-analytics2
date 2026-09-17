@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const source = fs.readFileSync('web/stats-filter-engine.js', 'utf8');
+const appSource = fs.readFileSync('web/app.js', 'utf8');
 
 function load() {
   const context = { window: {} };
@@ -12,6 +13,17 @@ function load() {
 }
 
 const E = load();
+
+// Re-QA Fix 2: the engine's same-date tiebreak (date -> created_at ->
+// source_game_id) is only real if the app actually fetches `created_at`.
+// Without it every game object has `created_at === undefined`, silently
+// degrading the tiebreak to source_game_id-only ordering. This asserts the
+// live Supabase read includes the column the engine depends on.
+test('Fix 2: the games Supabase read selects created_at so the same-date tiebreak is not silently defeated', () => {
+  const gamesRead = appSource.match(/read\('games', 'team_games', '([^']+)'/);
+  assert.ok(gamesRead, 'the games read must exist');
+  assert.ok(gamesRead[1].split(',').includes('created_at'), 'games select must include created_at for the same-date tiebreak');
+});
 
 // 12 games, one per day, descending relevance for "most recent" tests.
 // g12 is the most recent (2026-09-12), g1 the oldest (2026-09-01).
