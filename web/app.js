@@ -92,7 +92,7 @@ const prototypeMode = prototypeHost
   && !authCallbackPresent
   && queryParams.get('prototype') === '1';
 
-const viewNames = { command: 'Command Center', schedule: 'Schedule', stats: 'Analytics', players: 'Player Profiles', games: 'Game Center', film: 'Film Room', scouting: 'Scouting', reports: 'Coach Reports', development: 'Player Development', admin: 'Admin', settings: 'Team Settings' };
+const viewNames = { command: 'Command Center', schedule: 'Schedule', stats: 'Stats', players: 'Player Profiles', games: 'Game Center', film: 'Film Room', scouting: 'Scouting', reports: 'Coach Reports', development: 'Player Development', admin: 'Admin', settings: 'Team Settings' };
 const roleViews = { command: PERMISSIONS.DASHBOARD_VIEW, schedule: PERMISSIONS.SCHEDULE_VIEW, stats: PERMISSIONS.STATS_VIEW, players: PERMISSIONS.PLAYERS_VIEW, games: PERMISSIONS.GAMES_VIEW, film: PERMISSIONS.FILM_VIEW, scouting: PERMISSIONS.SCOUTING_VIEW, reports: PERMISSIONS.REPORTS_VIEW, development: PERMISSIONS.PLAYERS_VIEW, admin: PERMISSIONS.ADMIN_USERS, settings: PERMISSIONS.DASHBOARD_VIEW };
 
 // The trailing text is a descriptive note, not a destination. It previously
@@ -597,6 +597,44 @@ function teamStatsTotalFromDraft(draft, side) {
 function teamStatsInput(field, label, value, disabled = '') {
   return `<label class="team-stats-field">${escapeHtml(label)}<input type="number" min="0" step="1" inputmode="numeric" data-team-stat-field="${field}" aria-label="${escapeHtml(label)}" value="${escapeHtml(value)}"${disabled} /></label>`;
 }
+// A bare input (no visible repeated label) for the period-shot scoresheet
+// table, where the P1/P2/P3/OT column headers and team/opponent row labels
+// already convey the field's meaning visually; the full descriptive label
+// is kept as an aria-label for assistive tech.
+function teamStatsCellInput(field, label, value, disabled = '') {
+  return `<input type="number" min="0" step="1" inputmode="numeric" data-team-stat-field="${field}" aria-label="${escapeHtml(label)}" value="${escapeHtml(value)}"${disabled} />`;
+}
+// Presentation-only PP%/PK% preview computed from the unsaved draft (mirrors
+// teamStatsTotalFromDraft's blank-safe pattern). Never changes the saved
+// calculation or validateTeamStatsDraft's pairing rule -- both fields must
+// already be present together for validation to allow a save, so this is
+// purely a live visual echo of that same pair.
+function teamStatsRatioFromDraft(draft, successField, chancesField) {
+  const successRaw = String(draft[successField] ?? '').trim();
+  const chancesRaw = String(draft[chancesField] ?? '').trim();
+  if (successRaw === '' || chancesRaw === '') return null;
+  const success = Number(successRaw);
+  const chances = Number(chancesRaw);
+  return { success, chances, pct: chances > 0 ? (success / chances) * 100 : null };
+}
+function teamStatsFaceoffFromDraft(draft) {
+  const winsRaw = String(draft.faceoff_wins ?? '').trim();
+  const lossesRaw = String(draft.faceoff_losses ?? '').trim();
+  if (winsRaw === '' || lossesRaw === '') return null;
+  const wins = Number(winsRaw);
+  const losses = Number(lossesRaw);
+  const total = wins + losses;
+  return { wins, losses, pct: total > 0 ? (wins / total) * 100 : null };
+}
+function teamStatsSpecialTeamsBadges(draft) {
+  const pp = teamStatsRatioFromDraft(draft, 'power_play_success', 'power_play_chances');
+  const pk = teamStatsRatioFromDraft(draft, 'penalty_kill_success', 'penalty_kill_chances');
+  const fo = teamStatsFaceoffFromDraft(draft);
+  const badge = (label, fraction, pct) => `<div class="team-stats-special-badge"><small>${escapeHtml(label)}</small><span class="team-stats-special-fraction">${escapeHtml(fraction)}</span><strong>${pct === null ? '—' : pct.toFixed(1) + '%'}</strong></div>`;
+  return badge('Power play', pp ? `${pp.success} / ${pp.chances}` : '— / —', pp ? pp.pct : null)
+    + badge('Penalty kill', pk ? `${pk.success} / ${pk.chances}` : '— / —', pk ? pk.pct : null)
+    + badge('Faceoffs', fo ? `${fo.wins} – ${fo.losses}` : '— – —', fo ? fo.pct : null);
+}
 function teamStatsForm(game, row, canEditStats) {
   if (teamStatsEditor.gameId !== game.source_game_id) resetTeamStatsEditor(game.source_game_id, row);
   // Prefer a live total computed from the unsaved draft's P1-P3 entries over
@@ -611,12 +649,22 @@ function teamStatsForm(game, row, canEditStats) {
   const totalForLabel = draftTotalFor !== null ? 'Live total from your unsaved entries' : totalForDerived ? 'Server-derived from P1 + P2 + P3' : 'Historical total preserved by server';
   const totalAgainstLabel = draftTotalAgainst !== null ? 'Live total from your unsaved entries' : totalAgainstDerived ? 'Server-derived from P1 + P2 + P3' : 'Historical total preserved by server';
   const disabled = !canEditStats || teamStatsEditor.saving ? ' disabled' : '';
+  const teamLabel = tenantName();
+  const opponentLabel = game.opponent || 'Opponent';
+  const forCells = teamStatsFields.slice(0, 4).map(([field, label]) => `<td class="team-stats-shot-cell">${teamStatsCellInput(field, label, teamStatsEditor.draft[field], disabled)}</td>`).join('');
+  const againstCells = teamStatsFields.slice(4, 8).map(([field, label]) => `<td class="team-stats-shot-cell">${teamStatsCellInput(field, label, teamStatsEditor.draft[field], disabled)}</td>`).join('');
   return `<section class="team-stats-editor" data-team-stats-editor>
     <div class="card-title"><h2>Team Stats</h2><span class="tag">${canEditStats ? 'Editable' : 'View only'}</span></div>
     <p class="sub">Enter only what was recorded. Blank means unrecorded; <strong>0</strong> means an explicit zero.</p>
-    <div class="team-stats-total-grid"><div><small>Shots for</small><strong>${totalFor === null ? 'Not enough data yet' : totalFor}</strong><span>${totalForLabel}</span></div><div><small>Shots against</small><strong>${totalAgainst === null ? 'Not enough data yet' : totalAgainst}</strong><span>${totalAgainstLabel}</span></div></div>
-    <div class="team-stats-grid">${teamStatsFields.slice(0, 8).map(([field, label]) => teamStatsInput(field, label, teamStatsEditor.draft[field], disabled)).join('')}</div>
+    <div class="team-stats-scoresheet-wrap"><table class="team-stats-scoresheet"><caption class="sr-only">Shots by period</caption>
+      <thead><tr><th scope="col"></th><th scope="col">P1</th><th scope="col">P2</th><th scope="col">P3</th><th scope="col">OT</th><th scope="col">Total</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">${escapeHtml(teamLabel)}</th>${forCells}<td class="team-stats-total-cell"><div class="team-stats-total-grid"><div><small>Shots for</small><strong>${totalFor === null ? 'Not enough data yet' : totalFor}</strong><span>${totalForLabel}</span></div></div></td></tr>
+        <tr><th scope="row">${escapeHtml(opponentLabel)}</th>${againstCells}<td class="team-stats-total-cell"><div class="team-stats-total-grid"><div><small>Shots against</small><strong>${totalAgainst === null ? 'Not enough data yet' : totalAgainst}</strong><span>${totalAgainstLabel}</span></div></div></td></tr>
+      </tbody>
+    </table></div>
     <div class="callout team-stats-ot-note"><strong>OT applicability is unresolved.</strong> Optional OT shots are stored as raw period entries only and never make a total authoritative or prove that overtime occurred.</div>
+    <div class="team-stats-special-summary" data-team-stats-special-summary>${teamStatsSpecialTeamsBadges(teamStatsEditor.draft)}</div>
     <div class="team-stats-grid">${teamStatsFields.slice(8, 14).map(([field, label]) => teamStatsInput(field, label, teamStatsEditor.draft[field], disabled)).join('')}</div>
     <div class="team-stats-actions">${canEditStats ? `<button class="btn primary" type="button" data-save-team-stats${disabled}>Save Team Stats</button>` : ''}<span class="coach-form-status" data-team-stats-status role="status" aria-live="polite">${escapeHtml(teamStatsEditor.status)}</span></div>
   </section>`;
@@ -688,6 +736,8 @@ function bindTeamStatsEditor() {
         ? 'Period breakdown incomplete · previous total retained'
         : 'Live total from your unsaved entries';
     });
+    const summaryHost = editor.querySelector('[data-team-stats-special-summary]');
+    if (summaryHost) summaryHost.innerHTML = teamStatsSpecialTeamsBadges(teamStatsEditor.draft);
   }));
   editor.querySelector('[data-save-team-stats]')?.addEventListener('click', async event => {
     if (teamStatsEditor.saving) return;

@@ -92,27 +92,6 @@
     return { w, l, t, recorded };
   }
 
-  // A hand-rolled bar chart (no chart library, matching the existing
-  // dashboard sparkline/bar-col approach). A missing observation renders as
-  // a flat "not recorded" marker, never as a zero-height bar, so absence of
-  // data is never visually confused with a real zero.
-  function dualBarChart(filter, games, forField, againstField, label) {
-    const points = (games || []).map(game => ({
-      label: date(game.date),
-      forVal: filter.getRecordedValue(game, forField),
-      againstVal: filter.getRecordedValue(game, againstField)
-    }));
-    const recordedValues = points.flatMap(point => [point.forVal.recorded ? point.forVal.value : null, point.againstVal.recorded ? point.againstVal.value : null]).filter(value => value !== null);
-    if (!recordedValues.length) return `<p class="sub">No recorded ${esc(label)} data for this selection.</p>`;
-    const max = Math.max(...recordedValues, 1);
-    const bars = points.map(point => {
-      const forBar = point.forVal.recorded ? `<i class="bar-for" style="height:${Math.max(4, (point.forVal.value / max) * 100)}%" title="For: ${point.forVal.value}"></i>` : '<i class="bar-missing" title="Not recorded"></i>';
-      const againstBar = point.againstVal.recorded ? `<i class="bar-against" style="height:${Math.max(4, (point.againstVal.value / max) * 100)}%" title="Against: ${point.againstVal.value}"></i>` : '<i class="bar-missing" title="Not recorded"></i>';
-      return `<div class="bar-col dual"><span class="bar-pair">${forBar}${againstBar}</span><b>${esc(point.label)}</b></div>`;
-    }).join('');
-    return `<div class="analytics-bar-chart dual-bar-chart" role="img" aria-label="${esc(label)} by game">${bars}</div><p class="chart-legend"><span class="legend-dot for"></span>For<span class="legend-dot against"></span>Against</p>`;
-  }
-
   // Single-series percentage bar chart for PP%/PK% per game. A game where
   // the chances field is recorded but zero (no opportunities that game) is
   // correctly excluded rather than shown as a fabricated 0%.
@@ -128,6 +107,96 @@
       ? `<div class="bar-col"><i class="bar-missing" title="Not recorded"></i><b>${esc(point.label)}</b></div>`
       : `<div class="bar-col"><i style="height:${Math.max(4, point.value)}%" title="${point.value.toFixed(1)}%"></i><b>${esc(point.label)}</b></div>`).join('');
     return `<div class="analytics-bar-chart" role="img" aria-label="${esc(label)} trend by game">${bars}</div>`;
+  }
+
+  // Deterministic label thinning for line-chart axes (spec: intelligent
+  // thinning, not printing every date). Always keeps the first and last
+  // point plus evenly-spaced points in between so the trend stays readable
+  // at 20+ games without hiding the underlying data (every point still gets
+  // a dot + a <title> value, only the always-visible text label is thinned).
+  function thinnedLabelIndexes(n, maxLabels = 6) {
+    const indexes = new Set();
+    if (n <= 0) return indexes;
+    if (n <= maxLabels) { for (let i = 0; i < n; i += 1) indexes.add(i); return indexes; }
+    const step = Math.max(1, Math.round((n - 1) / (maxLabels - 1)));
+    for (let i = 0; i < n; i += step) indexes.add(i);
+    indexes.add(n - 1);
+    return indexes;
+  }
+
+  // Renders one or more missing-safe line segments for a series. A missing
+  // observation (value === null) breaks the line rather than being
+  // interpolated across or plotted as zero -- consecutive recorded points
+  // are joined; a gap simply ends one segment and starts a new one.
+  function svgLineSegments(series, x, y, cssClass) {
+    const segments = [];
+    let current = [];
+    series.forEach(point => {
+      if (point.value === null) { if (current.length > 1) segments.push(current); current = []; }
+      else current.push(point);
+    });
+    if (current.length > 1) segments.push(current);
+    return segments.map(segment => `<polyline class="${cssClass}" points="${segment.map(point => `${x(point.index).toFixed(1)},${y(point.value).toFixed(1)}`).join(' ')}" />`).join('');
+  }
+
+  function svgLineDots(series, x, y, cssClass, titleFor) {
+    return series.filter(point => point.value !== null)
+      .map(point => `<circle cx="${x(point.index).toFixed(1)}" cy="${y(point.value).toFixed(1)}" r="2.6" class="line-dot ${cssClass}"><title>${esc(titleFor(point))}</title></circle>`)
+      .join('');
+  }
+
+  function svgAxisLabels(points, x) {
+    const labelIndexes = thinnedLabelIndexes(points.length);
+    return points.map((point, index) => labelIndexes.has(index)
+      ? `<text x="${x(index).toFixed(1)}" y="99" class="line-axis-label" text-anchor="middle">${esc(point.label)}</text>`
+      : '').join('');
+  }
+
+  // A missing-safe two-series line chart (no chart library, matching the
+  // existing hand-rolled bar-chart approach). Replaces the dense dual bar
+  // chart for Trends so GF/GA and SF/SA read as a real trend across 20+
+  // games instead of a bar-code strip. A missing observation is never
+  // plotted as zero and never bridges the gap with an interpolated line.
+  function dualLineChart(filter, games, forField, againstField, label) {
+    const points = (games || []).map(game => ({
+      label: date(game.date),
+      forVal: filter.getRecordedValue(game, forField),
+      againstVal: filter.getRecordedValue(game, againstField)
+    }));
+    const recordedValues = points.flatMap(point => [point.forVal.recorded ? point.forVal.value : null, point.againstVal.recorded ? point.againstVal.value : null]).filter(value => value !== null);
+    if (!recordedValues.length) return `<p class="sub">No recorded ${esc(label)} data for this selection.</p>`;
+    const max = Math.max(...recordedValues, 1);
+    const width = Math.max(320, points.length * 34);
+    const x = index => points.length > 1 ? (index / (points.length - 1)) * (width - 20) + 10 : width / 2;
+    const y = value => 92 - (value / max) * 82;
+    const forSeries = points.map((point, index) => ({ index, value: point.forVal.recorded ? point.forVal.value : null }));
+    const againstSeries = points.map((point, index) => ({ index, value: point.againstVal.recorded ? point.againstVal.value : null }));
+    const lines = svgLineSegments(forSeries, x, y, 'line-for') + svgLineSegments(againstSeries, x, y, 'line-against');
+    const dots = svgLineDots(forSeries, x, y, 'line-dot-for', point => `${points[point.index].label} · For: ${point.value}`)
+      + svgLineDots(againstSeries, x, y, 'line-dot-against', point => `${points[point.index].label} · Against: ${point.value}`);
+    const axisLabels = svgAxisLabels(points, x);
+    return `<div class="analytics-line-chart-wrap"><svg class="analytics-line-chart" viewBox="0 0 ${width} 100" preserveAspectRatio="none" role="img" aria-label="${esc(label)} for vs against trend across ${points.length} games" style="width:${width}px">${lines}${dots}${axisLabels}</svg></div><p class="chart-legend"><span class="legend-dot for"></span>For<span class="legend-dot against"></span>Against</p>`;
+  }
+
+  // A missing-safe single-series percentage line chart, replacing the PP%/
+  // PK% bar-code-style bar chart in Trends. A game where the chances field
+  // is recorded but zero is correctly excluded (never a fabricated 0%).
+  function pctLineChart(filter, games, successField, chancesField, label) {
+    const points = (games || []).map(game => {
+      const success = filter.getRecordedValue(game, successField);
+      const chances = filter.getRecordedValue(game, chancesField);
+      const value = success.recorded && chances.recorded && chances.value > 0 ? (success.value / chances.value) * 100 : null;
+      return { label: date(game.date), value };
+    });
+    if (!points.some(point => point.value !== null)) return `<p class="sub">No recorded ${esc(label)} data for this selection.</p>`;
+    const width = Math.max(320, points.length * 34);
+    const x = index => points.length > 1 ? (index / (points.length - 1)) * (width - 20) + 10 : width / 2;
+    const y = value => 92 - (value / 100) * 82;
+    const series = points.map((point, index) => ({ index, value: point.value }));
+    const lines = svgLineSegments(series, x, y, 'line-pct');
+    const dots = svgLineDots(series, x, y, 'line-pct-dot', point => `${points[point.index].label} · ${point.value.toFixed(1)}%`);
+    const axisLabels = svgAxisLabels(points, x);
+    return `<div class="analytics-line-chart-wrap"><svg class="analytics-line-chart" viewBox="0 0 ${width} 100" preserveAspectRatio="none" role="img" aria-label="${esc(label)} trend across ${points.length} games" style="width:${width}px">${lines}${dots}${axisLabels}</svg></div>`;
   }
 
   function recentFormChips(filter, games) {
@@ -176,12 +245,12 @@
   }
 
   function trends(filter, mergedGames) {
-    return `<p class="sub">Charts use only recorded values from the current selection. A missing observation is skipped, not plotted as zero.</p>
-      <div class="analytics-chart-block"><h3>Goals for vs. against</h3>${dualBarChart(filter, mergedGames, 'goals_for', 'goals_against', 'Goals')}</div>
-      <div class="analytics-chart-block"><h3>Shots for vs. against</h3>${dualBarChart(filter, mergedGames, 'shots_for', 'shots_against', 'Shots')}</div>
+    return `<p class="sub">Charts use only recorded values from the current selection. A missing observation breaks the line rather than being plotted as zero or bridged across the gap.</p>
+      <div class="analytics-chart-block"><h3>Goals for vs. against</h3>${dualLineChart(filter, mergedGames, 'goals_for', 'goals_against', 'Goals')}</div>
+      <div class="analytics-chart-block"><h3>Shots for vs. against</h3>${dualLineChart(filter, mergedGames, 'shots_for', 'shots_against', 'Shots')}</div>
       <div class="analytics-chart-block"><h3>Recent form</h3>${recentFormChips(filter, mergedGames)}</div>
-      <div class="analytics-chart-block"><h3>Power-play trend</h3>${pctBarChart(filter, mergedGames, 'power_play_success', 'power_play_chances', 'Power play')}</div>
-      <div class="analytics-chart-block"><h3>Penalty-kill trend</h3>${pctBarChart(filter, mergedGames, 'penalty_kill_success', 'penalty_kill_chances', 'Penalty kill')}</div>`;
+      <div class="analytics-chart-block"><h3>Power-play trend</h3>${pctLineChart(filter, mergedGames, 'power_play_success', 'power_play_chances', 'Power play')}</div>
+      <div class="analytics-chart-block"><h3>Penalty-kill trend</h3>${pctLineChart(filter, mergedGames, 'penalty_kill_success', 'penalty_kill_chances', 'Penalty kill')}</div>`;
   }
 
   function specialTeams(filter, mergedGames) {
@@ -309,7 +378,7 @@
       : tab === 'games' ? games(mergedGames)
       : overview(filter, mergedGames);
     const label = TABS.find(([id]) => id === tab)?.[1] || 'Overview';
-    return `<div class="page-head"><div><div class="eyebrow">PUCKNEXUS · ${esc(data.teamName || 'Selected team')} workspace</div><h1>${esc(label)}</h1><p>Analytics from recorded team, player, and goalie game data.</p></div></div><nav class="workspace-tabs analytics-tabs" aria-label="Analytics tabs">${TABS.map(([id, name]) => `<button type="button" data-analytics-tab="${id}" aria-pressed="${id === tab}" class="${id === tab ? 'active' : ''}">${name}</button>`).join('')}</nav><section class="card analytics-content">${body}</section>`;
+    return `<div class="page-head"><div><div class="eyebrow">PUCKNEXUS · ${esc(data.teamName || 'Selected team')} workspace</div><h1>${esc(label)}</h1><p>Stats from recorded team, player, and goalie game data.</p></div></div><nav class="workspace-tabs analytics-tabs" aria-label="Stats tabs">${TABS.map(([id, name]) => `<button type="button" data-analytics-tab="${id}" aria-pressed="${id === tab}" class="${id === tab ? 'active' : ''}">${name}</button>`).join('')}</nav><section class="card analytics-content">${body}</section>`;
   }
 
   root.FoxesAnalyticsUI = Object.freeze({ TABS, render });

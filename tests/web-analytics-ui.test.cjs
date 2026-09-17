@@ -178,7 +178,7 @@ test('Blocker 1: Overview record only counts games with a recorded goals_for/goa
   assert.match(html, /1 of 2 games recorded/);
 });
 
-test('Blocker 1: Trends renders GF vs GA / SF vs SA charts, recent form, and PP/PK trend charts without inventing values', () => {
+test('Founder Polish: Trends renders GF vs GA / SF vs SA / PP% / PK% as missing-safe line charts (not bar-code bars), recent form, without inventing values', () => {
   const analytics = loadAnalytics(bGames);
   const html = analytics.render({ data: { games: bGames, roster: [], teamStats: bTeamStats, playerStats: [] }, tab: 'trends' });
   assert.match(html, /Goals for vs\. against/);
@@ -186,8 +186,16 @@ test('Blocker 1: Trends renders GF vs GA / SF vs SA charts, recent form, and PP/
   assert.match(html, /Recent form/);
   assert.match(html, /Power-play trend/);
   assert.match(html, /Penalty-kill trend/);
-  assert.match(html, /analytics-bar-chart/);
-  assert.match(html, /bar-missing/); // g2/g3 have no recorded PP/PK data
+  assert.match(html, /analytics-line-chart/);
+  assert.doesNotMatch(html, /analytics-bar-chart/);
+  // GF/GA and SF/SA are each recorded for all 3 fixture games -> 3 dots per
+  // series per chart, across the two dualLineChart calls (Goals + Shots).
+  assert.equal((html.match(/line-dot-for/g) || []).length, 6);
+  assert.equal((html.match(/line-dot-against/g) || []).length, 6);
+  // PP/PK are only recorded for g1 in this fixture: exactly one dot per
+  // pct chart, and the line must break (not plot a fabricated/zero point)
+  // for the two games missing that data.
+  assert.equal((html.match(/line-pct-dot/g) || []).length, 2); // one PP dot + one PK dot
 });
 
 test('Blocker 1: Special Teams surfaces PP%, PK%, opportunities, and times shorthanded from real recorded fields only', () => {
